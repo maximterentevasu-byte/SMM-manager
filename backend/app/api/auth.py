@@ -1,16 +1,20 @@
+import asyncio
+import uuid
+import random
+import string
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-import uuid, random, string
 
 from app.database import get_db
-from app.models.models import User, EmailVerification
+from app.models.models import User, EmailVerification, Business
 from app.config import settings
 from app.services.email_service import send_verification_code
 
@@ -25,7 +29,11 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
 
 def create_token(user_id: str) -> str:
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    return jwt.encode({"sub": user_id, "exp": expire}, settings.SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(
+        {"sub": user_id, "exp": expire},
+        settings.SECRET_KEY,
+        algorithm=ALGORITHM
+    )
 
 
 def generate_code() -> str:
@@ -72,19 +80,16 @@ class TokenResponse(BaseModel):
 
 @router.post("/register", response_model=TokenResponse)
 async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    # Проверяем существующего пользователя
     result = await db.execute(select(User).where(User.email == data.email))
     existing = result.scalar_one_or_none()
 
     if existing:
         if existing.is_verified:
             raise HTTPException(400, "Email уже зарегистрирован")
-        # Если не верифицирован — переотправляем код
         user = existing
     else:
         if len(data.password) < 8:
             raise HTTPException(400, "Пароль должен быть не менее 8 символов")
-
         user = User(
             id=uuid.uuid4(),
             email=data.email,
@@ -95,7 +100,6 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         db.add(user)
         await db.commit()
 
-    # Создаём код верификации
     code = generate_code()
     verification = EmailVerification(
         id=uuid.uuid4(),
@@ -106,8 +110,9 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     db.add(verification)
     await db.commit()
 
-    # Отправляем письмо
-    send_verification_code(data.email, code)
+    # Отправляем письмо асинхронно — не блокируем сервер
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, send_verification_code, data.email, code)
 
     return {
         "access_token": create_token(str(user.id)),
@@ -120,7 +125,6 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/verify-email", response_model=TokenResponse)
 async def verify_email(data: VerifyEmailRequest, db: AsyncSession = Depends(get_db)):
-    # Находим свежий неиспользованный код
     result = await db.execute(
         select(EmailVerification).where(
             EmailVerification.email == data.email,
@@ -134,10 +138,8 @@ async def verify_email(data: VerifyEmailRequest, db: AsyncSession = Depends(get_
     if not verification:
         raise HTTPException(400, "Неверный или истёкший код")
 
-    # Помечаем код использованным
     verification.is_used = True
 
-    # Верифицируем пользователя
     user_result = await db.execute(select(User).where(User.email == data.email))
     user = user_result.scalar_one_or_none()
     if not user:
@@ -146,10 +148,13 @@ async def verify_email(data: VerifyEmailRequest, db: AsyncSession = Depends(get_
     user.is_verified = True
     await db.commit()
 
+    biz_result = await db.execute(select(Business).where(Business.user_id == user.id))
+    has_business = biz_result.scalar_one_or_none() is not None
+
     return {
         "access_token": create_token(str(user.id)),
         "is_verified": True,
-        "has_business": False,
+        "has_business": has_business,
     }
 
 
@@ -174,14 +179,19 @@ async def resend_code(data: ResendCodeRequest, db: AsyncSession = Depends(get_db
     db.add(verification)
     await db.commit()
 
-    send_verification_code(data.email, code)
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, send_verification_code, data.email, code)
+
     return {"status": "sent"}
 
 
 # ── Login ─────────────────────────────────────────────────
 
 @router.post("/login", response_model=TokenResponse)
-async def login(form: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+async def login(
+    form: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(select(User).where(User.email == form.username))
     user = result.scalar_one_or_none()
 
@@ -189,7 +199,6 @@ async def login(form: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = 
         raise HTTPException(401, "Неверный email или пароль")
 
     if not user.is_verified:
-        # Переотправляем код если не верифицирован
         code = generate_code()
         verification = EmailVerification(
             id=uuid.uuid4(),
@@ -199,10 +208,13 @@ async def login(form: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = 
         )
         db.add(verification)
         await db.commit()
-        send_verification_code(user.email, code)
 
-    from app.models.models import Business
-    biz_result = await db.execute(select(Business).where(Business.user_id == user.id))
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(None, send_verification_code, user.email, code)
+
+    biz_result = await db.execute(
+        select(Business).where(Business.user_id == user.id)
+    )
     has_business = biz_result.scalar_one_or_none() is not None
 
     return {
