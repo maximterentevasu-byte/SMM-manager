@@ -1,9 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import axios from "axios";
-
-const api = axios.create({ baseURL: "http://localhost:8000/api" });
+import api from "@/lib/api";
 
 type Step = "register" | "verify";
 
@@ -20,7 +18,6 @@ export default function RegisterPage() {
   const [countdown, setCountdown] = useState(0);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Обратный отсчёт для повторной отправки
   useEffect(() => {
     if (countdown <= 0) return;
     const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
@@ -63,8 +60,7 @@ export default function RegisterPage() {
   const handleCodePaste = (e: React.ClipboardEvent) => {
     const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
     if (pasted.length === 6) {
-      const next = pasted.split("");
-      setCode(next);
+      setCode(pasted.split(""));
       inputRefs.current[5]?.focus();
       verifyCode(pasted);
     }
@@ -76,7 +72,7 @@ export default function RegisterPage() {
     try {
       const { data } = await api.post("/auth/verify-email", { email, code: fullCode });
       localStorage.setItem("token", data.access_token);
-      router.push("/onboarding");
+      router.push("/plans");
     } catch (e: any) {
       setError(e.response?.data?.detail || "Неверный код");
       setCode(["", "", "", "", "", ""]);
@@ -109,39 +105,33 @@ export default function RegisterPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F8F7F4", display: "flex",
-      alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI', sans-serif", padding: "1rem" }}>
+      alignItems: "center", justifyContent: "center",
+      fontFamily: "'Segoe UI', sans-serif", padding: "1rem" }}>
       <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #EAE8E2",
         padding: "2.5rem", width: "100%", maxWidth: 400 }}>
 
-        {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <div style={{ fontSize: 36, marginBottom: 8 }}>🍕</div>
           <h1 style={{ fontSize: 21, fontWeight: 700, margin: "0 0 4px", color: "#1a1a1a" }}>
             {step === "register" ? "Создать аккаунт" : "Подтвердите email"}
           </h1>
           <p style={{ color: "#999", fontSize: 13, margin: 0 }}>
-            {step === "register"
-              ? "SMM-платформа на AI-агентах"
-              : `Код отправлен на ${email}`}
+            {step === "register" ? "SMM-платформа на AI-агентах" : `Код отправлен на ${email}`}
           </p>
         </div>
 
-        {/* STEP: Register */}
         {step === "register" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
-              <label style={{ fontSize: 13, fontWeight: 500, color: "#444", display: "block", marginBottom: 6 }}>
-                Email
-              </label>
+              <label style={{ fontSize: 13, fontWeight: 500, color: "#444",
+                display: "block", marginBottom: 6 }}>Email</label>
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com" style={inp}
                 onKeyDown={(e) => e.key === "Enter" && register()} />
             </div>
-
             <div>
-              <label style={{ fontSize: 13, fontWeight: 500, color: "#444", display: "block", marginBottom: 6 }}>
-                Пароль
-              </label>
+              <label style={{ fontSize: 13, fontWeight: 500, color: "#444",
+                display: "block", marginBottom: 6 }}>Пароль</label>
               <div style={{ position: "relative" }}>
                 <input type={showPass ? "text" : "password"} value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -149,35 +139,31 @@ export default function RegisterPage() {
                   style={{ ...inp, paddingRight: 44 }}
                   onKeyDown={(e) => e.key === "Enter" && register()} />
                 <button onClick={() => setShowPass(!showPass)}
-                  style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
-                    background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#aaa" }}>
+                  style={{ position: "absolute", right: 12, top: "50%",
+                    transform: "translateY(-50%)", background: "none",
+                    border: "none", cursor: "pointer", fontSize: 16, color: "#aaa" }}>
                   {showPass ? "🙈" : "👁"}
                 </button>
               </div>
-              {/* Password strength */}
               {password && (
                 <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
                   {[...Array(4)].map((_, i) => (
-                    <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background:
-                      password.length >= 8 && i < 1 ? "#E24B4A" :
-                      password.length >= 10 && i < 2 ? "#EF9F27" :
-                      password.length >= 12 && i < 3 ? "#1D9E75" :
-                      password.length >= 14 && i < 4 ? "#0F6E56" : "#E0DED8" }} />
+                    <div key={i} style={{ flex: 1, height: 3, borderRadius: 2,
+                      background: password.length >= 8 + i * 2 ? "#0F6E56" : "#E0DED8" }} />
                   ))}
                 </div>
               )}
             </div>
 
             {error && (
-              <div style={{ padding: "10px 14px", background: "#FCEBEB", borderRadius: 8, fontSize: 13, color: "#A32D2D" }}>
-                {error}
-              </div>
+              <div style={{ padding: "10px 14px", background: "#FCEBEB",
+                borderRadius: 8, fontSize: 13, color: "#A32D2D" }}>{error}</div>
             )}
 
             <button onClick={register} disabled={loading}
-              style={{ padding: "13px", background: loading ? "#888" : "#1a1a1a", color: "#fff",
-                border: "none", borderRadius: 10, cursor: loading ? "not-allowed" : "pointer",
-                fontSize: 15, fontWeight: 600, marginTop: 4 }}>
+              style={{ padding: "13px", background: loading ? "#888" : "#1a1a1a",
+                color: "#fff", border: "none", borderRadius: 10,
+                cursor: loading ? "not-allowed" : "pointer", fontSize: 15, fontWeight: 600 }}>
               {loading ? "Отправляем код..." : "Продолжить →"}
             </button>
 
@@ -195,10 +181,8 @@ export default function RegisterPage() {
           </div>
         )}
 
-        {/* STEP: Verify */}
         {step === "verify" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {/* Code input */}
             <div style={{ display: "flex", gap: 8, justifyContent: "center" }}
               onPaste={handleCodePaste}>
               {code.map((digit, i) => (
@@ -210,30 +194,19 @@ export default function RegisterPage() {
                   style={{ width: 48, height: 56, textAlign: "center", fontSize: 22,
                     fontWeight: 700, border: `2px solid ${digit ? "#1a1a1a" : "#E0DED8"}`,
                     borderRadius: 10, fontFamily: "'Courier New', monospace",
-                    outline: "none", background: "#fff", color: "#1a1a1a",
-                    transition: "border-color 0.15s" }} />
+                    outline: "none", background: "#fff", color: "#1a1a1a" }} />
               ))}
             </div>
 
-            {loading && (
-              <div style={{ textAlign: "center", fontSize: 13, color: "#888" }}>
-                Проверяем код...
-              </div>
-            )}
-
+            {loading && <div style={{ textAlign: "center", fontSize: 13, color: "#888" }}>Проверяем...</div>}
             {error && (
-              <div style={{ padding: "10px 14px", background: "#FCEBEB", borderRadius: 8,
-                fontSize: 13, color: "#A32D2D", textAlign: "center" }}>
-                {error}
-              </div>
+              <div style={{ padding: "10px 14px", background: "#FCEBEB",
+                borderRadius: 8, fontSize: 13, color: "#A32D2D", textAlign: "center" }}>{error}</div>
             )}
 
-            {/* Resend */}
             <div style={{ textAlign: "center" }}>
               {countdown > 0 ? (
-                <span style={{ fontSize: 13, color: "#aaa" }}>
-                  Отправить повторно через {countdown} сек.
-                </span>
+                <span style={{ fontSize: 13, color: "#aaa" }}>Повторно через {countdown} сек.</span>
               ) : (
                 <button onClick={resend} disabled={resending}
                   style={{ background: "none", border: "none", cursor: "pointer",

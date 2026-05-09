@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import axios from "axios";
+import api from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,7 +18,7 @@ export default function LoginPage() {
       const form = new FormData();
       form.append("username", email);
       form.append("password", password);
-      const { data } = await axios.post("http://localhost:8000/api/auth/login", form);
+      const { data } = await api.post("/auth/login", form);
       localStorage.setItem("token", data.access_token);
       if (!localStorage.getItem("businessId")) {
         localStorage.setItem("businessId", "7e0fe5ef-71fd-4113-8df4-be129e34bd69");
@@ -49,7 +49,6 @@ export default function LoginPage() {
       fontFamily: "'Segoe UI', sans-serif", padding: "1rem" }}>
       <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #EAE8E2",
         padding: "2.5rem", width: "100%", maxWidth: 400 }}>
-
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <div style={{ fontSize: 36, marginBottom: 8 }}>🍕</div>
           <h1 style={{ fontSize: 21, fontWeight: 700, margin: "0 0 4px", color: "#1a1a1a" }}>
@@ -68,7 +67,6 @@ export default function LoginPage() {
               placeholder="you@company.com" style={inp}
               onKeyDown={(e) => e.key === "Enter" && login()} />
           </div>
-
           <div>
             <label style={{ fontSize: 13, fontWeight: 500, color: "#444",
               display: "block", marginBottom: 6 }}>Пароль</label>
