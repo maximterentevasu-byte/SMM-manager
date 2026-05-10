@@ -1,9 +1,10 @@
 import uuid
 import random
 import string
+import threading
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -36,6 +37,16 @@ def create_token(user_id: str) -> str:
 
 def generate_code() -> str:
     return "".join(random.choices(string.digits, k=6))
+
+
+def send_email_in_thread(to: str, code: str):
+    """Отправляет письмо в отдельном потоке с полным логированием"""
+    try:
+        print(f"[THREAD] Starting email send to {to}, code={code}")
+        result = send_verification_code(to, code)
+        print(f"[THREAD] Email send result: {result}")
+    except Exception as e:
+        print(f"[THREAD ERROR] {type(e).__name__}: {e}")
 
 
 async def get_current_user(
@@ -73,11 +84,7 @@ class TokenResponse(BaseModel):
 
 
 @router.post("/register", response_model=TokenResponse)
-async def register(
-    data: RegisterRequest,
-    background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db)
-):
+async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == data.email))
     existing = result.scalars().first()
 
@@ -108,8 +115,10 @@ async def register(
     db.add(verification)
     await db.commit()
 
-    # Отправляем после ответа — не блокируем, но логи видны
-    background_tasks.add_task(send_verification_code, data.email, code)
+    print(f"[REGISTER] Code for {data.email}: {code}")
+
+    t = threading.Thread(target=send_email_in_thread, args=(data.email, code), daemon=True)
+    t.start()
 
     return {
         "access_token": create_token(str(user.id)),
@@ -119,10 +128,7 @@ async def register(
 
 
 @router.post("/verify-email", response_model=TokenResponse)
-async def verify_email(
-    data: VerifyEmailRequest,
-    db: AsyncSession = Depends(get_db)
-):
+async def verify_email(data: VerifyEmailRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(EmailVerification).where(
             EmailVerification.email == data.email,
@@ -157,11 +163,7 @@ async def verify_email(
 
 
 @router.post("/resend-code")
-async def resend_code(
-    data: ResendCodeRequest,
-    background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db)
-):
+async def resend_code(data: ResendCodeRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalars().first()
     if not user:
@@ -179,7 +181,10 @@ async def resend_code(
     db.add(verification)
     await db.commit()
 
-    background_tasks.add_task(send_verification_code, data.email, code)
+    print(f"[RESEND] Code for {data.email}: {code}")
+
+    t = threading.Thread(target=send_email_in_thread, args=(data.email, code), daemon=True)
+    t.start()
 
     return {"status": "sent"}
 
@@ -187,7 +192,6 @@ async def resend_code(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     form: OAuth2PasswordRequestForm = Depends(),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(select(User).where(User.email == form.username))
@@ -206,7 +210,11 @@ async def login(
         )
         db.add(verification)
         await db.commit()
-        background_tasks.add_task(send_verification_code, user.email, code)
+
+        print(f"[LOGIN] Code for {user.email}: {code}")
+
+        t = threading.Thread(target=send_email_in_thread, args=(user.email, code), daemon=True)
+        t.start()
 
     biz_result = await db.execute(
         select(Business).where(Business.user_id == user.id)
