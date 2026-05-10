@@ -1,92 +1,45 @@
-import smtplib
-import ssl
+import httpx
 import re
-from email.header import Header
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-
 from app.config import settings
-
-SMTP_TIMEOUT = 10  # секунд
 
 
 def send_email(to: str, subject: str, html_body: str) -> bool:
-    """Отправляет письмо через SMTP или Resend API"""
+    """Отправляет письмо через Brevo API (работает из Railway)"""
 
-    # Resend API
-    if settings.RESEND_API_KEY:
+    if settings.BREVO_API_KEY:
         try:
-            import httpx
+            sender_email = settings.SMTP_FROM or settings.SMTP_USER or "noreply@smm-platform.ru"
+            sender_name = "SMM Platform"
+
             response = httpx.post(
-                "https://api.resend.com/emails",
+                "https://api.brevo.com/v3/smtp/email",
                 headers={
-                    "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                    "api-key": settings.BREVO_API_KEY,
                     "Content-Type": "application/json",
                 },
                 json={
-                    "from": settings.SMTP_FROM or "onboarding@resend.dev",
-                    "to": [to],
+                    "sender": {"name": sender_name, "email": sender_email},
+                    "to": [{"email": to}],
                     "subject": subject,
-                    "html": html_body,
+                    "htmlContent": html_body,
                 },
-                timeout=SMTP_TIMEOUT,
+                timeout=15,
             )
+
             if response.status_code in (200, 201):
-                print(f"[EMAIL OK] Resend → {to}")
+                print(f"[EMAIL OK] Brevo → {to}")
                 return True
             else:
-                print(f"[EMAIL ERROR] Resend {response.status_code}: {response.text}")
+                print(f"[EMAIL ERROR] Brevo {response.status_code}: {response.text}")
                 return False
+
         except Exception as e:
-            print(f"[EMAIL ERROR] Resend exception: {type(e).__name__}: {e}")
+            print(f"[EMAIL ERROR] Brevo exception: {type(e).__name__}: {e}")
             return False
 
-    # SMTP
-    if settings.SMTP_USER and settings.SMTP_PASSWORD:
-        try:
-            print(f"[SMTP] Connecting to {settings.SMTP_HOST}:{settings.SMTP_PORT}")
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = Header(subject, "utf-8")
-            msg["From"] = settings.SMTP_FROM or settings.SMTP_USER
-            msg["To"] = to
-            msg.attach(MIMEText(html_body, "html", "utf-8"))
-
-            if settings.SMTP_PORT == 465:
-                context = ssl.create_default_context()
-                with smtplib.SMTP_SSL(
-                    settings.SMTP_HOST, settings.SMTP_PORT,
-                    context=context, timeout=SMTP_TIMEOUT
-                ) as server:
-                    server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                    server.send_message(msg)
-            else:
-                # STARTTLS — Gmail port 587
-                with smtplib.SMTP(
-                    settings.SMTP_HOST, settings.SMTP_PORT,
-                    timeout=SMTP_TIMEOUT
-                ) as server:
-                    server.ehlo()
-                    server.starttls()
-                    server.ehlo()
-                    server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                    server.send_message(msg)
-
-            print(f"[EMAIL OK] SMTP → {to}")
-            return True
-
-        except smtplib.SMTPAuthenticationError as e:
-            print(f"[EMAIL ERROR] Auth failed: {e}")
-            return False
-        except TimeoutError as e:
-            print(f"[EMAIL ERROR] Timeout connecting to SMTP: {e}")
-            return False
-        except Exception as e:
-            print(f"[EMAIL ERROR] {type(e).__name__}: {e}")
-            return False
-
-    # Mock режим
+    # Mock режим если ключ не задан
     codes = re.findall(r'\d{6}', html_body)
-    print(f"[EMAIL MOCK] No credentials set. Code for {to}: {codes}")
+    print(f"[EMAIL MOCK] To: {to} | Code: {codes[0] if codes else '???'}")
     return True
 
 

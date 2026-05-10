@@ -22,17 +22,22 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str = ""
     S3_REGION: str = "ru-central1"
 
-    # Resend — https://resend.com (рекомендуется)
+    # Brevo (бывший Sendinblue) — рекомендуется для Railway
+    # Регистрация: https://brevo.com → API Keys
+    # Бесплатно: 300 писем/день без домена
+    BREVO_API_KEY: str = ""
+
+    # Resend — требует верифицированный домен
     RESEND_API_KEY: str = ""
 
-    # SMTP — резервный вариант (может не работать из Railway)
-    SMTP_HOST: str = "smtp.mail.ru"
-    SMTP_PORT: int = 465
+    # SMTP — заблокирован Railway (оставляем для локальной разработки)
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = ""
 
-    # ЮКасса — https://yookassa.ru/developers
+    # ЮКасса
     YOOKASSA_SHOP_ID: str = ""
     YOOKASSA_SECRET_KEY: str = ""
 
