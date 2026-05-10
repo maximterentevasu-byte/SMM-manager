@@ -22,12 +22,11 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str = ""
     S3_REGION: str = "ru-central1"
 
-    # SMTP — работает с любым провайдером
-    # Gmail:     host=smtp.gmail.com     port=587
-    # Yandex:    host=smtp.yandex.ru     port=465
-    # Mail.ru:   host=smtp.mail.ru       port=465
-    # Outlook:   host=smtp.office365.com port=587
-    SMTP_HOST: str = "smtp.yandex.ru"
+    # Resend — https://resend.com (рекомендуется)
+    RESEND_API_KEY: str = ""
+
+    # SMTP — резервный вариант (может не работать из Railway)
+    SMTP_HOST: str = "smtp.mail.ru"
     SMTP_PORT: int = 465
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
