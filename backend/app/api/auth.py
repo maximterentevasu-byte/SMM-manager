@@ -1,4 +1,3 @@
-import asyncio
 import uuid
 import random
 import string
@@ -105,8 +104,8 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     db.add(verification)
     await db.commit()
 
-    loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, send_verification_code, data.email, code)
+    # Синхронная отправка — видим ошибки в логах
+    send_verification_code(data.email, code)
 
     return {
         "access_token": create_token(str(user.id)),
@@ -169,8 +168,7 @@ async def resend_code(data: ResendCodeRequest, db: AsyncSession = Depends(get_db
     db.add(verification)
     await db.commit()
 
-    loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, send_verification_code, data.email, code)
+    send_verification_code(data.email, code)
 
     return {"status": "sent"}
 
@@ -196,8 +194,7 @@ async def login(
         )
         db.add(verification)
         await db.commit()
-        loop = asyncio.get_event_loop()
-        loop.run_in_executor(None, send_verification_code, user.email, code)
+        send_verification_code(user.email, code)
 
     biz_result = await db.execute(
         select(Business).where(Business.user_id == user.id)
