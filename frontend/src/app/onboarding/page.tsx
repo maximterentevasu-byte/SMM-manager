@@ -101,7 +101,7 @@ export default function OnboardingPage() {
       const { data: qs } = await api.post(`/onboarding/clarify/${bId}`);
       setClarifyQs(qs.questions || []);
       setStep(4);
-    } catch (e: unknown) {
+    } catch {
       setError("Ошибка сохранения. Проверьте что все поля заполнены.");
     } finally {
       setLoading(false);
@@ -112,6 +112,7 @@ export default function OnboardingPage() {
     setLaunching(true);
     setError("");
     try {
+      // Сохраняем ответы на уточнения
       for (const q of clarifyQs) {
         const answer = clarifyAs[q.field];
         if (answer) {
@@ -121,12 +122,11 @@ export default function OnboardingPage() {
           });
         }
       }
+
+      // Запускаем генерацию стратегии
+      // Контент-план запустится автоматически после стратегии через Celery
       await api.post(`/businesses/${businessId}/generate-strategy`);
-      const now = new Date();
-      await api.post(`/content/${businessId}/generate-plan`, {
-        year: now.getFullYear(),
-        month: now.getMonth() + 1,
-      });
+
       setStep(5);
     } catch {
       setError("Ошибка запуска. Попробуйте ещё раз.");
@@ -411,7 +411,8 @@ export default function OnboardingPage() {
               </p>
             </div>
             {clarifyQs.length === 0 ? (
-              <div style={{ padding: "2rem", textAlign: "center", color: "#888", background: "#F8F7F4", borderRadius: 12 }}>
+              <div style={{ padding: "2rem", textAlign: "center", color: "#888",
+                background: "#F8F7F4", borderRadius: 12 }}>
                 <p>AI не нашёл пробелов — профиль заполнен отлично!</p>
               </div>
             ) : (
@@ -444,17 +445,19 @@ export default function OnboardingPage() {
             <div style={{ fontSize: 72, marginBottom: 16 }}>🎉</div>
             <h2 style={{ fontSize: 26, fontWeight: 700, margin: "0 0 12px" }}>Платформа запущена!</h2>
             <p style={{ color: "#666", fontSize: 15, maxWidth: 400, margin: "0 auto 32px", lineHeight: 1.6 }}>
-              AI генерирует контент-стратегию и контент-план на этот месяц. Обычно это занимает 1-2 минуты.
+              AI генерирует контент-стратегию и контент-план на этот месяц.
+              Обычно это занимает 1-2 минуты.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 340, margin: "0 auto 32px" }}>
               {[
                 { icon: "📋", text: "Контент-стратегия для ваших площадок" },
                 { icon: "📅", text: "Контент-план на текущий месяц" },
                 { icon: "✍️", text: "Тексты постов под ваш голос бренда" },
-                { icon: "🖼", text: "AI-картинки для каждого поста" },
+                { icon: "🖼",  text: "AI-картинки для каждого поста" },
               ].map((item, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
-                  background: "#fff", borderRadius: 10, border: "1px solid #EAE8E2", textAlign: "left" }}>
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12,
+                  padding: "12px 16px", background: "#fff", borderRadius: 10,
+                  border: "1px solid #EAE8E2", textAlign: "left" }}>
                   <span style={{ fontSize: 20 }}>{item.icon}</span>
                   <span style={{ fontSize: 14, color: "#333" }}>{item.text}</span>
                   <span style={{ marginLeft: "auto", fontSize: 12, color: "#0F6E56" }}>Генерируется...</span>
