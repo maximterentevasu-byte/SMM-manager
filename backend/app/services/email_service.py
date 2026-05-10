@@ -1,48 +1,84 @@
-import httpx
+import smtplib
+import ssl
 import re
+from email.header import Header
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
 from app.config import settings
 
 
 def send_email(to: str, subject: str, html_body: str) -> bool:
-    """Отправляет письмо через Resend API или выводит в логи если ключ не задан"""
+    """Отправляет письмо через SMTP или Resend API"""
 
-    if not settings.RESEND_API_KEY:
-        print(f"[EMAIL MOCK] To: {to} | Subject: {subject}")
-        codes = re.findall(r'\b\d{6}\b', html_body)
-        if codes:
-            print(f"[EMAIL MOCK] KOD: {codes[0]}")
-        return True
+    # Resend API
+    if settings.RESEND_API_KEY:
+        try:
+            import httpx
+            response = httpx.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "from": settings.SMTP_FROM or "onboarding@resend.dev",
+                    "to": [to],
+                    "subject": subject,
+                    "html": html_body,
+                },
+                timeout=10,
+            )
+            if response.status_code in (200, 201):
+                print(f"[EMAIL OK] Resend → {to}")
+                return True
+            else:
+                print(f"[EMAIL ERROR] Resend {response.status_code}: {response.text}")
+        except Exception as e:
+            print(f"[EMAIL ERROR] Resend: {e}")
+        return False
 
-    try:
-        response = httpx.post(
-            "https://api.resend.com/emails",
-            headers={
-                "Authorization": f"Bearer {settings.RESEND_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "from": settings.SMTP_FROM or "SMM Platform <onboarding@resend.dev>",
-                "to": [to],
-                "subject": subject,
-                "html": html_body,
-            },
-            timeout=10,
-        )
+    # SMTP (Gmail / Yandex / Mail.ru / любой)
+    if settings.SMTP_USER and settings.SMTP_PASSWORD:
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = Header(subject, "utf-8")
+            msg["From"] = settings.SMTP_FROM or settings.SMTP_USER
+            msg["To"] = to
+            msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-        if response.status_code == 200 or response.status_code == 201:
-            print(f"[EMAIL OK] Отправлено на {to}")
+            if settings.SMTP_PORT == 465:
+                # SSL
+                context = ssl.create_default_context()
+                with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, context=context) as server:
+                    server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                    server.send_message(msg)
+            else:
+                # STARTTLS (Gmail port 587, Outlook port 587)
+                with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+                    server.ehlo()
+                    server.starttls()
+                    server.ehlo()
+                    server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                    server.send_message(msg)
+
+            print(f"[EMAIL OK] SMTP → {to}")
             return True
-        else:
-            print(f"[EMAIL ERROR] Resend вернул {response.status_code}: {response.text}")
+
+        except Exception as e:
+            print(f"[EMAIL ERROR] SMTP: {e}")
             return False
 
-    except Exception as e:
-        print(f"[EMAIL ERROR] {e}")
-        return False
+    # Mock режим — код в логах
+    print(f"[EMAIL MOCK] To: {to} | Subject: {subject}")
+    codes = re.findall(r'\b\d{6}\b', html_body)
+    if codes:
+        print(f"[EMAIL MOCK] KOD: {codes[0]}")
+    return True
 
 
 def send_verification_code(to: str, code: str, name: str = "") -> bool:
-    subject = "SMM Platform: код подтверждения"
+    subject = "Ваш код подтверждения — SMM Platform"
     html = f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
@@ -50,7 +86,7 @@ def send_verification_code(to: str, code: str, name: str = "") -> bool:
   <div style="max-width:480px;margin:40px auto;background:#fff;border-radius:16px;
               border:1px solid #EAE8E2;overflow:hidden;">
     <div style="padding:28px 32px 0;">
-      <div style="font-size:28px;margin-bottom:8px;">🍕</div>
+      <div style="font-size:28px;margin-bottom:8px;">&#127829;</div>
       <h1 style="font-size:20px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">
         Подтвердите email
       </h1>
@@ -92,24 +128,19 @@ def send_welcome_email(to: str, plan: str) -> bool:
   <div style="max-width:480px;margin:40px auto;background:#fff;border-radius:16px;
               border:1px solid #EAE8E2;overflow:hidden;">
     <div style="padding:32px;">
-      <div style="font-size:32px;margin-bottom:12px;">🎉</div>
       <h1 style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 12px;">
         Добро пожаловать!
       </h1>
-      <p style="color:#555;font-size:15px;margin:0 0 8px;line-height:1.6;">
+      <p style="color:#555;font-size:15px;margin:0 0 8px;">
         Ваш аккаунт активирован.
       </p>
       <p style="color:#555;font-size:15px;margin:0 0 24px;">
         Тариф: <strong>{plan_names.get(plan, plan)}</strong>
       </p>
-      <p style="color:#555;font-size:14px;margin:0 0 24px;line-height:1.6;">
-        Начните с онбординга — заполните профиль бизнеса и AI создаст
-        контент-стратегию и первый месяц постов автоматически.
-      </p>
       <a href="https://frontend-production-2875.up.railway.app/onboarding"
          style="display:inline-block;padding:12px 28px;background:#1a1a1a;color:#fff;
                 border-radius:10px;text-decoration:none;font-weight:600;font-size:15px;">
-        Начать онбординг →
+        Начать онбординг
       </a>
     </div>
   </div>
@@ -134,7 +165,6 @@ def send_subscription_expiring(to: str, days_left: int) -> bool:
   <div style="max-width:480px;margin:40px auto;background:#fff;border-radius:16px;
               border:1px solid #EAE8E2;overflow:hidden;">
     <div style="padding:32px;">
-      <div style="font-size:32px;margin-bottom:12px;">⏰</div>
       <h1 style="font-size:20px;font-weight:700;color:#1a1a1a;margin:0 0 12px;">
         Подписка истекает через {days_str}
       </h1>
@@ -144,7 +174,7 @@ def send_subscription_expiring(to: str, days_left: int) -> bool:
       <a href="https://frontend-production-2875.up.railway.app/plans"
          style="display:inline-block;padding:12px 28px;background:#1a1a1a;color:#fff;
                 border-radius:10px;text-decoration:none;font-weight:600;font-size:15px;">
-        Продлить подписку →
+        Продлить подписку
       </a>
     </div>
   </div>
