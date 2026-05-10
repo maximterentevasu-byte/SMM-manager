@@ -7,6 +7,8 @@ from email.mime.multipart import MIMEMultipart
 
 from app.config import settings
 
+SMTP_TIMEOUT = 10  # секунд
+
 
 def send_email(to: str, subject: str, html_body: str) -> bool:
     """Отправляет письмо через SMTP или Resend API"""
@@ -27,20 +29,22 @@ def send_email(to: str, subject: str, html_body: str) -> bool:
                     "subject": subject,
                     "html": html_body,
                 },
-                timeout=10,
+                timeout=SMTP_TIMEOUT,
             )
             if response.status_code in (200, 201):
                 print(f"[EMAIL OK] Resend → {to}")
                 return True
             else:
                 print(f"[EMAIL ERROR] Resend {response.status_code}: {response.text}")
+                return False
         except Exception as e:
-            print(f"[EMAIL ERROR] Resend: {e}")
-        return False
+            print(f"[EMAIL ERROR] Resend exception: {type(e).__name__}: {e}")
+            return False
 
-    # SMTP (Gmail / Yandex / Mail.ru / любой)
+    # SMTP
     if settings.SMTP_USER and settings.SMTP_PASSWORD:
         try:
+            print(f"[SMTP] Connecting to {settings.SMTP_HOST}:{settings.SMTP_PORT}")
             msg = MIMEMultipart("alternative")
             msg["Subject"] = Header(subject, "utf-8")
             msg["From"] = settings.SMTP_FROM or settings.SMTP_USER
@@ -48,14 +52,19 @@ def send_email(to: str, subject: str, html_body: str) -> bool:
             msg.attach(MIMEText(html_body, "html", "utf-8"))
 
             if settings.SMTP_PORT == 465:
-                # SSL
                 context = ssl.create_default_context()
-                with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, context=context) as server:
+                with smtplib.SMTP_SSL(
+                    settings.SMTP_HOST, settings.SMTP_PORT,
+                    context=context, timeout=SMTP_TIMEOUT
+                ) as server:
                     server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                     server.send_message(msg)
             else:
-                # STARTTLS (Gmail port 587, Outlook port 587)
-                with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+                # STARTTLS — Gmail port 587
+                with smtplib.SMTP(
+                    settings.SMTP_HOST, settings.SMTP_PORT,
+                    timeout=SMTP_TIMEOUT
+                ) as server:
                     server.ehlo()
                     server.starttls()
                     server.ehlo()
@@ -65,21 +74,23 @@ def send_email(to: str, subject: str, html_body: str) -> bool:
             print(f"[EMAIL OK] SMTP → {to}")
             return True
 
+        except smtplib.SMTPAuthenticationError as e:
+            print(f"[EMAIL ERROR] Auth failed: {e}")
+            return False
+        except TimeoutError as e:
+            print(f"[EMAIL ERROR] Timeout connecting to SMTP: {e}")
+            return False
         except Exception as e:
-            print(f"[EMAIL ERROR] SMTP: {e}")
+            print(f"[EMAIL ERROR] {type(e).__name__}: {e}")
             return False
 
-    # Mock режим — код в логах
-    print(f"[EMAIL MOCK] To: {to} | Subject: {subject}")
-    codes = re.findall(r'\b\d{6}\b', html_body)
-    if codes:
-        print(f"[EMAIL MOCK] KOD: {codes[0]}")
+    # Mock режим
+    print(f"[EMAIL MOCK] No credentials set. Code for {to}: {re.findall(r'\\b\\d{{6}}\\b', html_body)}")
     return True
 
 
 def send_verification_code(to: str, code: str, name: str = "") -> bool:
-    print(f"[EMAIL] Sending code {code} to {to}")  # уже есть
-    print(f"[VERIFICATION CODE FOR {to}]: {code}")  # добавь эту строку
+    print(f"[EMAIL] Sending code {code} to {to}")
     subject = "Ваш код подтверждения — SMM Platform"
     html = f"""<!DOCTYPE html>
 <html>
@@ -88,7 +99,6 @@ def send_verification_code(to: str, code: str, name: str = "") -> bool:
   <div style="max-width:480px;margin:40px auto;background:#fff;border-radius:16px;
               border:1px solid #EAE8E2;overflow:hidden;">
     <div style="padding:28px 32px 0;">
-      <div style="font-size:28px;margin-bottom:8px;">&#127829;</div>
       <h1 style="font-size:20px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">
         Подтвердите email
       </h1>
@@ -111,7 +121,6 @@ def send_verification_code(to: str, code: str, name: str = "") -> bool:
   </div>
 </body>
 </html>"""
-    print(f"[EMAIL] Sending code {code} to {to}")
     return send_email(to, subject, html)
 
 
