@@ -11,7 +11,6 @@ from sqlalchemy import select
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
-from typing import Optional
 
 from app.database import get_db
 from app.models.models import User, EmailVerification, Business
@@ -20,7 +19,7 @@ from app.services.email_service import send_verification_code
 
 router = APIRouter()
 
-pwd_context = CryptContext(schemes=["bcrypt"], bcrypt__rounds=12, truncate_error=False)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 ALGORITHM = "HS256"
@@ -50,13 +49,11 @@ async def get_current_user(
     except JWTError:
         raise HTTPException(status_code=401, detail="Not authenticated")
     result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
+    user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     return user
 
-
-# ── Schemas ──────────────────────────────────────────────
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -76,12 +73,10 @@ class TokenResponse(BaseModel):
     has_business: bool = False
 
 
-# ── Register ─────────────────────────────────────────────
-
 @router.post("/register", response_model=TokenResponse)
 async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == data.email))
-    existing = result.scalar_one_or_none()
+    existing = result.scalars().first()
 
     if existing:
         if existing.is_verified:
@@ -110,7 +105,6 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     db.add(verification)
     await db.commit()
 
-    # Отправляем письмо асинхронно — не блокируем сервер
     loop = asyncio.get_event_loop()
     loop.run_in_executor(None, send_verification_code, data.email, code)
 
@@ -120,8 +114,6 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         "has_business": False,
     }
 
-
-# ── Verify email ─────────────────────────────────────────
 
 @router.post("/verify-email", response_model=TokenResponse)
 async def verify_email(data: VerifyEmailRequest, db: AsyncSession = Depends(get_db)):
@@ -133,7 +125,7 @@ async def verify_email(data: VerifyEmailRequest, db: AsyncSession = Depends(get_
             EmailVerification.expires_at > datetime.utcnow(),
         ).order_by(EmailVerification.created_at.desc())
     )
-    verification = result.scalar_one_or_none()
+    verification = result.scalars().first()
 
     if not verification:
         raise HTTPException(400, "Неверный или истёкший код")
@@ -141,7 +133,7 @@ async def verify_email(data: VerifyEmailRequest, db: AsyncSession = Depends(get_
     verification.is_used = True
 
     user_result = await db.execute(select(User).where(User.email == data.email))
-    user = user_result.scalar_one_or_none()
+    user = user_result.scalars().first()
     if not user:
         raise HTTPException(404, "Пользователь не найден")
 
@@ -149,7 +141,7 @@ async def verify_email(data: VerifyEmailRequest, db: AsyncSession = Depends(get_
     await db.commit()
 
     biz_result = await db.execute(select(Business).where(Business.user_id == user.id))
-    has_business = biz_result.scalar_one_or_none() is not None
+    has_business = biz_result.scalars().first() is not None
 
     return {
         "access_token": create_token(str(user.id)),
@@ -158,12 +150,10 @@ async def verify_email(data: VerifyEmailRequest, db: AsyncSession = Depends(get_
     }
 
 
-# ── Resend code ───────────────────────────────────────────
-
 @router.post("/resend-code")
 async def resend_code(data: ResendCodeRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == data.email))
-    user = result.scalar_one_or_none()
+    user = result.scalars().first()
     if not user:
         raise HTTPException(404, "Пользователь не найден")
     if user.is_verified:
@@ -185,15 +175,13 @@ async def resend_code(data: ResendCodeRequest, db: AsyncSession = Depends(get_db
     return {"status": "sent"}
 
 
-# ── Login ─────────────────────────────────────────────────
-
 @router.post("/login", response_model=TokenResponse)
 async def login(
     form: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(select(User).where(User.email == form.username))
-    user = result.scalar_one_or_none()
+    user = result.scalars().first()
 
     if not user or not pwd_context.verify(form.password, user.hashed_password):
         raise HTTPException(401, "Неверный email или пароль")
@@ -208,14 +196,13 @@ async def login(
         )
         db.add(verification)
         await db.commit()
-
         loop = asyncio.get_event_loop()
         loop.run_in_executor(None, send_verification_code, user.email, code)
 
     biz_result = await db.execute(
         select(Business).where(Business.user_id == user.id)
     )
-    has_business = biz_result.scalar_one_or_none() is not None
+    has_business = biz_result.scalars().first() is not None
 
     return {
         "access_token": create_token(str(user.id)),
@@ -223,8 +210,6 @@ async def login(
         "has_business": has_business,
     }
 
-
-# ── Me ────────────────────────────────────────────────────
 
 @router.get("/me")
 async def get_me(current_user: User = Depends(get_current_user)):
