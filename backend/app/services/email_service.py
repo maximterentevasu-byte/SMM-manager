@@ -85,7 +85,8 @@ def send_email(to: str, subject: str, html_body: str) -> bool:
             return False
 
     # Mock режим
-    print(f"[EMAIL MOCK] No credentials set. Code for {to}: {re.findall(r'\\b\\d{{6}}\\b', html_body)}")
+    codes = re.findall(r'\d{6}', html_body)
+    print(f"[EMAIL MOCK] No credentials set. Code for {to}: {codes}")
     return True
 
 
