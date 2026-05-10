@@ -78,6 +78,8 @@ def send_email(to: str, subject: str, html_body: str) -> bool:
 
 
 def send_verification_code(to: str, code: str, name: str = "") -> bool:
+    print(f"[EMAIL] Sending code {code} to {to}")  # уже есть
+    print(f"[VERIFICATION CODE FOR {to}]: {code}")  # добавь эту строку
     subject = "Ваш код подтверждения — SMM Platform"
     html = f"""<!DOCTYPE html>
 <html>
