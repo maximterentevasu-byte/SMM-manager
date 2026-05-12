@@ -132,8 +132,8 @@ async def generate_post_text(
 ):
     try:
         biz = await _get_business(business_id, current_user, db)
-        profile = biz.profile or {}
-        strategy = biz.strategy or {}
+        profile = biz.profile if isinstance(biz.profile, dict) else {}
+        strategy = biz.strategy if isinstance(biz.strategy, dict) else {}
         name = biz.name
     except HTTPException:
         profile = {}
