@@ -83,6 +83,11 @@ class PlatformConnection(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
+    # TG Analytics MTProto credentials (хранятся per-connection, не в .env)
+    tg_api_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    tg_api_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    tg_session_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     business: Mapped["Business"] = relationship(back_populates="platform_connections")
 
 

@@ -25,13 +25,18 @@ type VKWeek = {
   collected_at: string;
 };
 
+type TGCredsStatus = {
+  configured: boolean;
+  has_connection: boolean;
+  channel_name?: string;
+};
+
 const fmt = (n: number | undefined | null, decimals = 0) =>
   n == null ? "—" : Number(n).toLocaleString("ru-RU", { maximumFractionDigits: decimals });
 
 const delta = (curr: number, prev: number) => {
   if (!prev) return null;
-  const d = ((curr - prev) / prev) * 100;
-  return d;
+  return ((curr - prev) / prev) * 100;
 };
 
 export default function AnalyticsPage() {
@@ -43,6 +48,11 @@ export default function AnalyticsPage() {
   const [collecting, setCollecting] = useState(false);
   const [collectMsg, setCollectMsg] = useState("");
   const [showSetup, setShowSetup] = useState(false);
+
+  const [tgCredsStatus, setTgCredsStatus] = useState<TGCredsStatus | null>(null);
+  const [tgCreds, setTgCreds] = useState({ api_id: "", api_hash: "", session: "" });
+  const [savingCreds, setSavingCreds] = useState(false);
+  const [credsMsg, setCredsMsg] = useState("");
 
   const [businessId] = useState(() =>
     typeof window !== "undefined" ? localStorage.getItem("businessId") || "" : ""
@@ -58,6 +68,9 @@ export default function AnalyticsPage() {
       .then(({ data }) => setVkData(data))
       .catch(() => {})
       .finally(() => setLoadingVk(false));
+    api.get(`/analytics/${businessId}/tg-credentials`)
+      .then(({ data }) => setTgCredsStatus(data))
+      .catch(() => setTgCredsStatus({ configured: false, has_connection: false }));
   }, [businessId]);
 
   const collect = async () => {
@@ -65,7 +78,7 @@ export default function AnalyticsPage() {
     setCollectMsg("");
     try {
       await api.post(`/analytics/${businessId}/collect`);
-      setCollectMsg("Сбор запущен! Данные появятся через 1–5 минут. Обнови страницу.");
+      setCollectMsg("Сбор запущен. Данные появятся через 1–5 минут — обнови страницу.");
     } catch {
       setCollectMsg("Ошибка запуска сбора");
     } finally {
@@ -73,14 +86,34 @@ export default function AnalyticsPage() {
     }
   };
 
+  const saveTgCreds = async () => {
+    setSavingCreds(true);
+    setCredsMsg("");
+    try {
+      await api.post(`/analytics/${businessId}/tg-credentials`, {
+        api_id: parseInt(tgCreds.api_id),
+        api_hash: tgCreds.api_hash,
+        session: tgCreds.session,
+      });
+      setTgCredsStatus((prev) => prev ? { ...prev, configured: true } : null);
+      setCredsMsg("✓ Реквизиты сохранены. Теперь нажмите «Собрать сейчас».");
+    } catch (e: any) {
+      setCredsMsg(e?.response?.data?.detail || "Ошибка сохранения");
+    } finally {
+      setSavingCreds(false);
+    }
+  };
+
   const exportExcel = (platform: "tg" | "vk") => {
-    window.open(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/analytics/${businessId}/${platform}/export`, "_blank");
+    window.open(
+      `${process.env.NEXT_PUBLIC_API_URL || ""}/api/analytics/${businessId}/${platform}/export`,
+      "_blank"
+    );
   };
 
   const lastUpdated = (data: (TGWeek | VKWeek)[]) =>
     data.length > 0 ? new Date(data[0].collected_at).toLocaleDateString("ru-RU") : null;
 
-  // Cards for last week
   const tgLast = tgData[0];
   const vkLast = vkData[0];
   const tgPrev = tgData[1];
@@ -129,9 +162,6 @@ export default function AnalyticsPage() {
     { key: "net_growth", label: "Прирост", render: (r: VKWeek) => r.net_growth != null ? (r.net_growth >= 0 ? "+" : "") + r.net_growth : "н/д", w: 80 },
     { key: "best_day", label: "Лучший день", render: (r: VKWeek) => `${r.best_day} ${r.best_hour}`, w: 110 },
   ];
-
-  const noTgCreds = !tgData.length && !loadingTg;
-  const noVkData = !vkData.length && !loadingVk;
 
   return (
     <div style={{ minHeight: "100vh", background: "#F8F7F4", fontFamily: "'Segoe UI', sans-serif" }}>
@@ -183,7 +213,7 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {/* Setup guide */}
+        {/* Кнопка-тоггл инструкции */}
         <div style={{ marginBottom: 24 }}>
           <button
             onClick={() => setShowSetup((v) => !v)}
@@ -192,12 +222,12 @@ export default function AnalyticsPage() {
               padding: "10px 18px", cursor: "pointer", fontSize: 14,
               color: "#444", fontWeight: 500, width: "100%", textAlign: "left" }}>
             <span style={{ fontSize: 16 }}>⚙</span>
-            <span>Как подключить аналитику</span>
+            <span>Как запустить автосбор (Celery)</span>
             <span style={{ marginLeft: "auto", fontSize: 12, color: "#aaa" }}>
               {showSetup ? "▲ Скрыть" : "▼ Показать"}
             </span>
           </button>
-          {showSetup && <SetupGuide />}
+          {showSetup && <CelerySetupGuide />}
         </div>
 
         {/* ── TELEGRAM ── */}
@@ -205,11 +235,8 @@ export default function AnalyticsPage() {
           <>
             {loadingTg ? (
               <div style={{ textAlign: "center", padding: "3rem", color: "#888" }}>Загружаем...</div>
-            ) : noTgCreds ? (
-              <TGEmptyState />
-            ) : (
+            ) : tgData.length > 0 ? (
               <>
-                {/* Cards */}
                 {tgLast && (
                   <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
                     {card("Подписчики", fmt(tgLast.subscribers))}
@@ -221,14 +248,20 @@ export default function AnalyticsPage() {
                       tgPrev ? delta(tgLast.quality_index, tgPrev.quality_index) : null)}
                   </div>
                 )}
-
-                {/* Table */}
-                <WeeklyTable
-                  rows={tgData}
-                  cols={tg_cols}
-                  emptyText="Нет данных по Telegram"
-                />
+                <WeeklyTable rows={tgData} cols={tg_cols} emptyText="Нет данных по Telegram" />
               </>
+            ) : tgCredsStatus?.configured ? (
+              <ReadyState text="Реквизиты Telegram сохранены. Нажмите «Собрать сейчас» — данные появятся через 1–5 минут." />
+            ) : tgCredsStatus?.has_connection ? (
+              <TGCredsForm
+                creds={tgCreds}
+                onChange={setTgCreds}
+                onSave={saveTgCreds}
+                saving={savingCreds}
+                msg={credsMsg}
+              />
+            ) : (
+              <NoConnectionState platform="Telegram" />
             )}
           </>
         )}
@@ -238,9 +271,7 @@ export default function AnalyticsPage() {
           <>
             {loadingVk ? (
               <div style={{ textAlign: "center", padding: "3rem", color: "#888" }}>Загружаем...</div>
-            ) : noVkData ? (
-              <VKEmptyState />
-            ) : (
+            ) : vkData.length > 0 ? (
               <>
                 {vkLast && (
                   <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
@@ -253,13 +284,10 @@ export default function AnalyticsPage() {
                       vkPrev ? delta(vkLast.engagement_index, vkPrev.engagement_index) : null)}
                   </div>
                 )}
-
-                <WeeklyTable
-                  rows={vkData}
-                  cols={vk_cols}
-                  emptyText="Нет данных по ВКонтакте"
-                />
+                <WeeklyTable rows={vkData} cols={vk_cols} emptyText="Нет данных по ВКонтакте" />
               </>
+            ) : (
+              <VKEmptyState />
             )}
           </>
         )}
@@ -267,6 +295,8 @@ export default function AnalyticsPage() {
     </div>
   );
 }
+
+// ─── вспомогательные компоненты ────────────────────────────────────────────
 
 function WeeklyTable({ rows, cols, emptyText }: { rows: any[]; cols: any[]; emptyText: string }) {
   if (!rows.length) {
@@ -285,8 +315,7 @@ function WeeklyTable({ rows, cols, emptyText }: { rows: any[]; cols: any[]; empt
             {cols.map((c) => (
               <th key={c.key} style={{ padding: "11px 14px", textAlign: "left",
                 fontWeight: 600, color: "#888", fontSize: 11, letterSpacing: 0.4,
-                borderBottom: "1px solid #EAE8E2", whiteSpace: "nowrap",
-                minWidth: c.w }}>
+                borderBottom: "1px solid #EAE8E2", whiteSpace: "nowrap", minWidth: c.w }}>
                 {c.label.toUpperCase()}
               </th>
             ))}
@@ -310,206 +339,206 @@ function WeeklyTable({ rows, cols, emptyText }: { rows: any[]; cols: any[]; empt
   );
 }
 
-function SetupGuide() {
-  const [open, setOpen] = useState<string | null>("tg");
-
-  const code = (text: string) => (
-    <code style={{ display: "block", background: "#1a1a1a", color: "#4ade80",
-      padding: "10px 14px", borderRadius: 8, fontFamily: "monospace",
-      fontSize: 12, margin: "8px 0", whiteSpace: "pre", overflowX: "auto" }}>
-      {text}
-    </code>
-  );
-
-  const env = (text: string) => (
-    <code style={{ display: "block", background: "#1a1a1a", color: "#93c5fd",
-      padding: "10px 14px", borderRadius: 8, fontFamily: "monospace",
-      fontSize: 12, margin: "8px 0", whiteSpace: "pre", overflowX: "auto" }}>
-      {text}
-    </code>
-  );
-
-  const pill = (text: string) => (
-    <code style={{ background: "#EAE8E2", padding: "2px 7px", borderRadius: 5, fontSize: 12 }}>
-      {text}
-    </code>
-  );
-
-  const sections: { id: string; icon: string; title: string; content: React.ReactNode }[] = [
-    {
-      id: "tg",
-      icon: "✈",
-      title: "Telegram — MTProto credentials",
-      content: (
-        <div style={{ fontSize: 13, color: "#444", lineHeight: 1.8 }}>
-          <p style={{ margin: "0 0 12px", color: "#888" }}>
-            Аналитика Telegram использует MTProto API (не бот-токен). Нужны credentials вашего Telegram-аккаунта.
-          </p>
-
-          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6 }}>Шаг 1. Получи App credentials</div>
-          <ol style={{ margin: "0 0 14px 18px", padding: 0 }}>
-            <li>Зайди на <strong>my.telegram.org</strong> и войди в аккаунт</li>
-            <li>Перейди в <strong>API development tools</strong></li>
-            <li>Создай приложение (название и платформа — любые)</li>
-            <li>Скопируй {pill("App api_id")} и {pill("App api_hash")}</li>
-          </ol>
-
-          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6 }}>Шаг 2. Сгенерируй сессионную строку</div>
-          <p style={{ margin: "0 0 6px", color: "#888", fontSize: 12 }}>
-            Выполни один раз на любом компьютере с Python 3. Введёт телефон и код — это нормально.
-          </p>
-          {code(`pip install telethon\n\npython -c "\nfrom telethon.sync import TelegramClient\nfrom telethon.sessions import StringSession\napi_id = int(input('api_id: '))\napi_hash = input('api_hash: ')\nwith TelegramClient(StringSession(), api_id, api_hash) as c:\n    print('\\nTG_STRING_SESSION=' + c.session.save())\n"`)}
-          <p style={{ margin: "6px 0 14px", color: "#888", fontSize: 12 }}>
-            Скрипт напечатает строку вида {pill("1Bv...")} — скопируй её целиком.
-          </p>
-
-          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6 }}>Шаг 3. Добавь в .env на сервере</div>
-          {env(`TG_API_ID=12345678\nTG_API_HASH=abcdef1234567890abcdef1234567890\nTG_STRING_SESSION=1Bv...`)}
-
-          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6, marginTop: 14 }}>Шаг 4. Перезапусти сервер</div>
-          {code(`docker compose restart backend\n# или\nuvicorn app.main:app --reload`)}
-
-          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6, marginTop: 14 }}>Шаг 5. Собери данные</div>
-          <p style={{ margin: 0, color: "#888" }}>
-            Нажми кнопку <strong>⟳ Собрать сейчас</strong> выше. Данные появятся через 1–5 минут.
-          </p>
-        </div>
-      ),
-    },
-    {
-      id: "vk",
-      icon: "В",
-      title: "ВКонтакте — токен сообщества",
-      content: (
-        <div style={{ fontSize: 13, color: "#444", lineHeight: 1.8 }}>
-          <p style={{ margin: "0 0 12px", color: "#888" }}>
-            VK аналитика использует тот же токен, что и автопостинг. Отдельной настройки не требует.
-          </p>
-
-          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6 }}>Шаг 1. Подключи сообщество</div>
-          <p style={{ margin: "0 0 12px" }}>
-            Перейди в раздел <strong>«Подключение платформ»</strong> и подключи своё VK сообщество.
-            При создании токена убедись что выбраны права:
-          </p>
-          <ul style={{ margin: "0 0 14px 18px" }}>
-            <li><strong>Управление сообществом</strong> — для публикации постов</li>
-            <li><strong>Статистика сообщества</strong> — для данных об охватах и приросте подписчиков</li>
-          </ul>
-
-          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6 }}>Шаг 2. Собери данные</div>
-          <p style={{ margin: 0, color: "#888" }}>
-            Нажми кнопку <strong>⟳ Собрать сейчас</strong>. Если токен не имеет прав на статистику,
-            базовые данные (посты, лайки, комментарии) всё равно соберутся — охваты будут недоступны.
-          </p>
-        </div>
-      ),
-    },
-    {
-      id: "auto",
-      icon: "⏱",
-      title: "Автосбор — Celery worker",
-      content: (
-        <div style={{ fontSize: 13, color: "#444", lineHeight: 1.8 }}>
-          <p style={{ margin: "0 0 12px", color: "#888" }}>
-            Для еженедельного автосбора (каждый понедельник в 06:00 МСК) нужно запустить
-            Celery worker и планировщик beat.
-          </p>
-
-          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6 }}>Запуск вручную</div>
-          {code(`# Воркер (обрабатывает задачи)\ncelery -A app.workers.celery_app worker -l info -Q default,generation,posting\n\n# Beat (планировщик, отдельным процессом)\ncelery -A app.workers.celery_app beat -l info`)}
-
-          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6, marginTop: 14 }}>Docker Compose</div>
-          <p style={{ margin: "0 0 6px", color: "#888", fontSize: 12 }}>
-            Если используешь Docker, добавь в {pill("docker-compose.yml")}:
-          </p>
-          {env(`celery_worker:\n  build: ./backend\n  command: celery -A app.workers.celery_app worker -l info\n  depends_on: [redis, db]\n  env_file: .env\n\ncelery_beat:\n  build: ./backend\n  command: celery -A app.workers.celery_app beat -l info\n  depends_on: [redis]\n  env_file: .env`)}
-
-          <div style={{ background: "#FFF8E6", border: "1px solid #F5E6A0", borderRadius: 8,
-            padding: "10px 14px", marginTop: 14, fontSize: 12, color: "#7A5C00" }}>
-            ⚠ Redis должен быть запущен — он используется как брокер задач.
-            Укажи {pill("REDIS_URL")} в .env (по умолчанию {pill("redis://localhost:6379/0")}).
-          </div>
-        </div>
-      ),
-    },
-  ];
-
+function ReadyState({ text }: { text: string }) {
   return (
-    <div style={{ marginTop: 12, border: "1px solid #EAE8E2", borderRadius: 12, overflow: "hidden",
-      background: "#fff" }}>
-      {sections.map((s, idx) => (
-        <div key={s.id} style={{ borderTop: idx > 0 ? "1px solid #EAE8E2" : "none" }}>
-          <button
-            onClick={() => setOpen(open === s.id ? null : s.id)}
-            style={{ width: "100%", display: "flex", alignItems: "center", gap: 12,
-              padding: "14px 20px", background: open === s.id ? "#F8F7F4" : "#fff",
-              border: "none", cursor: "pointer", textAlign: "left" }}>
-            <span style={{ fontSize: 18, width: 24, textAlign: "center" }}>{s.icon}</span>
-            <span style={{ flex: 1, fontWeight: 600, fontSize: 14, color: "#1a1a1a" }}>{s.title}</span>
-            <span style={{ fontSize: 12, color: "#bbb" }}>{open === s.id ? "▲" : "▼"}</span>
-          </button>
-          {open === s.id && (
-            <div style={{ padding: "4px 20px 20px 56px" }}>
-              {s.content}
-            </div>
-          )}
-        </div>
-      ))}
+    <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
+      padding: "40px 32px", textAlign: "center" }}>
+      <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
+      <p style={{ color: "#444", fontSize: 15, margin: 0 }}>{text}</p>
     </div>
   );
 }
 
-function TGEmptyState() {
+function NoConnectionState({ platform }: { platform: string }) {
+  return (
+    <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
+      padding: "40px 32px", textAlign: "center" }}>
+      <div style={{ fontSize: 32, marginBottom: 12 }}>🔗</div>
+      <h3 style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", margin: "0 0 8px" }}>
+        {platform} не подключён
+      </h3>
+      <p style={{ color: "#888", fontSize: 14, margin: 0 }}>
+        Сначала подключи {platform} в разделе{" "}
+        <a href="/platforms" style={{ color: "#1a1a1a", fontWeight: 600 }}>Подключение платформ</a>.
+      </p>
+    </div>
+  );
+}
+
+// ─── TG Credentials Form ────────────────────────────────────────────────────
+
+type TGCredsFormProps = {
+  creds: { api_id: string; api_hash: string; session: string };
+  onChange: (v: { api_id: string; api_hash: string; session: string }) => void;
+  onSave: () => void;
+  saving: boolean;
+  msg: string;
+};
+
+function TGCredsForm({ creds, onChange, onSave, saving, msg }: TGCredsFormProps) {
+  const [showScript, setShowScript] = useState(false);
+  const canSave = creds.api_id && creds.api_hash && creds.session;
+
+  const inp = (placeholder: string, key: "api_id" | "api_hash" | "session", type = "text") => (
+    <input
+      type={type}
+      placeholder={placeholder}
+      value={creds[key]}
+      onChange={(e) => onChange({ ...creds, [key]: e.target.value })}
+      style={{ width: "100%", padding: "10px 14px", border: "1px solid #E0DED8",
+        borderRadius: 10, fontSize: 13, fontFamily: "inherit",
+        background: "#FAFAF8", outline: "none", boxSizing: "border-box" }}
+    />
+  );
+
   return (
     <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16, padding: "32px" }}>
-      <div style={{ fontSize: 36, marginBottom: 12 }}>✈</div>
-      <h3 style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", margin: "0 0 8px" }}>
-        Данных по Telegram ещё нет
+      <div style={{ fontSize: 28, marginBottom: 10 }}>✈</div>
+      <h3 style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", margin: "0 0 6px" }}>
+        Подключи аналитику Telegram
       </h3>
-      <p style={{ color: "#888", fontSize: 14, margin: "0 0 20px", lineHeight: 1.6 }}>
-        Для сбора аналитики нужно добавить MTProto-credentials в .env файл сервера.
-        Это отдельные от бот-токена данные — они дают доступ к статистике канала.
+      <p style={{ color: "#888", fontSize: 14, margin: "0 0 24px", lineHeight: 1.6 }}>
+        Для сбора статистики канала нужны MTProto-реквизиты вашего аккаунта Telegram.
+        Это отдельно от бот-токена — данные вводятся один раз.
       </p>
-      <div style={{ background: "#F8F7F4", borderRadius: 12, padding: "20px", fontSize: 13, color: "#444" }}>
-        <div style={{ fontWeight: 600, marginBottom: 12 }}>Шаги настройки:</div>
-        {[
-          <>1. Зайди на <strong>my.telegram.org</strong> → API development tools → создай приложение</>,
-          <>2. Скопируй <code style={{ background: "#EAE8E2", padding: "1px 5px", borderRadius: 4 }}>App api_id</code> и <code style={{ background: "#EAE8E2", padding: "1px 5px", borderRadius: 4 }}>App api_hash</code></>,
-          <>3. Сгенерируй сессионную строку (одноразово, на своём компьютере):</>,
-          <code style={{ display: "block", background: "#1a1a1a", color: "#4ade80", padding: "10px 14px",
-            borderRadius: 8, fontFamily: "monospace", fontSize: 12, margin: "4px 0 8px" }}>
-            python -c "from telethon.sync import TelegramClient; c=TelegramClient('s',API_ID,'API_HASH'); c.start(); print(c.session.save())"
-          </code>,
-          <>4. Добавь в <code style={{ background: "#EAE8E2", padding: "1px 5px", borderRadius: 4 }}>.env</code> три переменные:</>,
-          <code style={{ display: "block", background: "#1a1a1a", color: "#93c5fd", padding: "10px 14px",
-            borderRadius: 8, fontFamily: "monospace", fontSize: 12, margin: "4px 0" }}>
-            TG_API_ID=12345678{"\n"}TG_API_HASH=abcdef...{"\n"}TG_STRING_SESSION=1Bv...
-          </code>,
-          <>5. Перезапусти сервер и нажми «Собрать сейчас»</>,
-        ].map((step, i) => (
-          <div key={i} style={{ marginBottom: 6, lineHeight: 1.6 }}>{step}</div>
-        ))}
+
+      {/* Step 1 */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, color: "#1a1a1a", marginBottom: 10 }}>
+          Шаг 1. Получи API ID и API Hash
+        </div>
+        <ol style={{ margin: "0 0 0 18px", padding: 0, color: "#555", fontSize: 13, lineHeight: 2 }}>
+          <li>Зайди на <strong>my.telegram.org</strong> и войди в аккаунт Telegram</li>
+          <li>Выбери <strong>API development tools</strong></li>
+          <li>Создай приложение (название и платформа — произвольные)</li>
+          <li>Скопируй <code style={{ background: "#EAE8E2", padding: "1px 6px", borderRadius: 4 }}>App api_id</code> и <code style={{ background: "#EAE8E2", padding: "1px 6px", borderRadius: 4 }}>App api_hash</code></li>
+        </ol>
+        <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+          <div style={{ flex: 1 }}>{inp("API ID (число)", "api_id")}</div>
+          <div style={{ flex: 2 }}>{inp("API Hash (строка из 32 символов)", "api_hash")}</div>
+        </div>
+      </div>
+
+      {/* Step 2 */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, color: "#1a1a1a", marginBottom: 10 }}>
+          Шаг 2. Сгенерируй строку сессии (один раз)
+        </div>
+        <p style={{ margin: "0 0 10px", color: "#555", fontSize: 13, lineHeight: 1.6 }}>
+          Строка сессии позволяет серверу читать статистику канала от имени твоего аккаунта.
+          Запусти этот скрипт на любом компьютере с Python 3:
+        </p>
+        <button
+          onClick={() => setShowScript((v) => !v)}
+          style={{ background: "none", border: "1px solid #E0DED8", borderRadius: 8,
+            padding: "6px 14px", cursor: "pointer", fontSize: 12, color: "#666", marginBottom: 8 }}>
+          {showScript ? "▲ Скрыть скрипт" : "▼ Показать скрипт генерации"}
+        </button>
+        {showScript && (
+          <pre style={{ background: "#1a1a1a", color: "#4ade80", padding: "14px 16px",
+            borderRadius: 10, fontFamily: "monospace", fontSize: 12,
+            margin: "0 0 10px", overflowX: "auto", whiteSpace: "pre-wrap" }}>
+{`pip install telethon
+
+python -c "
+from telethon.sync import TelegramClient
+from telethon.sessions import StringSession
+api_id = int(input('Введи api_id: '))
+api_hash = input('Введи api_hash: ')
+with TelegramClient(StringSession(), api_id, api_hash) as c:
+    print('\\nТвоя строка сессии:')
+    print(c.session.save())
+"`}
+          </pre>
+        )}
+        <p style={{ margin: "0 0 10px", color: "#888", fontSize: 12 }}>
+          Скрипт попросит ввести телефон и код из Telegram — это безопасно, данные не покидают твой компьютер.
+          Скопируй длинную строку, которую напечатает скрипт.
+        </p>
+        <textarea
+          placeholder="Вставь строку сессии сюда (начинается с 1Bv...)"
+          value={creds.session}
+          onChange={(e) => onChange({ ...creds, session: e.target.value })}
+          rows={3}
+          style={{ width: "100%", padding: "10px 14px", border: "1px solid #E0DED8",
+            borderRadius: 10, fontSize: 12, fontFamily: "monospace",
+            background: "#FAFAF8", resize: "vertical", boxSizing: "border-box" }}
+        />
+      </div>
+
+      {/* Save */}
+      <button
+        onClick={onSave}
+        disabled={saving || !canSave}
+        style={{ padding: "11px 28px", background: canSave ? "#1a1a1a" : "#ccc",
+          color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600,
+          cursor: canSave ? "pointer" : "not-allowed" }}>
+        {saving ? "Сохраняю..." : "Сохранить реквизиты"}
+      </button>
+
+      {msg && (
+        <div style={{ marginTop: 12, fontSize: 13,
+          color: msg.startsWith("✓") ? "#0F6E56" : "#A32D2D" }}>
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── VK Empty State ─────────────────────────────────────────────────────────
+
+function VKEmptyState() {
+  return (
+    <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
+      padding: "40px 32px" }}>
+      <div style={{ fontSize: 28, marginBottom: 10 }}>В</div>
+      <h3 style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", margin: "0 0 8px" }}>
+        Данных по ВКонтакте ещё нет
+      </h3>
+      <p style={{ color: "#555", fontSize: 14, margin: "0 0 16px", lineHeight: 1.6 }}>
+        Убедись что сообщество подключено в разделе{" "}
+        <a href="/platforms" style={{ color: "#1a1a1a", fontWeight: 600 }}>Подключение платформ</a>,
+        затем нажми <strong>«⟳ Собрать сейчас»</strong> вверху страницы.
+      </p>
+      <div style={{ background: "#FFF8E6", border: "1px solid #F5E6A0", borderRadius: 10,
+        padding: "12px 16px", fontSize: 13, color: "#7A5C00" }}>
+        Для получения данных об охватах и приросте подписчиков убедись, что при создании токена
+        выбрано разрешение <strong>«Статистика сообщества»</strong>.
       </div>
     </div>
   );
 }
 
-function VKEmptyState() {
+// ─── Celery Setup Guide ──────────────────────────────────────────────────────
+
+function CelerySetupGuide() {
+  const pre = (text: string, color = "#4ade80") => (
+    <pre style={{ background: "#1a1a1a", color, padding: "12px 16px",
+      borderRadius: 10, fontFamily: "monospace", fontSize: 12,
+      margin: "8px 0", overflowX: "auto", whiteSpace: "pre-wrap" }}>
+      {text}
+    </pre>
+  );
+  const pill = (t: string) => (
+    <code style={{ background: "#EAE8E2", padding: "2px 7px", borderRadius: 5, fontSize: 12 }}>{t}</code>
+  );
+
   return (
-    <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16, padding: "32px",
-      textAlign: "center" }}>
-      <div style={{ fontSize: 36, marginBottom: 12 }}>В</div>
-      <h3 style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", margin: "0 0 8px" }}>
-        Данных по ВКонтакте ещё нет
-      </h3>
-      <p style={{ color: "#888", fontSize: 14, margin: "0 0 16px", lineHeight: 1.6 }}>
-        Убедись что сообщество ВКонтакте подключено в разделе «Подключение платформ»,
-        а затем нажми «Собрать сейчас».
+    <div style={{ border: "1px solid #EAE8E2", borderTop: "none", borderRadius: "0 0 12px 12px",
+      background: "#fff", padding: "20px 24px", fontSize: 13, color: "#444", lineHeight: 1.8 }}>
+      <p style={{ margin: "0 0 12px", color: "#888" }}>
+        Кнопка «Собрать сейчас» работает без Celery. Celery нужен только для
+        <strong> еженедельного автосбора</strong> (каждый понедельник в 06:00 МСК).
       </p>
-      <p style={{ color: "#aaa", fontSize: 13, margin: 0 }}>
-        Для доступа к расширенной статистике (охват, подписки) убедись что при создании
-        токена выбраны права <strong>Статистика сообщества</strong>.
-      </p>
+      <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 4 }}>Запуск вручную</div>
+      {pre(`# Воркер\ncelery -A app.workers.celery_app worker -l info -Q default,generation,posting\n\n# Beat-планировщик (в отдельном терминале)\ncelery -A app.workers.celery_app beat -l info`)}
+      <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 4, marginTop: 16 }}>Docker Compose</div>
+      {pre(`celery_worker:\n  build: ./backend\n  command: celery -A app.workers.celery_app worker -l info\n  depends_on: [redis, db]\n  env_file: .env\n\ncelery_beat:\n  build: ./backend\n  command: celery -A app.workers.celery_app beat -l info\n  depends_on: [redis]\n  env_file: .env`, "#93c5fd")}
+      <div style={{ background: "#FFF8E6", border: "1px solid #F5E6A0", borderRadius: 8,
+        padding: "10px 14px", marginTop: 12, fontSize: 12, color: "#7A5C00" }}>
+        ⚠ Нужен Redis. Укажи {pill("REDIS_URL")} в .env (по умолчанию {pill("redis://localhost:6379/0")}).
+      </div>
     </div>
   );
 }

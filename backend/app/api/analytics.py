@@ -1,8 +1,10 @@
+import asyncio
 from io import BytesIO
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 
@@ -92,17 +94,66 @@ async def get_vk_analytics(
     ]
 
 
-# ─── Trigger collection ──────────────────────────────────────────────────────
+# ─── TG credentials ──────────────────────────────────────────────────────────
 
-@router.post("/{business_id}/collect")
-async def collect_analytics(
+class TGCredentialsIn(BaseModel):
+    api_id: int
+    api_hash: str
+    session: str
+
+
+@router.get("/{business_id}/tg-credentials")
+async def get_tg_credentials_status(
     business_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await _get_business(business_id, current_user, db)
-    from app.workers.analytics_tasks import collect_analytics_task
-    collect_analytics_task.delay(business_id)
+    conn = await _get_connection(business_id, "telegram", db)
+    if not conn:
+        return {"configured": False, "has_connection": False}
+    return {
+        "configured": bool(conn.tg_api_id and conn.tg_session_encrypted),
+        "has_connection": True,
+        "channel_name": conn.page_name,
+    }
+
+
+@router.post("/{business_id}/tg-credentials")
+async def save_tg_credentials(
+    business_id: str,
+    req: TGCredentialsIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_business(business_id, current_user, db)
+    conn = await _get_connection(business_id, "telegram", db)
+    if not conn:
+        raise HTTPException(400, "Telegram-канал не подключён. Сначала подключи в разделе Платформы.")
+    from app.services.publishers import encrypt_token
+    conn.tg_api_id = str(req.api_id)
+    conn.tg_api_hash = req.api_hash
+    conn.tg_session_encrypted = encrypt_token(req.session)
+    await db.commit()
+    return {"status": "saved"}
+
+
+# ─── Trigger collection (BackgroundTasks, не требует Celery) ─────────────────
+
+def _bg_collect(business_id: str):
+    from app.workers.analytics_tasks import _collect
+    asyncio.run(_collect(business_id))
+
+
+@router.post("/{business_id}/collect")
+async def collect_analytics(
+    business_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_business(business_id, current_user, db)
+    background_tasks.add_task(_bg_collect, business_id)
     return {"status": "started"}
 
 
@@ -163,14 +214,13 @@ def _make_excel_tg(rows: list) -> bytes:
     ws.column_dimensions["A"].width = 26
     ws.column_dimensions["B"].width = 22
 
-    # Posts sheet
     ws2 = wb.create_sheet("TG_Посты")
     P_HEADERS = ["Канал", "Дата (EKB)", "ID", "Просмотры", "Реакции", "Комм.", "Репосты", "Текст"]
     for col, h in enumerate(P_HEADERS, 1):
         c = ws2.cell(1, col, h)
         c.font = Font(bold=True, color="FFFFFF")
         c.fill = hdr_fill
-    for ri2, row in enumerate(rows, 0):
+    for row in rows:
         for post in (row.get("posts") or []):
             ws2.append([
                 row.get("channel_name", ""),

@@ -41,37 +41,36 @@ async def _collect(business_id: str):
             return
 
         # ── TG ───────────────────────────────────────────────────────────────
-        if settings.TG_API_ID and settings.TG_STRING_SESSION:
-            tg_conn = await db.execute(
-                select(PlatformConnection).where(
-                    PlatformConnection.business_id == business_id,
-                    PlatformConnection.platform == "telegram",
-                    PlatformConnection.is_active == True,
-                )
+        tg_conn = await db.execute(
+            select(PlatformConnection).where(
+                PlatformConnection.business_id == business_id,
+                PlatformConnection.platform == "telegram",
+                PlatformConnection.is_active == True,
             )
-            tg = tg_conn.scalar_one_or_none()
-            if tg:
+        )
+        tg = tg_conn.scalar_one_or_none()
+        if tg:
+            # Credentials из БД (введены пользователем), иначе fallback на .env
+            api_id = int(tg.tg_api_id) if tg.tg_api_id else settings.TG_API_ID
+            api_hash = tg.tg_api_hash if tg.tg_api_hash else settings.TG_API_HASH
+            session = (
+                decrypt_token(tg.tg_session_encrypted)
+                if tg.tg_session_encrypted
+                else settings.TG_STRING_SESSION
+            )
+
+            if api_id and session:
                 try:
                     from app.services.analytics_tg import collect_tg_weekly
                     weekly, posts = collect_tg_weekly(
-                        settings.TG_API_ID,
-                        settings.TG_API_HASH,
-                        settings.TG_STRING_SESSION,
-                        tg.external_page_id,
+                        api_id, api_hash, session, tg.external_page_id,
                     )
-                    # Удаляем старые данные для этого канала и перезаписываем
                     await db.execute(
                         delete(TGWeeklyStats).where(
                             TGWeeklyStats.business_id == business_id,
                             TGWeeklyStats.channel_id == tg.external_page_id,
                         )
                     )
-                    # Группируем посты по неделям для хранения
-                    posts_by_week: dict = {}
-                    for p in posts:
-                        wk = p["date"][:10]  # "YYYY-MM-DD"
-                        posts_by_week.setdefault(wk, []).append(p)
-
                     for w in weekly:
                         ws_date = datetime.fromisoformat(w["week_start"])
                         we_date = datetime.fromisoformat(w["week_end"])
@@ -92,6 +91,8 @@ async def _collect(business_id: str):
                     print(f"[analytics] TG собрана для {business.name}: {len(weekly)} недель")
                 except Exception as e:
                     print(f"[analytics] TG ошибка для {business.name}: {e}")
+            else:
+                print(f"[analytics] TG: нет credentials для {business.name}")
 
         # ── VK ───────────────────────────────────────────────────────────────
         vk_conn = await db.execute(
@@ -134,3 +135,5 @@ async def _collect(business_id: str):
                 print(f"[analytics] VK собрана для {business.name}: {len(weekly)} недель")
             except Exception as e:
                 print(f"[analytics] VK ошибка для {business.name}: {e}")
+        else:
+            print(f"[analytics] VK: нет активного подключения для {business.name}")
