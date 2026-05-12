@@ -2,10 +2,11 @@
 API для создания постов вручную:
   POST /{business_id}/generate-text   — Claude пишет текст поста по идее
   POST /{business_id}/generate-prompt — Claude пишет промт для картинки
-  POST /{business_id}/generate-image  — Gemini Imagen 3 генерирует картинку
+  POST /{business_id}/generate-image  — Gemini / DALL-E генерирует картинку
   POST /{business_id}/publish         — сохраняет ContentSlot(ы) в БД
 """
 import asyncio
+import base64
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -20,10 +21,12 @@ from app.api.auth import get_current_user
 from app.config import settings
 from app.database import get_db
 from app.models.models import (
-    Business, ContentSlot, PlatformConnection, PlanStatus, Platform, User,
+    Business, ContentSlot, PlanStatus, Platform, User,
 )
 
 router = APIRouter()
+
+_MODEL = "claude-sonnet-4-6"
 
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
@@ -38,8 +41,16 @@ async def _get_business(business_id: str, user: User, db: AsyncSession) -> Busin
     return biz
 
 
-def _claude() -> anthropic.AsyncAnthropic:
-    return anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+def _claude_sync(system: str, messages: list, max_tokens: int = 2000) -> str:
+    """Синхронный вызов Claude — запускать через asyncio.to_thread."""
+    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    resp = client.messages.create(
+        model=_MODEL,
+        max_tokens=max_tokens,
+        system=system,
+        messages=messages,
+    )
+    return resp.content[0].text.strip()
 
 
 # ─── 1. Генерация текста поста ────────────────────────────────────────────────
@@ -62,34 +73,19 @@ async def generate_post_text(
         strategy = {}
         name = "компании"
 
-    # Если прикреплён файл-изображение — передаём его в Claude как vision
     messages: list = []
     if file and file.content_type and file.content_type.startswith("image/"):
         content = await file.read()
-        import base64
-        b64 = base64.b64encode(content).decode()
+        b64img = base64.b64encode(content).decode()
         messages.append({
             "role": "user",
             "content": [
-                {
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": file.content_type, "data": b64},
-                },
-                {
-                    "type": "text",
-                    "text": (
-                        f"Бизнес: {name}\n"
-                        f"Идея поста: {idea}\n\n"
-                        "На изображении выше — визуальный контекст. Напиши текст поста."
-                    ),
-                },
+                {"type": "image", "source": {"type": "base64", "media_type": file.content_type, "data": b64img}},
+                {"type": "text", "text": f"Бизнес: {name}\nИдея поста: {idea}\n\nНа изображении — визуальный контекст. Напиши текст поста."},
             ],
         })
     else:
-        messages.append({
-            "role": "user",
-            "content": f"Идея поста: {idea}",
-        })
+        messages.append({"role": "user", "content": f"Идея поста: {idea}"})
 
     tone = strategy.get("tone_of_voice", "профессиональный, дружелюбный")
     niche = profile.get("niche", "")
@@ -106,14 +102,11 @@ async def generate_post_text(
         "• Не добавляй никаких пояснений — только текст поста"
     )
 
-    client = _claude()
-    resp = await client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2000,
-        system=system,
-        messages=messages,
-    )
-    text = resp.content[0].text.strip()
+    try:
+        text = await asyncio.to_thread(_claude_sync, system, messages, 2000)
+    except Exception as e:
+        raise HTTPException(500, f"Claude ошибка: {e}")
+
     return {"text": text}
 
 
@@ -130,13 +123,14 @@ async def generate_image_prompt(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    biz = await _get_business(business_id, current_user, db)
-
-    profile = biz.profile or {}
-    niche = profile.get("niche", "")
+    try:
+        biz = await _get_business(business_id, current_user, db)
+        niche = (biz.profile or {}).get("niche", "")
+    except HTTPException:
+        niche = ""
 
     system = (
-        "You are an expert prompt engineer for Imagen 3 image generation.\n"
+        "You are an expert prompt engineer for AI image generation.\n"
         "Create a detailed English image generation prompt based on the social media post.\n\n"
         "Rules:\n"
         "• Write in English only\n"
@@ -145,22 +139,13 @@ async def generate_image_prompt(
         "• Photorealistic or high-quality illustration style\n"
         "• Return ONLY the prompt, no explanations"
     )
+    messages = [{"role": "user", "content": f"Business niche: {niche}\n\nPost text (Russian):\n{body.post_text}\n\nWrite the image generation prompt:"}]
 
-    client = _claude()
-    resp = await client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=500,
-        system=system,
-        messages=[{
-            "role": "user",
-            "content": (
-                f"Business niche: {niche}\n\n"
-                f"Post text (Russian):\n{body.post_text}\n\n"
-                "Write the image generation prompt:"
-            ),
-        }],
-    )
-    prompt = resp.content[0].text.strip()
+    try:
+        prompt = await asyncio.to_thread(_claude_sync, system, messages, 500)
+    except Exception as e:
+        raise HTTPException(500, f"Claude ошибка: {e}")
+
     return {"prompt": prompt}
 
 
@@ -194,8 +179,8 @@ class PublishIn(BaseModel):
     post_text: str
     image_prompt: Optional[str] = None
     image_base64: Optional[str] = None
-    platforms: list[str]          # ["vk", "telegram"]
-    scheduled_at: Optional[str] = None   # ISO datetime или null = сейчас
+    platforms: list[str]
+    scheduled_at: Optional[str] = None
 
 
 @router.post("/{business_id}/publish")
