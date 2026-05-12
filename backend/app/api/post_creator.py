@@ -63,6 +63,28 @@ def _claude_sync(system: str, user_text: str, max_tokens: int = 2000) -> str:
     return r.json()["content"][0]["text"].strip()
 
 
+def _gemini_text_sync(system: str, user_text: str, max_tokens: int = 1200) -> str:
+    """Gemini 2.5 Flash для текста — быстро, GEMINI_API_KEY уже есть."""
+    r = httpx.post(
+        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={settings.GEMINI_API_KEY}",
+        json={
+            "contents": [{"parts": [{"text": f"{system}\n\n{user_text}"}]}],
+            "generationConfig": {"maxOutputTokens": max_tokens},
+        },
+        timeout=60,
+    )
+    if r.status_code != 200:
+        raise ValueError(f"Gemini {r.status_code}: {r.text[:200]}")
+    candidates = r.json().get("candidates", [])
+    if not candidates:
+        raise ValueError("Gemini не вернул текст")
+    parts = candidates[0].get("content", {}).get("parts", [])
+    text = parts[0].get("text", "").strip() if parts else ""
+    if not text:
+        raise ValueError("Gemini вернул пустой текст")
+    return text
+
+
 def _gpt_sync(system: str, user_text: str, max_tokens: int = 2000) -> str:
     """OpenAI GPT-4o-mini как запасной вариант."""
     r = httpx.post(
@@ -87,8 +109,14 @@ def _gpt_sync(system: str, user_text: str, max_tokens: int = 2000) -> str:
 
 
 def _generate_text(system: str, user_text: str, max_tokens: int = 1200) -> str:
-    """GPT-4o-mini primary (быстро, < 15с) → Claude fallback."""
+    """Gemini Flash (2-5с) → GPT-4o-mini → Claude."""
     errors: list[str] = []
+
+    if settings.GEMINI_API_KEY:
+        try:
+            return _gemini_text_sync(system, user_text, max_tokens)
+        except Exception as e:
+            errors.append(f"Gemini: {e}")
 
     if settings.OPENAI_API_KEY:
         try:
