@@ -1,45 +1,62 @@
-import httpx
 import re
+import json
+import urllib.request
+import urllib.error
 from app.config import settings
 
 
 def send_email(to: str, subject: str, html_body: str) -> bool:
-    """Отправляет письмо через Brevo API (работает из Railway)"""
+    """Отправляет письмо через Brevo API используя urllib"""
 
     if settings.BREVO_API_KEY:
+        sender_email = settings.SMTP_FROM or settings.SMTP_USER or "noreply@smm-platform.ru"
+
+        payload = json.dumps({
+            "sender": {"name": "SMM Platform", "email": sender_email},
+            "to": [{"email": to}],
+            "subject": subject,
+            "htmlContent": html_body,
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            "https://api.brevo.com/v3/smtp/email",
+            data=payload,
+            headers={
+                "api-key": settings.BREVO_API_KEY,
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
         try:
-            sender_email = settings.SMTP_FROM or settings.SMTP_USER or "noreply@smm-platform.ru"
-            sender_name = "SMM Platform"
+            with urllib.request.urlopen(req, timeout=10) as response:
+                status = response.status
+                if status in (200, 201):
+                    print(f"[EMAIL OK] Brevo → {to} (status={status})")
+                    return True
+                else:
+                    body = response.read().decode()
+                    print(f"[EMAIL ERROR] Brevo status={status}: {body}")
+                    return False
 
-            response = httpx.post(
-                "https://api.brevo.com/v3/smtp/email",
-                headers={
-                    "api-key": settings.BREVO_API_KEY,
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "sender": {"name": sender_name, "email": sender_email},
-                    "to": [{"email": to}],
-                    "subject": subject,
-                    "htmlContent": html_body,
-                },
-                timeout=15,
-            )
-
-            if response.status_code in (200, 201):
-                print(f"[EMAIL OK] Brevo → {to}")
-                return True
-            else:
-                print(f"[EMAIL ERROR] Brevo {response.status_code}: {response.text}")
-                return False
-
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            print(f"[EMAIL ERROR] Brevo HTTP {e.code}: {body}")
+            return False
+        except urllib.error.URLError as e:
+            print(f"[EMAIL ERROR] Brevo URL error: {e.reason}")
+            return False
+        except TimeoutError:
+            print(f"[EMAIL ERROR] Brevo timeout after 10s")
+            return False
         except Exception as e:
-            print(f"[EMAIL ERROR] Brevo exception: {type(e).__name__}: {e}")
+            print(f"[EMAIL ERROR] Brevo {type(e).__name__}: {e}")
             return False
 
-    # Mock режим если ключ не задан
+    # Mock режим
     codes = re.findall(r'\d{6}', html_body)
-    print(f"[EMAIL MOCK] To: {to} | Code: {codes[0] if codes else '???'}")
+    code_str = codes[0] if codes else '???'
+    print(f"[EMAIL MOCK] BREVO_API_KEY not set. To: {to} | Code: {code_str}")
     return True
 
 
@@ -83,7 +100,7 @@ def send_welcome_email(to: str, plan: str) -> bool:
         "demo": "Демо (3 дня)",
         "start": "Старт",
         "business": "Бизнес",
-        "pro": "Про"
+        "pro": "Про",
     }
     subject = "Добро пожаловать в SMM Platform!"
     html = f"""<!DOCTYPE html>
