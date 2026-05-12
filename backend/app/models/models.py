@@ -114,6 +114,8 @@ class ContentSlot(Base):
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    image_base64: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     reach: Mapped[Optional[int]] = mapped_column(nullable=True)
     likes: Mapped[Optional[int]] = mapped_column(nullable=True)
     comments: Mapped[Optional[int]] = mapped_column(nullable=True)

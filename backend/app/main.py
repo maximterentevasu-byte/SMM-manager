@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from sqlalchemy import text
 from app.database import engine, Base
-from app.api import auth, businesses, onboarding, content, platforms, subscriptions, analytics
+from app.api import auth, businesses, onboarding, content, platforms, subscriptions, analytics, post_creator
 
 # Колонки для миграций без Alembic — добавляются через ADD COLUMN IF NOT EXISTS
 _MIGRATIONS = [
@@ -11,6 +11,7 @@ _MIGRATIONS = [
     "ALTER TABLE platform_connections ADD COLUMN IF NOT EXISTS tg_api_hash VARCHAR(255)",
     "ALTER TABLE platform_connections ADD COLUMN IF NOT EXISTS tg_session_encrypted TEXT",
     "ALTER TABLE platform_connections ADD COLUMN IF NOT EXISTS vk_user_token_encrypted TEXT",
+    "ALTER TABLE content_slots ADD COLUMN IF NOT EXISTS image_base64 TEXT",
 ]
 
 
@@ -43,7 +44,8 @@ app.include_router(onboarding.router,    prefix="/api/onboarding",    tags=["onb
 app.include_router(content.router,       prefix="/api/content",       tags=["content"])
 app.include_router(platforms.router,     prefix="/api/platforms",     tags=["platforms"])
 app.include_router(subscriptions.router, prefix="/api/subscriptions", tags=["subscriptions"])
-app.include_router(analytics.router,    prefix="/api/analytics",    tags=["analytics"])
+app.include_router(analytics.router,      prefix="/api/analytics",      tags=["analytics"])
+app.include_router(post_creator.router,   prefix="/api/post-creator",   tags=["post-creator"])
 
 
 @app.get("/")

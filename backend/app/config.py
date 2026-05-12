@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     YOOKASSA_SHOP_ID: str = ""
     YOOKASSA_SECRET_KEY: str = ""
 
+    # Gemini (Google) — генерация изображений через Imagen 3
+    GEMINI_API_KEY: str = ""
+
     # Telegram Analytics (MTProto — отдельно от Bot API)
     # Получить: https://my.telegram.org → API development tools
     TG_API_ID: int = 0

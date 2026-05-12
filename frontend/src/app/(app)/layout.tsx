@@ -3,11 +3,12 @@
 import { usePathname, useRouter } from "next/navigation";
 
 const NAV = [
-  { href: "/home",      icon: "⌂",  label: "Главная" },
-  { href: "/analytics", icon: "📊", label: "Аналитика" },
-  { href: "/content",   icon: "📅", label: "Контент-план" },
-  { href: "/strategy",  icon: "🎯", label: "Стратегия и онбординг" },
-  { href: "/platforms", icon: "🔗", label: "Подключение платформ" },
+  { href: "/home",         icon: "⌂",  label: "Главная" },
+  { href: "/post-creator", icon: "✏️", label: "Создание постов" },
+  { href: "/analytics",    icon: "📊", label: "Аналитика" },
+  { href: "/content",      icon: "📅", label: "Контент-план" },
+  { href: "/strategy",     icon: "🎯", label: "Стратегия и онбординг" },
+  { href: "/platforms",    icon: "🔗", label: "Подключение платформ" },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
