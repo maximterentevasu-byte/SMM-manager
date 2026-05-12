@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import api from "@/lib/api";
 
 type TGWeek = {
@@ -42,6 +42,7 @@ export default function AnalyticsPage() {
   const [loadingVk, setLoadingVk] = useState(true);
   const [collecting, setCollecting] = useState(false);
   const [collectMsg, setCollectMsg] = useState("");
+  const [showSetup, setShowSetup] = useState(false);
 
   const [businessId] = useState(() =>
     typeof window !== "undefined" ? localStorage.getItem("businessId") || "" : ""
@@ -182,6 +183,23 @@ export default function AnalyticsPage() {
           </div>
         )}
 
+        {/* Setup guide */}
+        <div style={{ marginBottom: 24 }}>
+          <button
+            onClick={() => setShowSetup((v) => !v)}
+            style={{ display: "flex", alignItems: "center", gap: 8,
+              background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12,
+              padding: "10px 18px", cursor: "pointer", fontSize: 14,
+              color: "#444", fontWeight: 500, width: "100%", textAlign: "left" }}>
+            <span style={{ fontSize: 16 }}>⚙</span>
+            <span>Как подключить аналитику</span>
+            <span style={{ marginLeft: "auto", fontSize: 12, color: "#aaa" }}>
+              {showSetup ? "▲ Скрыть" : "▼ Показать"}
+            </span>
+          </button>
+          {showSetup && <SetupGuide />}
+        </div>
+
         {/* ── TELEGRAM ── */}
         {tab === "tg" && (
           <>
@@ -288,6 +306,155 @@ function WeeklyTable({ rows, cols, emptyText }: { rows: any[]; cols: any[]; empt
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function SetupGuide() {
+  const [open, setOpen] = useState<string | null>("tg");
+
+  const code = (text: string) => (
+    <code style={{ display: "block", background: "#1a1a1a", color: "#4ade80",
+      padding: "10px 14px", borderRadius: 8, fontFamily: "monospace",
+      fontSize: 12, margin: "8px 0", whiteSpace: "pre", overflowX: "auto" }}>
+      {text}
+    </code>
+  );
+
+  const env = (text: string) => (
+    <code style={{ display: "block", background: "#1a1a1a", color: "#93c5fd",
+      padding: "10px 14px", borderRadius: 8, fontFamily: "monospace",
+      fontSize: 12, margin: "8px 0", whiteSpace: "pre", overflowX: "auto" }}>
+      {text}
+    </code>
+  );
+
+  const pill = (text: string) => (
+    <code style={{ background: "#EAE8E2", padding: "2px 7px", borderRadius: 5, fontSize: 12 }}>
+      {text}
+    </code>
+  );
+
+  const sections: { id: string; icon: string; title: string; content: React.ReactNode }[] = [
+    {
+      id: "tg",
+      icon: "✈",
+      title: "Telegram — MTProto credentials",
+      content: (
+        <div style={{ fontSize: 13, color: "#444", lineHeight: 1.8 }}>
+          <p style={{ margin: "0 0 12px", color: "#888" }}>
+            Аналитика Telegram использует MTProto API (не бот-токен). Нужны credentials вашего Telegram-аккаунта.
+          </p>
+
+          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6 }}>Шаг 1. Получи App credentials</div>
+          <ol style={{ margin: "0 0 14px 18px", padding: 0 }}>
+            <li>Зайди на <strong>my.telegram.org</strong> и войди в аккаунт</li>
+            <li>Перейди в <strong>API development tools</strong></li>
+            <li>Создай приложение (название и платформа — любые)</li>
+            <li>Скопируй {pill("App api_id")} и {pill("App api_hash")}</li>
+          </ol>
+
+          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6 }}>Шаг 2. Сгенерируй сессионную строку</div>
+          <p style={{ margin: "0 0 6px", color: "#888", fontSize: 12 }}>
+            Выполни один раз на любом компьютере с Python 3. Введёт телефон и код — это нормально.
+          </p>
+          {code(`pip install telethon\n\npython -c "\nfrom telethon.sync import TelegramClient\nfrom telethon.sessions import StringSession\napi_id = int(input('api_id: '))\napi_hash = input('api_hash: ')\nwith TelegramClient(StringSession(), api_id, api_hash) as c:\n    print('\\nTG_STRING_SESSION=' + c.session.save())\n"`)}
+          <p style={{ margin: "6px 0 14px", color: "#888", fontSize: 12 }}>
+            Скрипт напечатает строку вида {pill("1Bv...")} — скопируй её целиком.
+          </p>
+
+          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6 }}>Шаг 3. Добавь в .env на сервере</div>
+          {env(`TG_API_ID=12345678\nTG_API_HASH=abcdef1234567890abcdef1234567890\nTG_STRING_SESSION=1Bv...`)}
+
+          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6, marginTop: 14 }}>Шаг 4. Перезапусти сервер</div>
+          {code(`docker compose restart backend\n# или\nuvicorn app.main:app --reload`)}
+
+          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6, marginTop: 14 }}>Шаг 5. Собери данные</div>
+          <p style={{ margin: 0, color: "#888" }}>
+            Нажми кнопку <strong>⟳ Собрать сейчас</strong> выше. Данные появятся через 1–5 минут.
+          </p>
+        </div>
+      ),
+    },
+    {
+      id: "vk",
+      icon: "В",
+      title: "ВКонтакте — токен сообщества",
+      content: (
+        <div style={{ fontSize: 13, color: "#444", lineHeight: 1.8 }}>
+          <p style={{ margin: "0 0 12px", color: "#888" }}>
+            VK аналитика использует тот же токен, что и автопостинг. Отдельной настройки не требует.
+          </p>
+
+          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6 }}>Шаг 1. Подключи сообщество</div>
+          <p style={{ margin: "0 0 12px" }}>
+            Перейди в раздел <strong>«Подключение платформ»</strong> и подключи своё VK сообщество.
+            При создании токена убедись что выбраны права:
+          </p>
+          <ul style={{ margin: "0 0 14px 18px" }}>
+            <li><strong>Управление сообществом</strong> — для публикации постов</li>
+            <li><strong>Статистика сообщества</strong> — для данных об охватах и приросте подписчиков</li>
+          </ul>
+
+          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6 }}>Шаг 2. Собери данные</div>
+          <p style={{ margin: 0, color: "#888" }}>
+            Нажми кнопку <strong>⟳ Собрать сейчас</strong>. Если токен не имеет прав на статистику,
+            базовые данные (посты, лайки, комментарии) всё равно соберутся — охваты будут недоступны.
+          </p>
+        </div>
+      ),
+    },
+    {
+      id: "auto",
+      icon: "⏱",
+      title: "Автосбор — Celery worker",
+      content: (
+        <div style={{ fontSize: 13, color: "#444", lineHeight: 1.8 }}>
+          <p style={{ margin: "0 0 12px", color: "#888" }}>
+            Для еженедельного автосбора (каждый понедельник в 06:00 МСК) нужно запустить
+            Celery worker и планировщик beat.
+          </p>
+
+          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6 }}>Запуск вручную</div>
+          {code(`# Воркер (обрабатывает задачи)\ncelery -A app.workers.celery_app worker -l info -Q default,generation,posting\n\n# Beat (планировщик, отдельным процессом)\ncelery -A app.workers.celery_app beat -l info`)}
+
+          <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 6, marginTop: 14 }}>Docker Compose</div>
+          <p style={{ margin: "0 0 6px", color: "#888", fontSize: 12 }}>
+            Если используешь Docker, добавь в {pill("docker-compose.yml")}:
+          </p>
+          {env(`celery_worker:\n  build: ./backend\n  command: celery -A app.workers.celery_app worker -l info\n  depends_on: [redis, db]\n  env_file: .env\n\ncelery_beat:\n  build: ./backend\n  command: celery -A app.workers.celery_app beat -l info\n  depends_on: [redis]\n  env_file: .env`)}
+
+          <div style={{ background: "#FFF8E6", border: "1px solid #F5E6A0", borderRadius: 8,
+            padding: "10px 14px", marginTop: 14, fontSize: 12, color: "#7A5C00" }}>
+            ⚠ Redis должен быть запущен — он используется как брокер задач.
+            Укажи {pill("REDIS_URL")} в .env (по умолчанию {pill("redis://localhost:6379/0")}).
+          </div>
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <div style={{ marginTop: 12, border: "1px solid #EAE8E2", borderRadius: 12, overflow: "hidden",
+      background: "#fff" }}>
+      {sections.map((s, idx) => (
+        <div key={s.id} style={{ borderTop: idx > 0 ? "1px solid #EAE8E2" : "none" }}>
+          <button
+            onClick={() => setOpen(open === s.id ? null : s.id)}
+            style={{ width: "100%", display: "flex", alignItems: "center", gap: 12,
+              padding: "14px 20px", background: open === s.id ? "#F8F7F4" : "#fff",
+              border: "none", cursor: "pointer", textAlign: "left" }}>
+            <span style={{ fontSize: 18, width: 24, textAlign: "center" }}>{s.icon}</span>
+            <span style={{ flex: 1, fontWeight: 600, fontSize: 14, color: "#1a1a1a" }}>{s.title}</span>
+            <span style={{ fontSize: 12, color: "#bbb" }}>{open === s.id ? "▲" : "▼"}</span>
+          </button>
+          {open === s.id && (
+            <div style={{ padding: "4px 20px 20px 56px" }}>
+              {s.content}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
