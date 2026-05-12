@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from typing import Optional
-import uuid, aiohttp, boto3
+import uuid, aiohttp, boto3, base64
 from datetime import datetime
 
 from app.database import get_db
@@ -69,6 +69,7 @@ async def get_plan(
             "idea": s.idea,
             "post_text": s.post_text,
             "image_url": s.image_url,
+            "image_base64": s.image_base64,
             "image_prompt": s.image_prompt,
             "status": s.status.value if hasattr(s.status, "value") else s.status,
         }
@@ -103,11 +104,10 @@ async def publish_slot_now(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(ContentSlot).where(ContentSlot.id == slot_id))
-    slot = result.scalar_one_or_none()
+    slot_result = await db.execute(select(ContentSlot).where(ContentSlot.id == slot_id))
+    slot = slot_result.scalar_one_or_none()
     if not slot:
         raise HTTPException(404, "Slot not found")
-
     if not slot.post_text:
         raise HTTPException(400, "Нет текста поста")
 
@@ -124,35 +124,121 @@ async def publish_slot_now(
 
     from app.services.publishers import decrypt_token
     token = decrypt_token(connection.token_encrypted)
-    chat_id = connection.external_page_id
+    page_id = connection.external_page_id
 
     hashtags_str = " ".join(f"#{t}" for t in (slot.hashtags or []))
     full_text = f"{slot.post_text}\n\n{hashtags_str}".strip()
 
     platform = slot.platform.value if hasattr(slot.platform, "value") else slot.platform
+    has_b64 = bool(slot.image_base64)
+    has_url = bool(slot.image_url)
 
     async with aiohttp.ClientSession() as session:
-        if slot.image_url and platform == "telegram":
-            resp = await session.post(
-                f"https://api.telegram.org/bot{token}/sendPhoto",
-                json={"chat_id": chat_id, "photo": slot.image_url, "caption": full_text[:1024]}
-            )
+
+        # ── Telegram ──────────────────────────────────────────────────────────
+        if platform == "telegram":
+            if has_b64:
+                img_bytes = base64.b64decode(slot.image_base64)
+                form = aiohttp.FormData()
+                form.add_field("chat_id", page_id)
+                form.add_field("caption", full_text[:1024])
+                form.add_field("photo", img_bytes, filename="image.png", content_type="image/png")
+                resp = await session.post(
+                    f"https://api.telegram.org/bot{token}/sendPhoto", data=form
+                )
+            elif has_url:
+                resp = await session.post(
+                    f"https://api.telegram.org/bot{token}/sendPhoto",
+                    json={"chat_id": page_id, "photo": slot.image_url, "caption": full_text[:1024]}
+                )
+            else:
+                resp = await session.post(
+                    f"https://api.telegram.org/bot{token}/sendMessage",
+                    json={"chat_id": page_id, "text": full_text[:4096]}
+                )
+
+            tg = await resp.json()
+            if not tg.get("ok"):
+                raise HTTPException(400, f"Telegram: {tg.get('description', str(tg))}")
+
+            slot.status = PlanStatus.published
+            slot.published_at = datetime.utcnow()
+            slot.external_post_id = str(tg["result"]["message_id"])
+            await db.commit()
+            return {"status": "published", "message_id": tg["result"]["message_id"]}
+
+        # ── VK ────────────────────────────────────────────────────────────────
+        elif platform == "vk":
+            group_id = page_id.lstrip("-")
+            attachment = ""
+
+            if has_b64 or has_url:
+                try:
+                    # 1. Получаем URL для загрузки фото
+                    r = await session.get(
+                        "https://api.vk.com/method/photos.getWallUploadServer",
+                        params={"group_id": group_id, "access_token": token, "v": "5.131"}
+                    )
+                    srv = await r.json()
+                    if "error" in srv:
+                        raise ValueError(srv["error"]["error_msg"])
+                    upload_url = srv["response"]["upload_url"]
+
+                    # 2. Загружаем изображение
+                    if has_b64:
+                        img_bytes = base64.b64decode(slot.image_base64)
+                    else:
+                        dl = await session.get(slot.image_url)
+                        img_bytes = await dl.read()
+
+                    form = aiohttp.FormData()
+                    form.add_field("photo", img_bytes, filename="photo.png", content_type="image/png")
+                    r = await session.post(upload_url, data=form)
+                    up = await r.json()
+
+                    # 3. Сохраняем фото
+                    r = await session.post(
+                        "https://api.vk.com/method/photos.saveWallPhoto",
+                        params={
+                            "group_id": group_id,
+                            "photo": up["photo"],
+                            "server": up["server"],
+                            "hash": up["hash"],
+                            "access_token": token,
+                            "v": "5.131",
+                        }
+                    )
+                    saved = await r.json()
+                    if "error" in saved:
+                        raise ValueError(saved["error"]["error_msg"])
+                    ph = saved["response"][0]
+                    attachment = f"photo{ph['owner_id']}_{ph['id']}"
+                except Exception:
+                    attachment = ""  # публикуем без фото если загрузка упала
+
+            # 4. Публикуем на стену
+            params = {
+                "owner_id": f"-{group_id}",
+                "message": full_text,
+                "access_token": token,
+                "v": "5.131",
+            }
+            if attachment:
+                params["attachments"] = attachment
+
+            r = await session.post("https://api.vk.com/method/wall.post", params=params)
+            vk = await r.json()
+            if "error" in vk:
+                raise HTTPException(400, f"VK: {vk['error']['error_msg']}")
+
+            slot.status = PlanStatus.published
+            slot.published_at = datetime.utcnow()
+            slot.external_post_id = str(vk["response"]["post_id"])
+            await db.commit()
+            return {"status": "published", "post_id": vk["response"]["post_id"]}
+
         else:
-            resp = await session.post(
-                f"https://api.telegram.org/bot{token}/sendMessage",
-                json={"chat_id": chat_id, "text": full_text[:4096]}
-            )
-        result_data = await resp.json()
-
-    if not result_data.get("ok"):
-        raise HTTPException(400, f"Ошибка публикации: {result_data}")
-
-    slot.status = PlanStatus.published
-    slot.published_at = datetime.utcnow()
-    slot.external_post_id = str(result_data["result"]["message_id"])
-    await db.commit()
-
-    return {"status": "published", "message_id": result_data["result"]["message_id"]}
+            raise HTTPException(400, f"Платформа {platform} не поддерживается")
 
 
 @router.post("/slot/{slot_id}/generate-image")

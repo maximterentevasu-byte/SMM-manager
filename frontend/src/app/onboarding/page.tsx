@@ -142,6 +142,17 @@ export default function OnboardingPage() {
     }
   };
 
+  const skipOnboarding = async () => {
+    const storedId = typeof window !== "undefined" ? localStorage.getItem("businessId") : null;
+    if (!storedId) {
+      try {
+        const { data } = await api.post("/onboarding/quick-start");
+        if (typeof window !== "undefined") localStorage.setItem("businessId", data.business_id);
+      } catch {}
+    }
+    router.push("/home");
+  };
+
   const inp: React.CSSProperties = {
     width: "100%", padding: "10px 14px", border: "1px solid #E0DED8",
     borderRadius: 10, fontSize: 14, fontFamily: "inherit",
@@ -183,6 +194,17 @@ export default function OnboardingPage() {
             </div>
           ))}
         </div>
+
+        {/* Кнопка пропуска — видна на всех шагах кроме финального */}
+        {step < 6 && (
+          <div style={{ textAlign: "right", marginBottom: 8, marginTop: -16 }}>
+            <button onClick={skipOnboarding}
+              style={{ background: "none", border: "none", color: "#aaa",
+                cursor: "pointer", fontSize: 13, textDecoration: "underline", padding: 0 }}>
+              Заполнить позже →
+            </button>
+          </div>
+        )}
 
         {/* STEP 0: Бизнес */}
         {step === 0 && (

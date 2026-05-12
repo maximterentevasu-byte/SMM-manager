@@ -19,7 +19,8 @@ const MONTHS = ["янв","фев","мар","апр","май","июн","июл","
 type Slot = {
   id: string; platform: string; scheduled_at: string; rubric_name: string;
   idea: { idea: string; hook: string; visual_concept: string } | null;
-  post_text: string | null; image_url: string | null; image_prompt: string | null; status: string;
+  post_text: string | null; image_url: string | null; image_base64: string | null;
+  image_prompt: string | null; status: string;
 };
 
 export default function ContentPage() {
@@ -46,8 +47,8 @@ export default function ContentPage() {
         params: { year: now.getFullYear(), month: now.getMonth() + 1 },
       });
       setSlots(data);
-    } catch {
-      router.push("/login");
+    } catch (e: any) {
+      if (e?.response?.status === 401) router.push("/login");
     } finally {
       setLoading(false);
     }
@@ -241,8 +242,10 @@ export default function ContentPage() {
                   <div style={{ width: 180, borderLeft: "1px solid #F2F0EC", padding: 14,
                     display: "flex", flexDirection: "column", gap: 10, alignItems: "center",
                     justifyContent: "center", background: "#FAFAF8" }}>
-                    {slot.image_url ? (
-                      <img src={slot.image_url} alt="post"
+                    {slot.image_url || slot.image_base64 ? (
+                      <img
+                        src={slot.image_url || `data:image/png;base64,${slot.image_base64}`}
+                        alt="post"
                         style={{ width: "100%", borderRadius: 10, objectFit: "cover" }} />
                     ) : (
                       <div style={{ width: "100%", aspectRatio: "1", background: "#F1EFE8",
@@ -252,7 +255,7 @@ export default function ContentPage() {
                         <span style={{ fontSize: 10, color: "#999", textAlign: "center" }}>Нет картинки</span>
                       </div>
                     )}
-                    {!slot.image_url && (
+                    {!slot.image_url && !slot.image_base64 && (
                       <button onClick={() => generateImage(slot)} disabled={generatingImg === slot.id}
                         style={{ width: "100%", padding: "7px", background: "#533AB7", color: "#fff",
                           border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>

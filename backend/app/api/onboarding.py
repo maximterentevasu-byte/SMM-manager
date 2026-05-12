@@ -96,6 +96,30 @@ async def get_clarifying_questions(
     return {"questions": questions}
 
 
+@router.post("/quick-start")
+async def quick_start(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Создаёт минимальный бизнес-профиль, если его ещё нет."""
+    result = await db.execute(
+        select(Business).where(Business.user_id == current_user.id)
+    )
+    existing = result.scalars().first()
+    if existing:
+        return {"business_id": str(existing.id), "status": "existing"}
+
+    business = Business(
+        id=uuid.uuid4(),
+        user_id=current_user.id,
+        name="Мой бизнес",
+        profile={"niche": "", "usp": "", "target_audience": "", "price_segment": "middle", "geo": ""},
+    )
+    db.add(business)
+    await db.commit()
+    return {"business_id": str(business.id), "status": "created"}
+
+
 @router.post("/answer-clarification/{business_id}")
 async def answer_clarification(
     business_id: str,
