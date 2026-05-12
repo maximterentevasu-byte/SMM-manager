@@ -1,6 +1,10 @@
 """
-Сбор аналитики VK-сообщества через Community Token.
-Токен берётся из PlatformConnection.
+Сбор аналитики VK-сообщества.
+
+wall.get вызывается БЕЗ токена (публичный API) — community token не имеет
+права на этот метод (VK error code 27).
+stats.get вызывается С токеном — требует разрешение «Статистика сообщества».
+groups.getById — с токеном (получить members_count), fallback без токена.
 """
 import httpx
 import time
@@ -16,12 +20,11 @@ DAY_RU = {
 }
 
 
-def _vk_get(method: str, params: dict, token: str, version: str = "5.131") -> dict:
-    """Синхронный запрос к VK API с базовым retry."""
-    p = {**params, "access_token": token, "v": version}
+def _req(method: str, params: dict, timeout: int = 20) -> dict:
+    """HTTP-запрос к VK API с retry на rate-limit ошибки."""
     for attempt in range(4):
         try:
-            r = httpx.get(f"{VK_API}/{method}", params=p, timeout=15)
+            r = httpx.get(f"{VK_API}/{method}", params={**params, "v": "5.131"}, timeout=timeout)
             data = r.json()
             if "error" in data:
                 code = data["error"]["error_code"]
@@ -30,7 +33,7 @@ def _vk_get(method: str, params: dict, token: str, version: str = "5.131") -> di
                     continue
                 raise ValueError(f"VK API {method}: {data['error']['error_msg']} (code {code})")
             return data.get("response", {})
-        except httpx.RequestError as e:
+        except httpx.RequestError:
             if attempt < 3:
                 time.sleep(1)
             else:
@@ -38,15 +41,38 @@ def _vk_get(method: str, params: dict, token: str, version: str = "5.131") -> di
     return {}
 
 
-def _get_posts(group_id: str, token: str) -> list[dict]:
+def _get_group_info(group_id: str, token: str) -> dict:
+    """Получает инфо о группе: name, members_count."""
+    try:
+        resp = _req("groups.getById", {"group_id": group_id, "fields": "members_count",
+                                        "access_token": token})
+    except ValueError:
+        # Fallback: без токена (публичный запрос)
+        resp = _req("groups.getById", {"group_id": group_id, "fields": "members_count"})
+
+    if isinstance(resp, list):
+        groups = resp
+    elif isinstance(resp, dict):
+        groups = resp.get("groups", [])
+    else:
+        groups = []
+    return groups[0] if groups else {}
+
+
+def _get_posts(group_id: str) -> list[dict]:
+    """
+    Читает посты стены через публичный API (без токена).
+    wall.get с community token возвращает code 27 — метод недоступен
+    для group auth, поэтому токен намеренно не передаётся.
+    """
     posts = []
     offset = 0
-    owner_id = f"-{group_id.lstrip('-')}"
+    owner_id = f"-{group_id}"
     while True:
-        resp = _vk_get("wall.get", {"owner_id": owner_id, "count": 100, "offset": offset, "filter": "owner"}, token)
+        resp = _req("wall.get", {"owner_id": owner_id, "count": 100, "offset": offset})
         items = resp.get("items", []) if isinstance(resp, dict) else []
         for p in items:
-            if p.get("is_pinned"):
+            if p.get("is_pinned") or p.get("marked_as_ads"):
                 continue
             posts.append({
                 "id": p["id"],
@@ -60,21 +86,22 @@ def _get_posts(group_id: str, token: str) -> list[dict]:
         if len(items) < 100:
             break
         offset += 100
-        time.sleep(0.4)
+        time.sleep(0.35)
     return posts
 
 
 def _get_stats(group_id: str, token: str, date_from: str, date_to: str) -> dict:
-    """Получает stats.get. Возвращает {} если нет доступа."""
+    """Статистика через community token (требует «Статистика сообщества»). Возвращает {} при ошибке."""
     try:
-        resp = _vk_get("stats.get", {
-            "group_id": group_id.lstrip("-"),
+        resp = _req("stats.get", {
+            "group_id": group_id,
             "date_from": date_from,
             "date_to": date_to,
             "interval": "week",
             "intervals_count": 52,
             "extended": 0,
-        }, token)
+            "access_token": token,
+        })
         if isinstance(resp, list):
             return {item.get("period_from", ""): item for item in resp}
     except ValueError:
@@ -83,21 +110,18 @@ def _get_stats(group_id: str, token: str, date_from: str, date_to: str) -> dict:
 
 
 def collect_vk_weekly(group_id: str, token: str) -> tuple[list[dict], list[dict]]:
-    """Возвращает (weekly_stats, all_posts)"""
+    """Возвращает (weekly_stats, all_posts)."""
     group_id = group_id.lstrip("-")
 
-    # Инфо о группе
-    group_resp = _vk_get("groups.getById", {"group_id": group_id, "fields": "members_count"}, token)
-    groups = group_resp if isinstance(group_resp, list) else group_resp.get("groups", [])
-    group_info = groups[0] if groups else {}
+    group_info = _get_group_info(group_id, token)
     group_name = group_info.get("name", group_id)
     members = group_info.get("members_count", 0)
 
-    posts = _get_posts(group_id, token)
+    posts = _get_posts(group_id)
     if not posts:
         return [], []
 
-    # Группировка по неделям
+    # Группировка по неделям (EKB UTC+5)
     week_posts: dict = defaultdict(list)
     today = date.today()
     for p in posts:
@@ -108,12 +132,9 @@ def collect_vk_weekly(group_id: str, token: str) -> tuple[list[dict], list[dict]
         if we < today:
             week_posts[(ws, we)].append(p)
 
-    # Попытка получить stats
     if week_posts:
-        all_dates = list(week_posts.keys())
-        date_from = sorted(all_dates)[0][0].isoformat()
-        date_to = today.isoformat()
-        stats_map = _get_stats(group_id, token, date_from, date_to)
+        all_dates = sorted(week_posts.keys())
+        stats_map = _get_stats(group_id, token, all_dates[0][0].isoformat(), today.isoformat())
     else:
         stats_map = {}
 
@@ -138,13 +159,10 @@ def collect_vk_weekly(group_id: str, token: str) -> tuple[list[dict], list[dict]
         virality = sum(r_list) / total_views * 100 if total_views > 0 else 0
         eng_idx = (sum(l_list) + 2 * sum(c_list) + 3 * sum(r_list)) / total_views * 100 if total_views > 0 else 0
 
-        # VK stats (subscribers delta) если доступно
         net_growth = None
         stat = stats_map.get(ws.isoformat())
         if stat:
-            subs = stat.get("subscribed", 0) or 0
-            unsubs = stat.get("unsubscribed", 0) or 0
-            net_growth = subs - unsubs
+            net_growth = (stat.get("subscribed") or 0) - (stat.get("unsubscribed") or 0)
 
         day_s: dict = defaultdict(lambda: {"v": 0, "n": 0})
         hour_s: dict = defaultdict(lambda: {"v": 0, "n": 0})
