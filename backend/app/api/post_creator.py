@@ -52,11 +52,15 @@ async def generate_post_text(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    biz = await _get_business(business_id, current_user, db)
-
-    profile = biz.profile or {}
-    strategy = biz.strategy or {}
-    name = biz.name
+    try:
+        biz = await _get_business(business_id, current_user, db)
+        profile = biz.profile or {}
+        strategy = biz.strategy or {}
+        name = biz.name
+    except HTTPException:
+        profile = {}
+        strategy = {}
+        name = "компании"
 
     # Если прикреплён файл-изображение — передаём его в Claude как vision
     messages: list = []

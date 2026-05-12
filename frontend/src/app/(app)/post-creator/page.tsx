@@ -85,7 +85,10 @@ export default function PostCreatorPage() {
       const { data } = await api.post(`/post-creator/${businessId}/generate-text`, fd);
       setPostText(data.text);
     } catch (e: any) {
-      setPostText("Ошибка: " + (e?.response?.data?.detail || "не удалось сгенерировать"));
+      const d = e?.response?.data;
+      const detail = (typeof d === "string" ? d : d?.detail) || e?.message || "нет ответа от сервера";
+      const status = e?.response?.status ? ` [${e.response.status}]` : "";
+      setPostText(`Ошибка${status}: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`);
     } finally {
       setLoadingText(false);
     }
