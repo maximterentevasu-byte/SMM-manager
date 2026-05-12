@@ -7,7 +7,7 @@ from app.config import settings
 
 _ENDPOINT = (
     "https://generativelanguage.googleapis.com/v1beta"
-    "/models/imagen-3.0-generate-001:predict"
+    "/models/imagen-3.0-generate-002:predict"
 )
 
 
