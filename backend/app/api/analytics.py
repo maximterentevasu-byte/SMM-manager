@@ -159,19 +159,37 @@ class TGCodeIn(BaseModel):
 
 
 def _tg_send_code_sync(api_id: int, api_hash: str, phone: str):
-    from telethon.sync import TelegramClient
+    import asyncio as _aio
+    from telethon import TelegramClient
     from telethon.sessions import StringSession
-    client = TelegramClient(StringSession(), api_id, api_hash)
-    client.connect()
-    sent = client.send_code_request(phone)
-    return client, sent.phone_code_hash
+
+    loop = _aio.new_event_loop()
+    _aio.set_event_loop(loop)
+
+    async def _do():
+        client = TelegramClient(StringSession(), api_id, api_hash)
+        await client.connect()
+        sent = await client.send_code_request(phone)
+        return client, sent.phone_code_hash
+
+    return loop.run_until_complete(_do())
 
 
 def _tg_sign_in_sync(client, phone: str, code: str, phone_code_hash: str) -> str:
-    client.sign_in(phone, code, phone_code_hash=phone_code_hash)
-    session_str = client.session.save()
-    client.disconnect()
-    return session_str
+    import asyncio as _aio
+
+    loop = _aio.get_event_loop()
+    if loop is None or loop.is_closed():
+        loop = _aio.new_event_loop()
+        _aio.set_event_loop(loop)
+
+    async def _do():
+        await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
+        session_str = client.session.save()
+        await client.disconnect()
+        return session_str
+
+    return loop.run_until_complete(_do())
 
 
 @router.post("/{business_id}/tg-send-code")
@@ -186,8 +204,14 @@ async def tg_send_code(
     if not conn:
         raise HTTPException(400, "Telegram-канал не подключён. Сначала подключи в разделе Платформы.")
     from app.config import settings
-    api_id = int(settings.TG_API_ID)
-    api_hash = settings.TG_API_HASH
+    api_id = int(settings.TG_API_ID) if settings.TG_API_ID else 0
+    api_hash = settings.TG_API_HASH or ""
+    if not api_id or not api_hash:
+        raise HTTPException(
+            400,
+            "На сервере не настроен TG_API_ID / TG_API_HASH. "
+            "Добавь переменные окружения в Railway (получить на my.telegram.org → API development tools)."
+        )
     try:
         client, phone_code_hash = await asyncio.to_thread(
             _tg_send_code_sync, api_id, api_hash, req.phone

@@ -24,16 +24,34 @@ def _week_bounds(dt: datetime) -> tuple[date, date]:
     return start, start + timedelta(days=6)
 
 
+def _parse_channel_id(chat_id: str) -> int:
+    """
+    Возвращает числовой ID канала без -100 префикса.
+    Принимает: '1003916447124', '-1001003916447124', '-1003916447124'
+    """
+    s = str(chat_id).strip().lstrip("-")
+    if s.startswith("100") and len(s) > 12:
+        s = s[3:]  # убираем 100 из -100XXXXXXXXX
+    return int(s)
+
+
 async def _fetch_channel(api_id: int, api_hash: str, session_str: str, chat_id: str) -> tuple[int, str, list]:
     from telethon import TelegramClient
     from telethon.sessions import StringSession
     from telethon.tl.functions.channels import GetFullChannelRequest
-    from telethon.tl.types import PeerChannel
 
-    numeric_id = int(str(chat_id).lstrip("-"))
+    numeric_id = _parse_channel_id(chat_id)
+    full_id = int(f"-100{numeric_id}")  # формат, который Telethon понимает без кэша
 
     async with TelegramClient(StringSession(session_str), api_id, api_hash) as client:
-        entity = await client.get_entity(PeerChannel(numeric_id))
+        # get_entity по полному ID (-100XXXXXXXXX) работает даже без кэша сессии
+        try:
+            entity = await client.get_entity(full_id)
+        except Exception:
+            # если не получилось — обновляем диалоги и пробуем снова
+            await client.get_dialogs(limit=50)
+            entity = await client.get_entity(full_id)
+
         full = await client(GetFullChannelRequest(entity))
         subscribers = full.full_chat.participants_count
         channel_name = getattr(entity, "title", str(chat_id))
@@ -64,7 +82,7 @@ def _build_weekly(channel_id: str, subscribers: int, channel_name: str, posts: l
 
     for p in posts:
         ws, we = _week_bounds(p["date"])
-        if we < today:  # только завершённые недели
+        if we < today:
             week_posts[(ws, we)].append(p)
 
     results = []
@@ -127,10 +145,20 @@ def _build_weekly(channel_id: str, subscribers: int, channel_name: str, posts: l
 
 
 def collect_tg_weekly(api_id: int, api_hash: str, session_str: str, chat_id: str) -> tuple[list[dict], list[dict]]:
-    """Возвращает (weekly_stats, all_posts)"""
-    subscribers, channel_name, posts = asyncio.run(
-        _fetch_channel(api_id, api_hash, session_str, chat_id)
-    )
+    """
+    Возвращает (weekly_stats, all_posts).
+    Создаёт собственный event loop — безопасно вызывать из asyncio.to_thread.
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        subscribers, channel_name, posts = loop.run_until_complete(
+            _fetch_channel(api_id, api_hash, session_str, chat_id)
+        )
+    finally:
+        loop.close()
+        asyncio.set_event_loop(None)
+
     weekly = _build_weekly(chat_id, subscribers, channel_name, posts)
 
     all_posts = [
