@@ -86,14 +86,22 @@ def _gpt_sync(system: str, user_text: str, max_tokens: int = 2000) -> str:
     return r.json()["choices"][0]["message"]["content"].strip()
 
 
-def _generate_text(system: str, user_text: str, max_tokens: int = 2000) -> str:
-    """Claude → GPT fallback."""
+def _generate_text(system: str, user_text: str, max_tokens: int = 1200) -> str:
+    """GPT-4o-mini primary (быстро, < 15с) → Claude fallback."""
+    errors: list[str] = []
+
+    if settings.OPENAI_API_KEY:
+        try:
+            return _gpt_sync(system, user_text, max_tokens)
+        except Exception as e:
+            errors.append(f"GPT: {e}")
+
     try:
         return _claude_sync(system, user_text, max_tokens)
-    except Exception as claude_err:
-        if settings.OPENAI_API_KEY:
-            return _gpt_sync(system, user_text, max_tokens)
-        raise ValueError(f"Claude: {claude_err}") from claude_err
+    except Exception as e:
+        errors.append(f"Claude: {e}")
+
+    raise ValueError(" | ".join(errors) or "Нет доступных AI провайдеров")
 
 
 # ─── 1. Генерация текста поста ────────────────────────────────────────────────
@@ -135,7 +143,7 @@ async def generate_post_text(
     )
 
     try:
-        text = await asyncio.to_thread(_generate_text, system, f"Идея поста: {body.idea}", 2000)
+        text = await asyncio.to_thread(_generate_text, system, f"Идея поста: {body.idea}")
     except Exception as e:
         raise HTTPException(500, f"Ошибка генерации: {e}")
 
@@ -176,7 +184,7 @@ async def generate_image_prompt(
     user_text = f"Business niche: {niche}\n\nPost text (Russian):\n{body.post_text}\n\nWrite the image generation prompt:"
 
     try:
-        prompt = await asyncio.to_thread(_generate_text, system, user_text, 500)
+        prompt = await asyncio.to_thread(_generate_text, system, user_text, 400)
     except Exception as e:
         raise HTTPException(500, f"Ошибка генерации промта: {e}")
 
