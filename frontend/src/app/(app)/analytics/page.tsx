@@ -158,7 +158,9 @@ export default function AnalyticsPage() {
     </div>
   );
 
-  const tg_cols = [
+  const isBasicMode = tgData.length > 0 && (tgData[0] as any)._mode === "basic";
+
+  const tg_cols_full = [
     { key: "week_start", label: "Неделя", render: (r: TGWeek) => `${r.week_start} — ${r.week_end}`, w: 200 },
     { key: "subscribers", label: "Подписчики", render: (r: TGWeek) => fmt(r.subscribers), w: 110 },
     { key: "posts_count", label: "Постов", render: (r: TGWeek) => String(r.posts_count), w: 70 },
@@ -170,6 +172,14 @@ export default function AnalyticsPage() {
     { key: "quality_index", label: "Индекс", render: (r: TGWeek) => fmt(r.quality_index, 2), w: 80 },
     { key: "best_day", label: "Лучший день", render: (r: TGWeek) => `${r.best_day} ${r.best_hour}`, w: 110 },
   ];
+
+  const tg_cols_basic = [
+    { key: "week_start", label: "Неделя", render: (r: TGWeek) => `${r.week_start} — ${r.week_end}`, w: 200 },
+    { key: "subscribers", label: "Подписчики", render: (r: TGWeek) => fmt(r.subscribers), w: 130 },
+    { key: "posts_count", label: "Постов опубликовано", render: (r: TGWeek) => String(r.posts_count), w: 160 },
+  ];
+
+  const tg_cols = isBasicMode ? tg_cols_basic : tg_cols_full;
 
   const vk_cols = [
     { key: "week_start", label: "Неделя", render: (r: VKWeek) => `${r.week_start} — ${r.week_end}`, w: 200 },
@@ -259,7 +269,8 @@ export default function AnalyticsPage() {
               <div style={{ textAlign: "center", padding: "3rem", color: "#888" }}>Загружаем...</div>
             ) : tgData.length > 0 ? (
               <>
-                {tgLast && (
+                {/* Карточки: только если полный режим */}
+                {!isBasicMode && tgLast && (
                   <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
                     {card("Подписчики", fmt(tgLast.subscribers))}
                     {card("Ср. охват", fmt(tgLast.avg_views), "просм.",
@@ -270,10 +281,44 @@ export default function AnalyticsPage() {
                       tgPrev ? delta(tgLast.quality_index, tgPrev.quality_index) : null)}
                   </div>
                 )}
+                {/* Карточки: базовый режим */}
+                {isBasicMode && tgLast && (
+                  <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+                    {card("Подписчики", fmt(tgLast.subscribers))}
+                    {card("Постов за посл. неделю", String(tgLast.posts_count))}
+                  </div>
+                )}
+                {/* Баннер базового режима */}
+                {isBasicMode && (
+                  <div style={{ background: "#F0F4FF", border: "1px solid #C7D4F5",
+                    borderRadius: 12, padding: "14px 18px", marginBottom: 20,
+                    display: "flex", gap: 12, alignItems: "flex-start" }}>
+                    <span style={{ fontSize: 18 }}>ℹ</span>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: "#2D4A9A", marginBottom: 4 }}>
+                        Базовый режим — только подписчики и публикации через платформу
+                      </div>
+                      <div style={{ fontSize: 12, color: "#4A6AB0", lineHeight: 1.6 }}>
+                        Для охватов, просмотров и ER настрой MTProto-реквизиты ниже.
+                        Это одноразовая настройка — данные начнут собираться сразу.
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <WeeklyTable rows={tgData} cols={tg_cols} emptyText="Нет данных по Telegram" />
+                {/* Форма MTProto под таблицей в базовом режиме */}
+                {isBasicMode && (
+                  <div style={{ marginTop: 24 }}>
+                    <TGCredsForm
+                      creds={tgCreds}
+                      onChange={setTgCreds}
+                      onSave={saveTgCreds}
+                      saving={savingCreds}
+                      msg={credsMsg}
+                    />
+                  </div>
+                )}
               </>
-            ) : tgCredsStatus?.configured ? (
-              <ReadyState text="Реквизиты Telegram сохранены. Нажмите «Собрать сейчас» — данные появятся через 1–5 минут." />
             ) : tgCredsStatus?.has_connection ? (
               <TGCredsForm
                 creds={tgCreds}

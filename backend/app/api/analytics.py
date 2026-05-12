@@ -10,7 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 
 from app.database import get_db
-from app.models.models import User, Business, PlatformConnection, TGWeeklyStats, VKWeeklyStats
+from app.models.models import (
+    User, Business, PlatformConnection,
+    TGWeeklyStats, VKWeeklyStats, ContentSlot, PlanStatus, Platform,
+)
 from app.api.auth import get_current_user
 from app.services.publishers import decrypt_token
 
@@ -175,9 +178,92 @@ async def _save_vk(db: AsyncSession, business_id: str, vk: PlatformConnection) -
     return {"weeks": len(weekly)}
 
 
+async def _save_tg_via_bot(db: AsyncSession, business_id: str, tg: PlatformConnection) -> dict:
+    """
+    Базовый сбор TG через бот-токен (без MTProto).
+    Даёт: количество подписчиков + посты из ContentSlots за последние 12 недель.
+    """
+    import aiohttp
+    from datetime import date, timedelta, datetime as dt
+
+    bot_token = decrypt_token(tg.token_encrypted)
+
+    async with aiohttp.ClientSession() as s:
+        r1 = await s.get(
+            f"https://api.telegram.org/bot{bot_token}/getChat",
+            params={"chat_id": tg.external_page_id},
+        )
+        chat_resp = await r1.json()
+        r2 = await s.get(
+            f"https://api.telegram.org/bot{bot_token}/getChatMemberCount",
+            params={"chat_id": tg.external_page_id},
+        )
+        members_resp = await r2.json()
+
+    if not chat_resp.get("ok"):
+        return {"weeks": 0, "error": chat_resp.get("description", "Bot API ошибка")}
+
+    channel_name = chat_resp["result"].get("title", tg.page_name)
+    subscribers = members_resp.get("result", 0) if members_resp.get("ok") else 0
+
+    # Последние 12 завершённых недель из ContentSlots
+    today = date.today()
+    monday_this = today - timedelta(days=today.weekday())
+    weeks_data = []
+    for i in range(1, 13):
+        ws = monday_this - timedelta(weeks=i)
+        we = ws + timedelta(days=6)
+        ws_dt = dt(ws.year, ws.month, ws.day, 0, 0, 0)
+        we_dt = dt(we.year, we.month, we.day, 23, 59, 59)
+
+        slots_res = await db.execute(
+            select(ContentSlot).where(
+                ContentSlot.business_id == business_id,
+                ContentSlot.platform == Platform.telegram,
+                ContentSlot.status == PlanStatus.published,
+                ContentSlot.published_at >= ws_dt,
+                ContentSlot.published_at <= we_dt,
+            )
+        )
+        slots = slots_res.scalars().all()
+        weeks_data.append({
+            "week_start": ws.isoformat(),
+            "week_end": we.isoformat(),
+            "posts_count": len(slots),
+        })
+
+    # Всегда сохраняем хотя бы последнюю неделю (с subscriber count)
+    save_weeks = [w for w in weeks_data if w["posts_count"] > 0] or [weeks_data[0]]
+
+    await db.execute(
+        delete(TGWeeklyStats).where(TGWeeklyStats.business_id == business_id)
+    )
+    for w in save_weeks:
+        db.add(TGWeeklyStats(
+            id=uuid.uuid4(),
+            business_id=uuid.UUID(business_id),
+            channel_id=tg.external_page_id,
+            channel_name=channel_name,
+            week_start=datetime.fromisoformat(w["week_start"]),
+            week_end=datetime.fromisoformat(w["week_end"]),
+            stats={
+                "subscribers": subscribers,
+                "posts_count": w["posts_count"],
+                "total_views": None,
+                "avg_views": None,
+                "er_views_pct": None,
+                "er_activity_pct": None,
+                "quality_index": None,
+                "_mode": "basic",
+            },
+            posts=[],
+        ))
+    await db.commit()
+    return {"weeks": len(save_weeks), "mode": "basic", "subscribers": subscribers}
+
+
 async def _save_tg(db: AsyncSession, business_id: str, tg: PlatformConnection) -> dict:
-    """Собирает TG-аналитику и сохраняет в БД. Возвращает статус."""
-    from app.services.analytics_tg import collect_tg_weekly
+    """Собирает TG-аналитику. MTProto если настроен, иначе базовый Bot API режим."""
     from app.config import settings
 
     api_id = int(tg.tg_api_id) if tg.tg_api_id else settings.TG_API_ID
@@ -187,38 +273,40 @@ async def _save_tg(db: AsyncSession, business_id: str, tg: PlatformConnection) -
         if tg.tg_session_encrypted
         else settings.TG_STRING_SESSION
     )
-    if not (api_id and session):
-        return {"weeks": 0, "error": "MTProto-реквизиты не настроены"}
 
-    weekly, posts = await asyncio.to_thread(
-        collect_tg_weekly, api_id, api_hash, session, tg.external_page_id
-    )
-    if not weekly:
-        return {"weeks": 0, "error": "Постов не найдено"}
-
-    await db.execute(
-        delete(TGWeeklyStats).where(
-            TGWeeklyStats.business_id == business_id,
-            TGWeeklyStats.channel_id == tg.external_page_id,
+    if api_id and session:
+        from app.services.analytics_tg import collect_tg_weekly
+        weekly, posts = await asyncio.to_thread(
+            collect_tg_weekly, api_id, api_hash, session, tg.external_page_id
         )
-    )
-    for w in weekly:
-        ws_date = datetime.fromisoformat(w["week_start"])
-        we_date = datetime.fromisoformat(w["week_end"])
-        week_posts = [p for p in posts if w["week_start"] <= p["date"][:10] <= w["week_end"]]
-        db.add(TGWeeklyStats(
-            id=uuid.uuid4(),
-            business_id=uuid.UUID(business_id),
-            channel_id=tg.external_page_id,
-            channel_name=w.get("channel_name", tg.page_name),
-            week_start=ws_date,
-            week_end=we_date,
-            stats={k: v for k, v in w.items()
-                   if k not in ("channel_id", "channel_name", "week_start", "week_end")},
-            posts=week_posts,
-        ))
-    await db.commit()
-    return {"weeks": len(weekly)}
+        if not weekly:
+            return {"weeks": 0, "error": "MTProto: постов не найдено"}
+        await db.execute(
+            delete(TGWeeklyStats).where(
+                TGWeeklyStats.business_id == business_id,
+                TGWeeklyStats.channel_id == tg.external_page_id,
+            )
+        )
+        for w in weekly:
+            ws_date = datetime.fromisoformat(w["week_start"])
+            we_date = datetime.fromisoformat(w["week_end"])
+            week_posts = [p for p in posts if w["week_start"] <= p["date"][:10] <= w["week_end"]]
+            db.add(TGWeeklyStats(
+                id=uuid.uuid4(),
+                business_id=uuid.UUID(business_id),
+                channel_id=tg.external_page_id,
+                channel_name=w.get("channel_name", tg.page_name),
+                week_start=ws_date,
+                week_end=we_date,
+                stats={k: v for k, v in w.items()
+                       if k not in ("channel_id", "channel_name", "week_start", "week_end")},
+                posts=week_posts,
+            ))
+        await db.commit()
+        return {"weeks": len(weekly), "mode": "full"}
+
+    # Fallback: базовый режим через бот-токен
+    return await _save_tg_via_bot(db, business_id, tg)
 
 
 @router.post("/{business_id}/collect")
