@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -41,8 +41,8 @@ async def _get_business(business_id: str, user: User, db: AsyncSession) -> Busin
     return biz
 
 
-def _claude_sync(system: str, messages: list, max_tokens: int = 2000) -> str:
-    """Прямой вызов Anthropic API через httpx — без SDK, явный таймаут 120с."""
+def _claude_sync(system: str, user_text: str, max_tokens: int = 2000) -> str:
+    """Прямой вызов Anthropic API через httpx, таймаут 120с."""
     r = httpx.post(
         "https://api.anthropic.com/v1/messages",
         headers={
@@ -54,7 +54,7 @@ def _claude_sync(system: str, messages: list, max_tokens: int = 2000) -> str:
             "model": _MODEL,
             "max_tokens": max_tokens,
             "system": system,
-            "messages": messages,
+            "messages": [{"role": "user", "content": user_text}],
         },
         timeout=120,
     )
@@ -63,13 +63,49 @@ def _claude_sync(system: str, messages: list, max_tokens: int = 2000) -> str:
     return r.json()["content"][0]["text"].strip()
 
 
+def _gpt_sync(system: str, user_text: str, max_tokens: int = 2000) -> str:
+    """OpenAI GPT-4o-mini как запасной вариант."""
+    r = httpx.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+            "content-type": "application/json",
+        },
+        json={
+            "model": "gpt-4o-mini",
+            "max_tokens": max_tokens,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_text},
+            ],
+        },
+        timeout=120,
+    )
+    if r.status_code != 200:
+        raise ValueError(f"OpenAI {r.status_code}: {r.text[:300]}")
+    return r.json()["choices"][0]["message"]["content"].strip()
+
+
+def _generate_text(system: str, user_text: str, max_tokens: int = 2000) -> str:
+    """Claude → GPT fallback."""
+    try:
+        return _claude_sync(system, user_text, max_tokens)
+    except Exception as claude_err:
+        if settings.OPENAI_API_KEY:
+            return _gpt_sync(system, user_text, max_tokens)
+        raise ValueError(f"Claude: {claude_err}") from claude_err
+
+
 # ─── 1. Генерация текста поста ────────────────────────────────────────────────
+
+class TextIn(BaseModel):
+    idea: str
+
 
 @router.post("/{business_id}/generate-text")
 async def generate_post_text(
     business_id: str,
-    idea: str = Form(...),
-    file: Optional[UploadFile] = File(None),
+    body: TextIn,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -82,20 +118,6 @@ async def generate_post_text(
         profile = {}
         strategy = {}
         name = "компании"
-
-    messages: list = []
-    if file and file.content_type and file.content_type.startswith("image/"):
-        content = await file.read()
-        b64img = base64.b64encode(content).decode()
-        messages.append({
-            "role": "user",
-            "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": file.content_type, "data": b64img}},
-                {"type": "text", "text": f"Бизнес: {name}\nИдея поста: {idea}\n\nНа изображении — визуальный контекст. Напиши текст поста."},
-            ],
-        })
-    else:
-        messages.append({"role": "user", "content": f"Идея поста: {idea}"})
 
     tone = strategy.get("tone_of_voice", "профессиональный, дружелюбный")
     niche = profile.get("niche", "")
@@ -113,9 +135,9 @@ async def generate_post_text(
     )
 
     try:
-        text = await asyncio.to_thread(_claude_sync, system, messages, 2000)
+        text = await asyncio.to_thread(_generate_text, system, f"Идея поста: {body.idea}", 2000)
     except Exception as e:
-        raise HTTPException(500, f"Claude ошибка: {e}")
+        raise HTTPException(500, f"Ошибка генерации: {e}")
 
     return {"text": text}
 
@@ -151,10 +173,12 @@ async def generate_image_prompt(
     )
     messages = [{"role": "user", "content": f"Business niche: {niche}\n\nPost text (Russian):\n{body.post_text}\n\nWrite the image generation prompt:"}]
 
+    user_text = f"Business niche: {niche}\n\nPost text (Russian):\n{body.post_text}\n\nWrite the image generation prompt:"
+
     try:
-        prompt = await asyncio.to_thread(_claude_sync, system, messages, 500)
+        prompt = await asyncio.to_thread(_generate_text, system, user_text, 500)
     except Exception as e:
-        raise HTTPException(500, f"Claude ошибка: {e}")
+        raise HTTPException(500, f"Ошибка генерации промта: {e}")
 
     return {"prompt": prompt}
 

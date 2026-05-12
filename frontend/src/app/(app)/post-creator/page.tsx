@@ -79,10 +79,7 @@ export default function PostCreatorPage() {
     setImageBase64("");
     setImageRetries(0);
     try {
-      const fd = new FormData();
-      fd.append("idea", idea);
-      if (ideaFile) fd.append("file", ideaFile);
-      const { data } = await api.post(`/post-creator/${businessId}/generate-text`, fd);
+      const { data } = await api.post(`/post-creator/${businessId}/generate-text`, { idea });
       setPostText(data.text);
     } catch (e: any) {
       const d = e?.response?.data;
