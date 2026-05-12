@@ -1,0 +1,457 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import api from "@/lib/api";
+
+type Connection = {
+  platform: string;
+  page_name: string;
+  external_page_id: string;
+  is_active: boolean;
+};
+
+type PlatformSetup = {
+  token: string;
+  pageId: string;
+};
+
+const PLATFORMS = [
+  {
+    id: "telegram",
+    name: "Telegram",
+    icon: "✈",
+    color: "#2AABEE",
+    bg: "#E8F6FE",
+    description: "Канал или группа",
+    steps: [
+      {
+        title: "Создай бота через @BotFather",
+        items: [
+          <>Открой <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" style={{ color: "#2AABEE" }}>@BotFather</a> в Telegram</>,
+          <>Напиши <code style={code}>/newbot</code> и следуй инструкциям</>,
+          <>Получишь токен вида: <code style={code}>7123456789:AAFxxxxxxxx</code></>,
+          <>Вставь его в поле «Токен бота» ниже</>,
+        ],
+      },
+      {
+        title: "Добавь бота в канал как администратора",
+        items: [
+          <>Открой свой канал → Настройки → Администраторы</>,
+          <>Нажми «Добавить администратора» и найди своего бота по username</>,
+          <>Достаточно прав: <strong>Публикация сообщений</strong></>,
+        ],
+      },
+      {
+        title: "Получи ID канала",
+        items: [
+          <>Перешли любое сообщение из канала боту <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" style={{ color: "#2AABEE" }}>@userinfobot</a></>,
+          <>Он вернёт ID вида <code style={code}>-1001234567890</code> (отрицательное число)</>,
+          <>Вставь этот ID в поле «ID канала / чата» ниже</>,
+        ],
+      },
+    ],
+    tokenLabel: "Токен бота",
+    tokenPlaceholder: "7123456789:AAFxxxxxxxxxxxxxxxx",
+    pageIdLabel: "ID канала / чата",
+    pageIdPlaceholder: "-1001234567890",
+    pageIdHint: "Отрицательное число для каналов и групп",
+  },
+  {
+    id: "vk",
+    name: "ВКонтакте",
+    icon: "В",
+    color: "#4680C2",
+    bg: "#EBF2FB",
+    description: "Сообщество (группа или публичная страница)",
+    steps: [
+      {
+        title: "Создай ключ доступа для сообщества",
+        items: [
+          <>Открой своё сообщество ВКонтакте</>,
+          <>Перейди в <strong>Управление → Настройки → Работа с API</strong></>,
+          <>Нажми «Создать ключ доступа»</>,
+          <>Поставь галочки: <strong>Управление сообществом</strong> и <strong>Управление записями на стене</strong></>,
+          <>Скопируй токен — он длинный, начинается с букв/цифр</>,
+        ],
+      },
+      {
+        title: "Найди ID своего сообщества",
+        items: [
+          <>Открой страницу сообщества в браузере</>,
+          <>В адресной строке: <code style={code}>vk.com/club123456</code> — ID это <code style={code}>123456</code></>,
+          <>Или: Управление → Настройки — вверху страницы будет «ID сообщества»</>,
+          <>Вводи только цифры, <strong>без минуса и без «club»</strong></>,
+        ],
+      },
+    ],
+    tokenLabel: "Токен сообщества",
+    tokenPlaceholder: "vk1.a.xxxxxxxxxxxxxxxx",
+    pageIdLabel: "ID сообщества",
+    pageIdPlaceholder: "123456789",
+    pageIdHint: "Только цифры, без минуса",
+  },
+];
+
+const code: React.CSSProperties = {
+  background: "#F1EFE8", padding: "1px 6px", borderRadius: 4,
+  fontFamily: "monospace", fontSize: 12, color: "#333",
+};
+
+export default function PlatformsPage() {
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [form, setForm] = useState<Record<string, PlatformSetup>>({
+    telegram: { token: "", pageId: "" },
+    vk: { token: "", pageId: "" },
+  });
+  const [connecting, setConnecting] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [testing, setTesting] = useState<string | null>(null);
+  const [error, setError] = useState<Record<string, string>>({});
+  const [success, setSuccess] = useState<Record<string, string>>({});
+  const [openStep, setOpenStep] = useState<Record<string, number | null>>({});
+
+  const [businessId] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("businessId") || "" : ""
+  );
+
+  useEffect(() => {
+    if (!businessId) return;
+    api.get(`/platforms/list/${businessId}`)
+      .then(({ data }) => setConnections(data))
+      .finally(() => setLoading(false));
+  }, [businessId]);
+
+  const getConn = (id: string) => connections.find((c) => c.platform === id) || null;
+
+  const setErr = (id: string, msg: string) => setError((p) => ({ ...p, [id]: msg }));
+  const setOk = (id: string, msg: string) => {
+    setSuccess((p) => ({ ...p, [id]: msg }));
+    setTimeout(() => setSuccess((p) => ({ ...p, [id]: "" })), 4000);
+  };
+
+  const connect = async (platformId: string) => {
+    const f = form[platformId];
+    if (!f.token.trim() || !f.pageId.trim()) {
+      setErr(platformId, "Заполните оба поля");
+      return;
+    }
+    setConnecting(platformId);
+    setError((p) => ({ ...p, [platformId]: "" }));
+    try {
+      const { data } = await api.post("/platforms/connect", {
+        business_id: businessId,
+        platform: platformId,
+        token: f.token.trim(),
+        page_id: f.pageId.trim(),
+      });
+      setConnections((prev) => {
+        const filtered = prev.filter((c) => c.platform !== platformId);
+        return [...filtered, {
+          platform: platformId,
+          page_name: data.page_name,
+          external_page_id: f.pageId.trim(),
+          is_active: true,
+        }];
+      });
+      setForm((p) => ({ ...p, [platformId]: { token: "", pageId: "" } }));
+      setExpanded(null);
+      setOk(platformId, `Подключено: ${data.page_name}`);
+    } catch (e: any) {
+      setErr(platformId, e.response?.data?.detail || "Ошибка подключения. Проверьте токен и ID.");
+    } finally {
+      setConnecting(null);
+    }
+  };
+
+  const disconnect = async (platformId: string) => {
+    if (!confirm("Отключить платформу?")) return;
+    setDisconnecting(platformId);
+    try {
+      await api.delete(`/platforms/disconnect/${businessId}/${platformId}`);
+      setConnections((prev) => prev.filter((c) => c.platform !== platformId));
+      setOk(platformId, "Платформа отключена");
+    } catch (e: any) {
+      setErr(platformId, e.response?.data?.detail || "Ошибка отключения");
+    } finally {
+      setDisconnecting(null);
+    }
+  };
+
+  const testPost = async (platformId: string) => {
+    setTesting(platformId);
+    setError((p) => ({ ...p, [platformId]: "" }));
+    try {
+      await api.post(`/platforms/test-post/${businessId}`, {
+        platform: platformId,
+        text: "✅ Тестовое сообщение от SMM Platform. Автопостинг работает!",
+      });
+      setOk(platformId, "Тест отправлен! Проверь канал/сообщество.");
+    } catch (e: any) {
+      setErr(platformId, e.response?.data?.detail || "Ошибка отправки теста");
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const inp: React.CSSProperties = {
+    width: "100%", padding: "10px 13px", border: "1px solid #E0DED8",
+    borderRadius: 10, fontSize: 14, fontFamily: "monospace",
+    outline: "none", boxSizing: "border-box", background: "#fff",
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#F8F7F4", fontFamily: "'Segoe UI', sans-serif" }}>
+      <div style={{ background: "#fff", borderBottom: "1px solid #EAE8E2", padding: "0 2rem" }}>
+        <div style={{ maxWidth: 860, margin: "0 auto", height: 64, display: "flex", alignItems: "center", gap: 16 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Подключение платформ</h1>
+          <span style={{ fontSize: 13, color: "#888" }}>
+            Подключи каналы для автоматической публикации постов
+          </span>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 860, margin: "0 auto", padding: "2rem", display: "flex", flexDirection: "column", gap: 20 }}>
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "3rem", color: "#888" }}>Загружаем...</div>
+        ) : (
+          PLATFORMS.map((pl) => {
+            const conn = getConn(pl.id);
+            const isExpanded = expanded === pl.id;
+            const f = form[pl.id];
+            const err = error[pl.id] || "";
+            const ok = success[pl.id] || "";
+
+            return (
+              <div key={pl.id} style={{ background: "#fff", border: "1px solid #EAE8E2",
+                borderRadius: 18, overflow: "hidden" }}>
+
+                {/* Header */}
+                <div style={{ padding: "20px 24px", display: "flex", alignItems: "center", gap: 16 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: pl.bg,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 20, fontWeight: 700, color: pl.color, flexShrink: 0 }}>
+                    {pl.icon}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: "#1a1a1a" }}>{pl.name}</div>
+                    <div style={{ fontSize: 13, color: "#999", marginTop: 2 }}>
+                      {conn ? conn.page_name : pl.description}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    {conn ? (
+                      <>
+                        <span style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px",
+                          borderRadius: 20, background: "#E1F5EE", color: "#0F6E56" }}>
+                          ✓ Подключён
+                        </span>
+                        <button onClick={() => testPost(pl.id)} disabled={testing === pl.id}
+                          style={{ padding: "8px 16px", background: "#F1EFE8", color: "#444",
+                            border: "1px solid #E0DED8", borderRadius: 10, cursor: "pointer",
+                            fontSize: 13, fontWeight: 500 }}>
+                          {testing === pl.id ? "Отправка..." : "Тест"}
+                        </button>
+                        <button onClick={() => disconnect(pl.id)} disabled={disconnecting === pl.id}
+                          style={{ padding: "8px 16px", background: "#FCEBEB", color: "#A32D2D",
+                            border: "1px solid #F5C6C6", borderRadius: 10, cursor: "pointer",
+                            fontSize: 13, fontWeight: 500 }}>
+                          {disconnecting === pl.id ? "..." : "Отключить"}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ fontSize: 12, padding: "4px 12px", borderRadius: 20,
+                          background: "#F1EFE8", color: "#888" }}>
+                          Не подключён
+                        </span>
+                        <button
+                          onClick={() => setExpanded(isExpanded ? null : pl.id)}
+                          style={{ padding: "8px 20px", background: "#1a1a1a", color: "#fff",
+                            border: "none", borderRadius: 10, cursor: "pointer",
+                            fontSize: 13, fontWeight: 600 }}>
+                          {isExpanded ? "Свернуть" : "Подключить"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Feedback */}
+                {(err || ok) && (
+                  <div style={{ margin: "0 24px 12px", padding: "10px 14px", borderRadius: 10, fontSize: 13,
+                    background: err ? "#FCEBEB" : "#E1F5EE",
+                    color: err ? "#A32D2D" : "#0F6E56" }}>
+                    {err || ok}
+                  </div>
+                )}
+
+                {/* Setup panel */}
+                {!conn && isExpanded && (
+                  <div style={{ borderTop: "1px solid #F2F0EC", padding: "24px" }}>
+
+                    {/* Instructions */}
+                    <div style={{ marginBottom: 24 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#888",
+                        marginBottom: 12, letterSpacing: 0.5 }}>ИНСТРУКЦИЯ ПО ПОДКЛЮЧЕНИЮ</div>
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {pl.steps.map((step, si) => {
+                          const isOpen = openStep[pl.id] === si;
+                          return (
+                            <div key={si} style={{ border: "1px solid #EAE8E2", borderRadius: 12, overflow: "hidden" }}>
+                              <div onClick={() => setOpenStep((p) => ({ ...p, [pl.id]: isOpen ? null : si }))}
+                                style={{ padding: "12px 16px", display: "flex", alignItems: "center",
+                                  gap: 12, cursor: "pointer", userSelect: "none",
+                                  background: isOpen ? "#F8F7F4" : "#fff" }}>
+                                <span style={{ width: 24, height: 24, borderRadius: "50%",
+                                  background: isOpen ? "#1a1a1a" : "#F1EFE8",
+                                  color: isOpen ? "#fff" : "#888",
+                                  display: "flex", alignItems: "center", justifyContent: "center",
+                                  fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+                                  {si + 1}
+                                </span>
+                                <span style={{ fontSize: 14, fontWeight: 500, color: "#1a1a1a", flex: 1 }}>
+                                  {step.title}
+                                </span>
+                                <span style={{ fontSize: 12, color: "#bbb" }}>{isOpen ? "▲" : "▼"}</span>
+                              </div>
+                              {isOpen && (
+                                <div style={{ padding: "4px 16px 14px 52px", display: "flex", flexDirection: "column", gap: 8 }}>
+                                  {step.items.map((item, ii) => (
+                                    <div key={ii} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                                      <span style={{ color: "#bbb", fontSize: 12, marginTop: 2, flexShrink: 0 }}>{ii + 1}.</span>
+                                      <span style={{ fontSize: 13, color: "#444", lineHeight: 1.6 }}>{item}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Form */}
+                    <div style={{ background: "#F8F7F4", borderRadius: 14, padding: "20px" }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#888",
+                        marginBottom: 16, letterSpacing: 0.5 }}>ДАННЫЕ ДЛЯ ПОДКЛЮЧЕНИЯ</div>
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                        <div>
+                          <label style={{ fontSize: 13, fontWeight: 500, color: "#444",
+                            display: "block", marginBottom: 6 }}>
+                            {pl.tokenLabel}
+                          </label>
+                          <input
+                            type="password"
+                            value={f.token}
+                            onChange={(e) => setForm((p) => ({ ...p, [pl.id]: { ...f, token: e.target.value } }))}
+                            placeholder={pl.tokenPlaceholder}
+                            style={{ ...inp, fontFamily: "monospace" }}
+                          />
+                          <p style={{ fontSize: 12, color: "#999", marginTop: 4 }}>
+                            Хранится в зашифрованном виде
+                          </p>
+                        </div>
+
+                        <div>
+                          <label style={{ fontSize: 13, fontWeight: 500, color: "#444",
+                            display: "block", marginBottom: 6 }}>
+                            {pl.pageIdLabel}
+                          </label>
+                          <input
+                            value={f.pageId}
+                            onChange={(e) => setForm((p) => ({ ...p, [pl.id]: { ...f, pageId: e.target.value } }))}
+                            placeholder={pl.pageIdPlaceholder}
+                            style={{ ...inp, fontFamily: "monospace" }}
+                          />
+                          <p style={{ fontSize: 12, color: "#999", marginTop: 4 }}>{pl.pageIdHint}</p>
+                        </div>
+
+                        <button
+                          onClick={() => connect(pl.id)}
+                          disabled={connecting === pl.id || !f.token.trim() || !f.pageId.trim()}
+                          style={{
+                            padding: "12px", fontSize: 14, fontWeight: 600, color: "#fff",
+                            background: connecting === pl.id || !f.token.trim() || !f.pageId.trim()
+                              ? "#bbb" : pl.color,
+                            border: "none", borderRadius: 12, cursor: "pointer",
+                          }}>
+                          {connecting === pl.id ? "Проверяю подключение..." : "Проверить и подключить"}
+                        </button>
+
+                        <p style={{ fontSize: 12, color: "#aaa", margin: 0, textAlign: "center" }}>
+                          Мы проверим токен перед сохранением — неверные данные не сохраним
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Already connected — small info bar */}
+                {conn && (
+                  <div style={{ borderTop: "1px solid #F2F0EC", padding: "12px 24px",
+                    display: "flex", alignItems: "center", gap: 16,
+                    background: "#FAFAF8", fontSize: 13, color: "#888" }}>
+                    <span>ID: <code style={{ ...code, fontSize: 11 }}>{conn.external_page_id}</code></span>
+                    <span style={{ color: "#ddd" }}>|</span>
+                    <span>Автопостинг активен</span>
+                    <button onClick={() => setExpanded(isExpanded ? null : pl.id)}
+                      style={{ marginLeft: "auto", background: "none", border: "none",
+                        cursor: "pointer", color: "#aaa", fontSize: 12 }}>
+                      Обновить данные
+                    </button>
+                  </div>
+                )}
+
+                {/* Re-connect form (when connected but wants to update) */}
+                {conn && isExpanded && (
+                  <div style={{ borderTop: "1px solid #F2F0EC", padding: "20px 24px",
+                    background: "#F8F7F4" }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#888",
+                      marginBottom: 14, letterSpacing: 0.5 }}>ОБНОВИТЬ ДАННЫЕ ПОДКЛЮЧЕНИЯ</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      <input type="password" value={f.token}
+                        onChange={(e) => setForm((p) => ({ ...p, [pl.id]: { ...f, token: e.target.value } }))}
+                        placeholder={pl.tokenPlaceholder}
+                        style={{ ...inp, fontFamily: "monospace" }} />
+                      <input value={f.pageId}
+                        onChange={(e) => setForm((p) => ({ ...p, [pl.id]: { ...f, pageId: e.target.value } }))}
+                        placeholder={pl.pageIdPlaceholder}
+                        style={{ ...inp, fontFamily: "monospace" }} />
+                      <button onClick={() => connect(pl.id)} disabled={connecting === pl.id}
+                        style={{ padding: "11px", fontSize: 14, fontWeight: 600, color: "#fff",
+                          background: connecting === pl.id ? "#bbb" : pl.color,
+                          border: "none", borderRadius: 12, cursor: "pointer" }}>
+                        {connecting === pl.id ? "Проверяю..." : "Обновить подключение"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+
+        {/* Info block */}
+        <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
+          padding: "20px 24px", display: "flex", gap: 16 }}>
+          <span style={{ fontSize: 24, flexShrink: 0 }}>🔒</span>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#1a1a1a", marginBottom: 4 }}>
+              Безопасность токенов
+            </div>
+            <div style={{ fontSize: 13, color: "#888", lineHeight: 1.6 }}>
+              Все токены хранятся в зашифрованном виде (Fernet AES-128). Мы никогда не передаём их третьим лицам.
+              Токен бота Telegram можно отозвать в @BotFather командой <code style={code}>/revoke</code>.
+              Токен ВКонтакте — в настройках сообщества → Работа с API.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

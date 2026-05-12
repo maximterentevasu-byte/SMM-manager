@@ -1,24 +1,25 @@
+import aiohttp
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
-from typing import Optional
-import uuid
 
 from app.database import get_db
 from app.models.models import User, Business, PlatformConnection
 from app.api.auth import get_current_user
-from app.services.publishers import encrypt_token
+from app.services.publishers import encrypt_token, decrypt_token
 
 router = APIRouter()
 
 
 class ConnectPlatformRequest(BaseModel):
     business_id: str
-    platform: str  # telegram / vk / ok
+    platform: str   # telegram / vk
     token: str
     page_id: str
-    page_name: str
+    page_name: str = ""
 
 
 @router.post("/connect")
@@ -27,18 +28,43 @@ async def connect_platform(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    # Проверяем что бизнес принадлежит пользователю
     result = await db.execute(
-        select(Business).where(
-            Business.id == data.business_id,
-            Business.user_id == current_user.id
-        )
+        select(Business).where(Business.id == data.business_id, Business.user_id == current_user.id)
     )
-    business = result.scalar_one_or_none()
-    if not business:
-        raise HTTPException(status_code=404, detail="Business not found")
+    if not result.scalar_one_or_none():
+        raise HTTPException(404, "Business not found")
 
-    # Проверяем нет ли уже такого подключения
+    page_name = data.page_name
+
+    # Верифицируем токен и получаем имя страницы автоматически
+    if data.platform == "telegram":
+        async with aiohttp.ClientSession() as session:
+            resp = await session.get(
+                f"https://api.telegram.org/bot{data.token}/getChat",
+                params={"chat_id": data.page_id}
+            )
+            tg = await resp.json()
+        if not tg.get("ok"):
+            raise HTTPException(400, tg.get("description", "Неверный токен или chat_id"))
+        chat = tg["result"]
+        page_name = chat.get("title") or chat.get("username") or data.page_name
+
+    elif data.platform == "vk":
+        async with aiohttp.ClientSession() as session:
+            resp = await session.get(
+                "https://api.vk.com/method/groups.getById",
+                params={"group_id": data.page_id, "access_token": data.token, "v": "5.131"}
+            )
+            vk = await resp.json()
+        if "error" in vk:
+            raise HTTPException(400, vk["error"]["error_msg"])
+        if vk.get("response"):
+            page_name = vk["response"][0].get("name", data.page_name)
+
+    else:
+        raise HTTPException(400, f"Платформа {data.platform} не поддерживается")
+
+    # Сохраняем или обновляем подключение
     existing = await db.execute(
         select(PlatformConnection).where(
             PlatformConnection.business_id == data.business_id,
@@ -46,30 +72,27 @@ async def connect_platform(
         )
     )
     connection = existing.scalar_one_or_none()
-
     encrypted = encrypt_token(data.token)
 
     if connection:
-        # Обновляем существующее
         connection.token_encrypted = encrypted
         connection.external_page_id = data.page_id
-        connection.page_name = data.page_name
+        connection.page_name = page_name
         connection.is_active = True
     else:
-        # Создаём новое
         connection = PlatformConnection(
             id=uuid.uuid4(),
             business_id=uuid.UUID(data.business_id),
             platform=data.platform,
             token_encrypted=encrypted,
             external_page_id=data.page_id,
-            page_name=data.page_name,
-            is_active=True
+            page_name=page_name,
+            is_active=True,
         )
         db.add(connection)
 
     await db.commit()
-    return {"status": "connected", "platform": data.platform, "page": data.page_name}
+    return {"status": "connected", "platform": data.platform, "page_name": page_name}
 
 
 @router.get("/list/{business_id}")
@@ -79,47 +102,64 @@ async def list_connections(
     db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(
-        select(PlatformConnection).where(
-            PlatformConnection.business_id == business_id
-        )
+        select(PlatformConnection).where(PlatformConnection.business_id == business_id)
     )
-    connections = result.scalars().all()
     return [
         {
-            "platform": c.platform,
+            "platform": c.platform.value if hasattr(c.platform, "value") else c.platform,
             "page_name": c.page_name,
-            "is_active": c.is_active
+            "external_page_id": c.external_page_id,
+            "is_active": c.is_active,
         }
-        for c in connections
+        for c in result.scalars().all()
     ]
+
+
+@router.delete("/disconnect/{business_id}/{platform}")
+async def disconnect_platform(
+    business_id: str,
+    platform: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(PlatformConnection).where(
+            PlatformConnection.business_id == business_id,
+            PlatformConnection.platform == platform
+        )
+    )
+    connection = result.scalar_one_or_none()
+    if not connection:
+        raise HTTPException(404, "Подключение не найдено")
+    await db.delete(connection)
+    await db.commit()
+    return {"status": "disconnected"}
 
 
 @router.post("/test-post/{business_id}")
 async def test_post(
     business_id: str,
-    body: dict,  # {"platform": "telegram", "text": "Тест!"}
+    body: dict,  # {"platform": "telegram"|"vk", "text": "Тест!"}
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Отправляет тестовый пост прямо сейчас"""
-    import aiohttp
-    from app.services.publishers import decrypt_token
+    platform = body.get("platform")
+    text = body.get("text", "Тест от SMM Platform 🚀")
 
     conn_result = await db.execute(
         select(PlatformConnection).where(
             PlatformConnection.business_id == business_id,
-            PlatformConnection.platform == body["platform"],
+            PlatformConnection.platform == platform,
             PlatformConnection.is_active == True
         )
     )
     connection = conn_result.scalar_one_or_none()
     if not connection:
-        raise HTTPException(status_code=404, detail="Platform not connected")
+        raise HTTPException(404, "Платформа не подключена")
 
     token = decrypt_token(connection.token_encrypted)
-    text = body.get("text", "Тест от SMM Platform 🚀")
 
-    if body["platform"] == "telegram":
+    if platform == "telegram":
         async with aiohttp.ClientSession() as session:
             resp = await session.post(
                 f"https://api.telegram.org/bot{token}/sendMessage",
@@ -127,7 +167,24 @@ async def test_post(
             )
             result = await resp.json()
         if not result.get("ok"):
-            raise HTTPException(status_code=400, detail=f"TG error: {result}")
+            raise HTTPException(400, f"Telegram: {result.get('description', 'Ошибка')}")
         return {"status": "sent", "message_id": result["result"]["message_id"]}
 
-    raise HTTPException(status_code=400, detail="Platform not supported yet")
+    if platform == "vk":
+        group_id = connection.external_page_id.lstrip("-")
+        async with aiohttp.ClientSession() as session:
+            resp = await session.post(
+                "https://api.vk.com/method/wall.post",
+                params={
+                    "owner_id": f"-{group_id}",
+                    "message": text,
+                    "access_token": token,
+                    "v": "5.131",
+                }
+            )
+            result = await resp.json()
+        if "error" in result:
+            raise HTTPException(400, f"VK: {result['error']['error_msg']}")
+        return {"status": "sent", "post_id": result["response"]["post_id"]}
+
+    raise HTTPException(400, "Платформа не поддерживается")
