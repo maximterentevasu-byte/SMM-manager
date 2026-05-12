@@ -93,14 +93,14 @@ async def _claude_text(client: httpx.AsyncClient, system: str, user_text: str, m
 
 
 async def _generate_text(system: str, user_text: str, max_tokens: int = 1200) -> str:
-    """Gemini → GPT → Claude, все вызовы нативно async."""
+    """Claude → GPT → Gemini, все вызовы нативно async."""
     errors: list[str] = []
     async with httpx.AsyncClient(timeout=60) as client:
-        if settings.GEMINI_API_KEY:
+        if settings.ANTHROPIC_API_KEY:
             try:
-                return await _gemini_text(client, system, user_text, max_tokens)
+                return await _claude_text(client, system, user_text, max_tokens)
             except Exception as e:
-                errors.append(f"Gemini: {e}")
+                errors.append(f"Claude: {e}")
 
         if settings.OPENAI_API_KEY:
             try:
@@ -108,11 +108,11 @@ async def _generate_text(system: str, user_text: str, max_tokens: int = 1200) ->
             except Exception as e:
                 errors.append(f"GPT: {e}")
 
-        if settings.ANTHROPIC_API_KEY:
+        if settings.GEMINI_API_KEY:
             try:
-                return await _claude_text(client, system, user_text, max_tokens)
+                return await _gemini_text(client, system, user_text, max_tokens)
             except Exception as e:
-                errors.append(f"Claude: {e}")
+                errors.append(f"Gemini: {e}")
 
     raise HTTPException(500, "Ошибка генерации: " + " | ".join(errors))
 
@@ -152,7 +152,8 @@ async def generate_post_text(
         "• Добавь 3–5 релевантных хэштегов в конце\n"
         "• Оптимальная длина: 800–1500 символов\n"
         "• Учитывай актуальные тренды российских соцсетей\n"
-        "• Не добавляй никаких пояснений — только текст поста"
+        "• Не добавляй никаких пояснений — только текст поста\n"
+        "• СТРОГО используй только факты из идеи. Никогда не придумывай продукты, бренды, страны, события, детали, которые явно не указаны в идее"
     )
 
     text = await _generate_text(system, f"Идея поста: {body.idea}")
@@ -163,6 +164,7 @@ async def generate_post_text(
 
 class PromptIn(BaseModel):
     post_text: str
+    idea: Optional[str] = None
 
 
 @router.post("/{business_id}/generate-prompt")
@@ -178,17 +180,25 @@ async def generate_image_prompt(
     except HTTPException:
         niche = ""
 
+    idea_block = f"\nOriginal post idea: {body.idea}" if body.idea else ""
+
     system = (
         "You are an expert prompt engineer for AI image generation.\n"
-        "Create a detailed English image generation prompt based on the social media post.\n\n"
+        "Create a highly specific image generation prompt that visually represents the EXACT content of the post.\n\n"
         "Rules:\n"
         "• Write in English only\n"
-        "• Be specific: describe style, mood, lighting, composition, colors\n"
+        "• The image must directly reflect the specific subject, objects, and context from the post and original idea\n"
+        "• Never use generic descriptions like 'diverse group of people' — be concrete and specific\n"
+        "• Describe: exact subject matter, visual style, mood, lighting, composition, colors\n"
         "• No text or words in the image\n"
         "• Photorealistic or high-quality illustration style\n"
         "• Return ONLY the prompt, no explanations"
     )
-    user_text = f"Business niche: {niche}\n\nPost text:\n{body.post_text}\n\nWrite the image prompt:"
+    user_text = (
+        f"Business niche: {niche}{idea_block}\n\n"
+        f"Post text:\n{body.post_text}\n\n"
+        "Write a specific image prompt that shows exactly what this post is about:"
+    )
 
     prompt = await _generate_text(system, user_text, 400)
     return {"prompt": prompt}

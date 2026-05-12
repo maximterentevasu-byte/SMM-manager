@@ -99,6 +99,7 @@ export default function PostCreatorPage() {
     try {
       const { data } = await api.post(`/post-creator/${businessId}/generate-prompt`, {
         post_text: postText,
+        idea: idea || undefined,
       });
       setImagePrompt(data.prompt);
     } catch (e: any) {
