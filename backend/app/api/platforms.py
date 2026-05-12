@@ -50,16 +50,33 @@ async def connect_platform(
         page_name = chat.get("title") or chat.get("username") or data.page_name
 
     elif data.platform == "vk":
+        group_id_clean = data.page_id.lstrip("-")
         async with aiohttp.ClientSession() as session:
             resp = await session.get(
                 "https://api.vk.com/method/groups.getById",
-                params={"group_id": data.page_id, "access_token": data.token, "v": "5.131"}
+                params={"group_id": group_id_clean, "fields": "members_count",
+                        "access_token": data.token, "v": "5.199"}
             )
             vk = await resp.json()
+
         if "error" in vk:
-            raise HTTPException(400, vk["error"]["error_msg"])
-        if vk.get("response"):
-            page_name = vk["response"][0].get("name", data.page_name)
+            # Fallback: проверяем токен через wall.get (работает с любым community token)
+            async with aiohttp.ClientSession() as session:
+                resp2 = await session.get(
+                    "https://api.vk.com/method/wall.get",
+                    params={"owner_id": f"-{group_id_clean}", "count": 1,
+                            "access_token": data.token, "v": "5.199"}
+                )
+                vk2 = await resp2.json()
+            if "error" in vk2:
+                raise HTTPException(400, vk2["error"]["error_msg"])
+            # Токен рабочий, имя берём из поля запроса
+        else:
+            resp_data = vk.get("response", {})
+            # VK API 5.131- возвращает список, 5.194+ возвращает {"groups": [...]}
+            groups = resp_data if isinstance(resp_data, list) else resp_data.get("groups", [])
+            if groups:
+                page_name = groups[0].get("name", data.page_name)
 
     else:
         raise HTTPException(400, f"Платформа {data.platform} не поддерживается")
