@@ -61,6 +61,7 @@ export default function AnalyticsPage() {
   const [vkUserToken, setVkUserToken] = useState("");
   const [savingVkCreds, setSavingVkCreds] = useState(false);
   const [vkCredsMsg, setVkCredsMsg] = useState("");
+  const [numWeeks, setNumWeeks] = useState(8);
 
   const [businessId] = useState(() =>
     typeof window !== "undefined" ? localStorage.getItem("businessId") || "" : ""
@@ -311,17 +312,9 @@ export default function AnalyticsPage() {
               <div style={{ textAlign: "center", padding: "3rem", color: "#888" }}>Загружаем...</div>
             ) : tgData.length > 0 ? (
               <>
-                {/* Карточки: только если полный режим */}
-                {!isBasicMode && tgLast && (
-                  <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
-                    {card("Подписчики", fmt(tgLast.subscribers))}
-                    {card("Ср. охват", fmt(tgLast.avg_views), "просм.",
-                      tgPrev ? delta(tgLast.avg_views, tgPrev.avg_views) : null)}
-                    {card("ER по просмотрам", fmt(tgLast.er_views_pct, 2), "%",
-                      tgPrev ? delta(tgLast.er_views_pct, tgPrev.er_views_pct) : null)}
-                    {card("Индекс качества", fmt(tgLast.quality_index, 2), "",
-                      tgPrev ? delta(tgLast.quality_index, tgPrev.quality_index) : null)}
-                  </div>
+                {/* Дашборд: только если полный режим */}
+                {!isBasicMode && tgData.length > 0 && (
+                  <TGDashboard data={tgData} numWeeks={numWeeks} onNumWeeksChange={setNumWeeks} />
                 )}
                 {/* Карточки: базовый режим */}
                 {isBasicMode && tgLast && (
@@ -392,17 +385,7 @@ export default function AnalyticsPage() {
               <div style={{ textAlign: "center", padding: "3rem", color: "#888" }}>Загружаем...</div>
             ) : vkData.length > 0 ? (
               <>
-                {vkLast && (
-                  <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
-                    {card("Участников", fmt(vkLast.members))}
-                    {card("Ср. охват", fmt(vkLast.avg_views), "просм.",
-                      vkPrev ? delta(vkLast.avg_views, vkPrev.avg_views) : null)}
-                    {card("ER подписчики", fmt(vkLast.er_subscribers_pct, 2), "%",
-                      vkPrev ? delta(vkLast.er_subscribers_pct, vkPrev.er_subscribers_pct) : null)}
-                    {card("Индекс вовлечённости", fmt(vkLast.engagement_index, 2), "",
-                      vkPrev ? delta(vkLast.engagement_index, vkPrev.engagement_index) : null)}
-                  </div>
-                )}
+                <VKDashboard data={vkData} numWeeks={numWeeks} onNumWeeksChange={setNumWeeks} />
                 <WeeklyTable rows={vkData} cols={vk_cols} emptyText="Нет данных по ВКонтакте" />
               </>
             ) : vkCredsStatus?.has_connection ? (
@@ -753,6 +736,295 @@ function CelerySetupGuide() {
       <div style={{ background: "#FFF8E6", border: "1px solid #F5E6A0", borderRadius: 8,
         padding: "10px 14px", marginTop: 12, fontSize: 12, color: "#7A5C00" }}>
         ⚠ Нужен Redis. Укажи {pill("REDIS_URL")} в .env (по умолчанию {pill("redis://localhost:6379/0")}).
+      </div>
+    </div>
+  );
+}
+
+// ─── Dashboard Components ─────────────────────────────────────────────────────
+
+function PeriodFilter({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const opts = [
+    { label: "4 нед.", v: 4 },
+    { label: "8 нед.", v: 8 },
+    { label: "12 нед.", v: 12 },
+    { label: "Все", v: 0 },
+  ];
+  return (
+    <div style={{ display: "flex", gap: 3, background: "#F0EEE8", padding: 3, borderRadius: 10 }}>
+      {opts.map(o => (
+        <button key={o.v} onClick={() => onChange(o.v)}
+          style={{ padding: "5px 13px", borderRadius: 8, border: "none", cursor: "pointer",
+            fontSize: 12, fontWeight: o.v === value ? 600 : 400,
+            background: o.v === value ? "#fff" : "transparent",
+            color: o.v === value ? "#1a1a1a" : "#999",
+            boxShadow: o.v === value ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
+            transition: "all 0.15s" }}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Sparkline({ vals, color }: { vals: number[]; color: string }) {
+  if (vals.length < 2) return <div style={{ width: 64, height: 28 }} />;
+  const max = Math.max(...vals) || 1;
+  const min = Math.min(...vals);
+  const range = max - min || max || 1;
+  const W = 64, H = 28;
+  const pts = vals.map((v, i) => {
+    const x = (i / (vals.length - 1)) * W;
+    const y = H - ((v - min) / range) * H * 0.85 - H * 0.05;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: 64, height: 28, flexShrink: 0 }}>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function DashCard({ label, value, suffix = "", trend, sparkVals }: {
+  label: string; value: number | null; suffix?: string;
+  trend?: number | null; sparkVals: number[];
+}) {
+  const trendColor = trend == null ? "#aaa" : trend > 0 ? "#0F6E56" : trend < 0 ? "#A32D2D" : "#888";
+  const v = value ?? 0;
+  return (
+    <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 14,
+      padding: "18px 20px", flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: 10, color: "#aaa", fontWeight: 700, letterSpacing: 0.8, marginBottom: 6 }}>
+        {label.toUpperCase()}
+      </div>
+      <div style={{ fontSize: 24, fontWeight: 700, color: "#1a1a1a", lineHeight: 1, marginBottom: 6 }}>
+        {v.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}
+        {suffix && <span style={{ fontSize: 13, fontWeight: 400, color: "#888", marginLeft: 2 }}>{suffix}</span>}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ fontSize: 11, color: trendColor, fontWeight: 500 }}>
+          {trend != null
+            ? <>{trend > 0 ? "▲" : trend < 0 ? "▼" : "•"} {Math.abs(trend).toFixed(1)}%</>
+            : <span style={{ color: "#ddd" }}>—</span>}
+        </div>
+        <Sparkline vals={sparkVals} color={trendColor === "#aaa" || trendColor === "#888" ? "#d0cec8" : trendColor} />
+      </div>
+    </div>
+  );
+}
+
+function BarChartSVG({ data, getValue, getLabel, color, title }: {
+  data: any[]; getValue: (d: any) => number;
+  getLabel: (d: any) => string; color: string; title: string;
+}) {
+  const vals = data.map(getValue);
+  const max = Math.max(...vals, 0.001);
+  const n = vals.length;
+  const W = 400, H = 96, labelH = 18;
+
+  return (
+    <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 14, padding: "18px 20px" }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: "#aaa", letterSpacing: 0.7, marginBottom: 14 }}>
+        {title.toUpperCase()}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H + labelH}`} style={{ width: "100%", height: H + labelH + 4, display: "block", overflow: "visible" }}>
+        {/* gridlines */}
+        {[0.25, 0.5, 0.75, 1].map(f => (
+          <line key={f} x1={0} y1={H - H * f} x2={W} y2={H - H * f}
+            stroke="#F0EEE8" strokeWidth={1} />
+        ))}
+        {vals.map((v, i) => {
+          const slotW = W / n;
+          const barW = Math.max(Math.min(slotW * 0.55, 40), 6);
+          const x = i * slotW + (slotW - barW) / 2;
+          const barH = (v / max) * H;
+          const y = H - barH;
+          const isLast = i === n - 1;
+          return (
+            <g key={i}>
+              <rect x={x} y={y} width={barW} height={barH}
+                fill={isLast ? color : color + "60"} rx={3} />
+              <text x={x + barW / 2} y={H + labelH - 1} textAnchor="middle"
+                fontSize={8.5} fill={isLast ? "#555" : "#bbb"}>
+                {getLabel(data[i])}
+              </text>
+            </g>
+          );
+        })}
+        <text x={2} y={10} fontSize={8} fill="#ddd">
+          {max.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+function LineChartSVG({ data, getValue, getLabel, color, title, suffix = "" }: {
+  data: any[]; getValue: (d: any) => number; getLabel: (d: any) => string;
+  color: string; title: string; suffix?: string;
+}) {
+  const vals = data.map(getValue);
+  const n = vals.length;
+  if (n < 2) return null;
+  const max = Math.max(...vals, 0.001);
+  const min = Math.min(...vals);
+  const range = max - min || max;
+  const W = 400, H = 96, labelH = 18;
+
+  const pts = vals.map((v, i) => ({
+    x: n > 1 ? (i / (n - 1)) * W : W / 2,
+    y: H - ((v - min) / range) * H * 0.82 - H * 0.07,
+  }));
+
+  const polyline = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  const area = `M${pts[0].x.toFixed(1)},${H} ` +
+    pts.map(p => `L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ") +
+    ` L${pts[n - 1].x.toFixed(1)},${H} Z`;
+  const gradId = `lg-${title.replace(/\s/g, "")}`;
+
+  return (
+    <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 14, padding: "18px 20px" }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: "#aaa", letterSpacing: 0.7, marginBottom: 14 }}>
+        {title.toUpperCase()}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H + labelH}`} style={{ width: "100%", height: H + labelH + 4, display: "block", overflow: "visible" }}>
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.18" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {[0.25, 0.5, 0.75, 1].map(f => (
+          <line key={f} x1={0} y1={H - H * f * 0.82 - H * 0.07} x2={W} y2={H - H * f * 0.82 - H * 0.07}
+            stroke="#F0EEE8" strokeWidth={1} />
+        ))}
+        <path d={area} fill={`url(#${gradId})`} />
+        <polyline points={polyline} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        {pts.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r={i === n - 1 ? 4 : 2.5}
+            fill={i === n - 1 ? color : "#fff"} stroke={color} strokeWidth={1.5} />
+        ))}
+        {data.map((d, i) => (
+          <text key={i} x={pts[i].x} y={H + labelH - 1} textAnchor="middle"
+            fontSize={8.5} fill={i === n - 1 ? "#555" : "#bbb"}>
+            {getLabel(d)}
+          </text>
+        ))}
+        <text x={2} y={10} fontSize={8} fill="#ddd">
+          {max.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}{suffix}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+function TGDashboard({ data, numWeeks, onNumWeeksChange }: {
+  data: TGWeek[]; numWeeks: number; onNumWeeksChange: (v: number) => void;
+}) {
+  const filtered = [...data].slice(0, numWeeks === 0 ? data.length : numWeeks).reverse();
+  const last = filtered[filtered.length - 1];
+  const prev = filtered[filtered.length - 2];
+  if (!filtered.length || !last) return null;
+
+  const pct = (a: number, b: number | undefined) =>
+    b && b > 0 ? ((a - b) / b) * 100 : null;
+  const lbl = (d: TGWeek) => d.week_start.slice(5).replace("-", ".");
+
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#555" }}>Сравнение периодов</div>
+        <PeriodFilter value={numWeeks} onChange={onNumWeeksChange} />
+      </div>
+
+      {/* 4 карточки */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
+        <DashCard label="Подписчики" value={last.subscribers}
+          trend={pct(last.subscribers, prev?.subscribers)}
+          sparkVals={filtered.map(d => d.subscribers || 0)} />
+        <DashCard label="Ср. охват" value={last.avg_views}
+          trend={pct(last.avg_views, prev?.avg_views)}
+          sparkVals={filtered.map(d => d.avg_views || 0)} />
+        <DashCard label="ER просмотры" value={last.er_views_pct} suffix="%"
+          trend={pct(last.er_views_pct, prev?.er_views_pct)}
+          sparkVals={filtered.map(d => d.er_views_pct || 0)} />
+        <DashCard label="Индекс качества" value={last.quality_index}
+          trend={pct(last.quality_index, prev?.quality_index)}
+          sparkVals={filtered.map(d => d.quality_index || 0)} />
+      </div>
+
+      {/* 2 графика: охват + ER */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+        <BarChartSVG data={filtered} getValue={d => d.avg_views || 0} getLabel={lbl}
+          color="#1a1a1a" title="Средний охват по неделям" />
+        <LineChartSVG data={filtered} getValue={d => d.er_views_pct || 0} getLabel={lbl}
+          color="#0F6E56" title="ER динамика %" suffix="%" />
+      </div>
+
+      {/* 3 графика: реакции / комменты / репосты */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+        <BarChartSVG data={filtered} getValue={d => d.avg_reactions || 0} getLabel={lbl}
+          color="#4680C2" title="Ср. реакции" />
+        <BarChartSVG data={filtered} getValue={d => d.avg_comments || 0} getLabel={lbl}
+          color="#7C5CBF" title="Ср. комментарии" />
+        <BarChartSVG data={filtered} getValue={d => d.avg_reposts || 0} getLabel={lbl}
+          color="#C25B46" title="Ср. репосты" />
+      </div>
+    </div>
+  );
+}
+
+function VKDashboard({ data, numWeeks, onNumWeeksChange }: {
+  data: VKWeek[]; numWeeks: number; onNumWeeksChange: (v: number) => void;
+}) {
+  const filtered = [...data].slice(0, numWeeks === 0 ? data.length : numWeeks).reverse();
+  const last = filtered[filtered.length - 1];
+  const prev = filtered[filtered.length - 2];
+  if (!filtered.length || !last) return null;
+
+  const pct = (a: number, b: number | undefined) =>
+    b && b > 0 ? ((a - b) / b) * 100 : null;
+  const lbl = (d: VKWeek) => d.week_start.slice(5).replace("-", ".");
+
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#555" }}>Сравнение периодов</div>
+        <PeriodFilter value={numWeeks} onChange={onNumWeeksChange} />
+      </div>
+
+      {/* 4 карточки */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
+        <DashCard label="Участников" value={last.members}
+          trend={pct(last.members, prev?.members)}
+          sparkVals={filtered.map(d => d.members || 0)} />
+        <DashCard label="Ср. охват" value={last.avg_views}
+          trend={pct(last.avg_views, prev?.avg_views)}
+          sparkVals={filtered.map(d => d.avg_views || 0)} />
+        <DashCard label="ER подписчики" value={last.er_subscribers_pct} suffix="%"
+          trend={pct(last.er_subscribers_pct, prev?.er_subscribers_pct)}
+          sparkVals={filtered.map(d => d.er_subscribers_pct || 0)} />
+        <DashCard label="ER просмотры" value={last.er_views_pct} suffix="%"
+          trend={pct(last.er_views_pct, prev?.er_views_pct)}
+          sparkVals={filtered.map(d => d.er_views_pct || 0)} />
+      </div>
+
+      {/* 2 графика: охват + ER */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+        <BarChartSVG data={filtered} getValue={d => d.avg_views || 0} getLabel={lbl}
+          color="#1a1a1a" title="Средний охват по неделям" />
+        <LineChartSVG data={filtered} getValue={d => d.er_subscribers_pct || 0} getLabel={lbl}
+          color="#4680C2" title="ER по подписчикам %" suffix="%" />
+      </div>
+
+      {/* 3 графика: лайки / комменты / репосты */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+        <BarChartSVG data={filtered} getValue={d => d.avg_likes || 0} getLabel={lbl}
+          color="#0F6E56" title="Ср. лайки" />
+        <BarChartSVG data={filtered} getValue={d => d.avg_comments || 0} getLabel={lbl}
+          color="#7C5CBF" title="Ср. комментарии" />
+        <BarChartSVG data={filtered} getValue={d => d.avg_reposts || 0} getLabel={lbl}
+          color="#C25B46" title="Ср. репосты" />
       </div>
     </div>
   );
