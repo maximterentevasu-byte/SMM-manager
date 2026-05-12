@@ -15,6 +15,11 @@ type PlatformSetup = {
   pageId: string;
 };
 
+const code: React.CSSProperties = {
+  background: "#F1EFE8", padding: "1px 6px", borderRadius: 4,
+  fontFamily: "monospace", fontSize: 12, color: "#333",
+};
+
 const PLATFORMS = [
   {
     id: "telegram",
@@ -91,11 +96,6 @@ const PLATFORMS = [
     pageIdHint: "Только цифры, без минуса",
   },
 ];
-
-const code: React.CSSProperties = {
-  background: "#F1EFE8", padding: "1px 6px", borderRadius: 4,
-  fontFamily: "monospace", fontSize: 12, color: "#333",
-};
 
 export default function PlatformsPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
