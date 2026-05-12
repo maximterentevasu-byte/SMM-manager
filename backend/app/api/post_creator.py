@@ -172,10 +172,7 @@ async def generate_image(
     business_id: str,
     body: ImageIn,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
-    await _get_business(business_id, current_user, db)
-
     from app.services.gemini_image import generate_image_sync
     try:
         b64 = await asyncio.to_thread(
