@@ -1,14 +1,24 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from sqlalchemy import text
 from app.database import engine, Base
 from app.api import auth, businesses, onboarding, content, platforms, subscriptions, analytics
+
+# Колонки для миграций без Alembic — добавляются через ADD COLUMN IF NOT EXISTS
+_MIGRATIONS = [
+    "ALTER TABLE platform_connections ADD COLUMN IF NOT EXISTS tg_api_id VARCHAR(50)",
+    "ALTER TABLE platform_connections ADD COLUMN IF NOT EXISTS tg_api_hash VARCHAR(255)",
+    "ALTER TABLE platform_connections ADD COLUMN IF NOT EXISTS tg_session_encrypted TEXT",
+]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        for migration in _MIGRATIONS:
+            await conn.execute(text(migration))
     yield
 
 
