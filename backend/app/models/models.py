@@ -117,6 +117,34 @@ class ContentSlot(Base):
     business: Mapped["Business"] = relationship(back_populates="content_slots")
 
 
+class TGWeeklyStats(Base):
+    __tablename__ = "analytics_tg_weekly"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    business_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("businesses.id"), index=True)
+    channel_id: Mapped[str] = mapped_column(String(255))
+    channel_name: Mapped[str] = mapped_column(String(255))
+    week_start: Mapped[datetime] = mapped_column(DateTime, index=True)
+    week_end: Mapped[datetime] = mapped_column(DateTime)
+    stats: Mapped[dict] = mapped_column(JSON)    # агрегированные метрики
+    posts: Mapped[list] = mapped_column(JSON)    # список постов недели
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class VKWeeklyStats(Base):
+    __tablename__ = "analytics_vk_weekly"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    business_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("businesses.id"), index=True)
+    group_id: Mapped[str] = mapped_column(String(255))
+    group_name: Mapped[str] = mapped_column(String(255))
+    week_start: Mapped[datetime] = mapped_column(DateTime, index=True)
+    week_end: Mapped[datetime] = mapped_column(DateTime)
+    stats: Mapped[dict] = mapped_column(JSON)
+    posts: Mapped[list] = mapped_column(JSON)
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class Subscription(Base):
     __tablename__ = "subscriptions"
 

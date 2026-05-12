@@ -1,0 +1,150 @@
+"""
+Сбор аналитики Telegram-канала через MTProto (telethon).
+Требует TG_API_ID, TG_API_HASH, TG_STRING_SESSION в .env
+"""
+import asyncio
+from datetime import datetime, date, timedelta
+from collections import defaultdict
+
+EKB_HOURS = 5  # UTC+5 (Екатеринбург)
+
+DAY_RU = {
+    "Monday": "Пн", "Tuesday": "Вт", "Wednesday": "Ср",
+    "Thursday": "Чт", "Friday": "Пт", "Saturday": "Сб", "Sunday": "Вс",
+}
+
+
+def _to_ekb(dt: datetime) -> datetime:
+    return dt.replace(tzinfo=None) + timedelta(hours=EKB_HOURS)
+
+
+def _week_bounds(dt: datetime) -> tuple[date, date]:
+    ekb = _to_ekb(dt)
+    start = (ekb - timedelta(days=ekb.weekday())).date()
+    return start, start + timedelta(days=6)
+
+
+async def _fetch_channel(api_id: int, api_hash: str, session_str: str, chat_id: str) -> tuple[int, str, list]:
+    from telethon import TelegramClient
+    from telethon.sessions import StringSession
+    from telethon.tl.functions.channels import GetFullChannelRequest
+    from telethon.tl.types import PeerChannel
+
+    numeric_id = int(str(chat_id).lstrip("-"))
+
+    async with TelegramClient(StringSession(session_str), api_id, api_hash) as client:
+        entity = await client.get_entity(PeerChannel(numeric_id))
+        full = await client(GetFullChannelRequest(entity))
+        subscribers = full.full_chat.participants_count
+        channel_name = getattr(entity, "title", str(chat_id))
+
+        posts = []
+        async for msg in client.iter_messages(entity, limit=None):
+            if msg.views is None:
+                continue
+            reactions = 0
+            if msg.reactions:
+                reactions = sum(r.count for r in msg.reactions.results)
+            posts.append({
+                "id": msg.id,
+                "date": msg.date,
+                "views": msg.views or 0,
+                "reactions": reactions,
+                "comments": msg.replies.replies if msg.replies else 0,
+                "reposts": msg.forwards or 0,
+                "text": (msg.message or "")[:160],
+            })
+
+    return subscribers, channel_name, posts
+
+
+def _build_weekly(channel_id: str, subscribers: int, channel_name: str, posts: list) -> list[dict]:
+    week_posts: dict = defaultdict(list)
+    today = date.today()
+
+    for p in posts:
+        ws, we = _week_bounds(p["date"])
+        if we < today:  # только завершённые недели
+            week_posts[(ws, we)].append(p)
+
+    results = []
+    for (ws, we), week in sorted(week_posts.items()):
+        n = len(week)
+        if n == 0:
+            continue
+
+        views = [p["views"] for p in week if p["views"] > 0]
+        r_list = [p["reactions"] for p in week]
+        c_list = [p["comments"] for p in week]
+        f_list = [p["reposts"] for p in week]
+
+        total_views = sum(views)
+        total_eng = sum(r_list) + sum(c_list) + sum(f_list)
+        avg_views = total_views / len(views) if views else 0
+        median_views = sorted(views)[len(views) // 2] if views else 0
+
+        er_views = total_eng / total_views * 100 if total_views > 0 else 0
+        er_subs = total_eng / (subscribers * n) * 100 if subscribers > 0 else 0
+        virality = sum(f_list) / total_views * 100 if total_views > 0 else 0
+        eng_1000 = total_eng / total_views * 1000 if total_views > 0 else 0
+        quality = er_views * 0.4 + er_subs * 0.3 + virality * 0.2 + eng_1000 * 0.1
+
+        day_s: dict = defaultdict(lambda: {"v": 0, "n": 0})
+        hour_s: dict = defaultdict(lambda: {"v": 0, "n": 0})
+        for p in week:
+            ekb = _to_ekb(p["date"])
+            day_s[ekb.strftime("%A")]["v"] += p["views"]
+            day_s[ekb.strftime("%A")]["n"] += 1
+            hour_s[ekb.hour]["v"] += p["views"]
+            hour_s[ekb.hour]["n"] += 1
+
+        best_day_en = max(day_s, key=lambda d: day_s[d]["v"] / max(day_s[d]["n"], 1)) if day_s else ""
+        best_hour = max(hour_s, key=lambda h: hour_s[h]["v"] / max(hour_s[h]["n"], 1)) if hour_s else 0
+
+        results.append({
+            "channel_id": channel_id,
+            "channel_name": channel_name,
+            "week_start": ws.isoformat(),
+            "week_end": we.isoformat(),
+            "subscribers": subscribers,
+            "posts_count": n,
+            "total_views": total_views,
+            "avg_views": round(avg_views, 1),
+            "median_views": median_views,
+            "avg_reactions": round(sum(r_list) / n, 1),
+            "avg_comments": round(sum(c_list) / n, 1),
+            "avg_reposts": round(sum(f_list) / n, 1),
+            "er_views_pct": round(er_views, 2),
+            "er_activity_pct": round(er_subs, 2),
+            "virality_pct": round(virality, 3),
+            "engagement_per_1000": round(eng_1000, 2),
+            "quality_index": round(quality, 2),
+            "best_day": DAY_RU.get(best_day_en, best_day_en),
+            "best_hour": f"{best_hour:02d}:00",
+        })
+
+    return results
+
+
+def collect_tg_weekly(api_id: int, api_hash: str, session_str: str, chat_id: str) -> tuple[list[dict], list[dict]]:
+    """Возвращает (weekly_stats, all_posts)"""
+    subscribers, channel_name, posts = asyncio.run(
+        _fetch_channel(api_id, api_hash, session_str, chat_id)
+    )
+    weekly = _build_weekly(chat_id, subscribers, channel_name, posts)
+
+    all_posts = [
+        {
+            "id": p["id"],
+            "date": p["date"].isoformat(),
+            "views": p["views"],
+            "reactions": p["reactions"],
+            "comments": p["comments"],
+            "reposts": p["reposts"],
+            "text": p["text"],
+            "channel_id": chat_id,
+            "channel_name": channel_name,
+        }
+        for p in posts
+    ]
+    return weekly, all_posts

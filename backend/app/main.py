@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.database import engine, Base
-from app.api import auth, businesses, onboarding, content, platforms, subscriptions
+from app.api import auth, businesses, onboarding, content, platforms, subscriptions, analytics
 
 
 @asynccontextmanager
@@ -32,6 +32,7 @@ app.include_router(onboarding.router,    prefix="/api/onboarding",    tags=["onb
 app.include_router(content.router,       prefix="/api/content",       tags=["content"])
 app.include_router(platforms.router,     prefix="/api/platforms",     tags=["platforms"])
 app.include_router(subscriptions.router, prefix="/api/subscriptions", tags=["subscriptions"])
+app.include_router(analytics.router,    prefix="/api/analytics",    tags=["analytics"])
 
 
 @app.get("/")

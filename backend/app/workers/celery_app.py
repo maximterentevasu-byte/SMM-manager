@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.schedules import crontab
 from app.config import settings
 
 celery_app = Celery(
@@ -9,6 +10,7 @@ celery_app = Celery(
         "app.workers.strategy_tasks",
         "app.workers.content_tasks",
         "app.workers.posting_tasks",
+        "app.workers.analytics_tasks",
     ]
 )
 
@@ -24,10 +26,14 @@ celery_app.conf.update(
         "app.workers.posting_tasks.*":  {"queue": "posting"},
     },
     beat_schedule={
-        # Проверяем очередь публикаций каждую минуту
         "check-publish-queue": {
             "task": "app.workers.posting_tasks.check_publish_queue",
             "schedule": 60.0,
+        },
+        # Сбор аналитики каждый понедельник в 06:00 МСК
+        "collect-analytics-weekly": {
+            "task": "app.workers.analytics_tasks.collect_all_analytics_task",
+            "schedule": crontab(hour=6, minute=0, day_of_week=1),
         },
     }
 )

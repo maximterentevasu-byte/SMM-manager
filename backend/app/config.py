@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     YOOKASSA_SHOP_ID: str = ""
     YOOKASSA_SECRET_KEY: str = ""
 
+    # Telegram Analytics (MTProto — отдельно от Bot API)
+    # Получить: https://my.telegram.org → API development tools
+    TG_API_ID: int = 0
+    TG_API_HASH: str = ""
+    # Сессия генерируется один раз: python -c "from telethon.sync import TelegramClient; c=TelegramClient('s',API_ID,API_HASH); c.start(); print(c.session.save())"
+    TG_STRING_SESSION: str = ""
+
     class Config:
         env_file = ".env"
 
