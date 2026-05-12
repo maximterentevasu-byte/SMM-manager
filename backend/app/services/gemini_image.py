@@ -1,14 +1,13 @@
 """
-Генерация изображений через Google Gemini Imagen 3.
-Возвращает base64-строку PNG.
+Генерация изображений через Gemini 2.0 Flash Image (Nano Banana 2).
+Использует generateContent с responseModalities: ["IMAGE"].
+Возвращает base64-строку PNG/JPEG.
 """
 import httpx
 from app.config import settings
 
-_ENDPOINT = (
-    "https://generativelanguage.googleapis.com/v1beta"
-    "/models/imagen-3.0-generate-002:predict"
-)
+_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+_MODEL = "gemini-2.0-flash-preview-image-generation"
 
 
 def generate_image_sync(prompt: str, aspect_ratio: str = "1:1") -> str:
@@ -16,29 +15,40 @@ def generate_image_sync(prompt: str, aspect_ratio: str = "1:1") -> str:
     if not settings.GEMINI_API_KEY:
         raise ValueError("GEMINI_API_KEY не задан в переменных окружения.")
 
+    # Вставляем aspect ratio в промт, модель это понимает
+    ar_hint = {
+        "1:1":  "square format (1:1 aspect ratio)",
+        "16:9": "wide landscape format (16:9 aspect ratio)",
+        "9:16": "vertical portrait format (9:16 aspect ratio)",
+        "4:3":  "standard landscape format (4:3 aspect ratio)",
+    }.get(aspect_ratio, "square format (1:1 aspect ratio)")
+
+    full_prompt = f"{prompt}. Output as {ar_hint}."
+
     r = httpx.post(
-        f"{_ENDPOINT}?key={settings.GEMINI_API_KEY}",
+        f"{_BASE}/{_MODEL}:generateContent?key={settings.GEMINI_API_KEY}",
         json={
-            "instances": [{"prompt": prompt}],
-            "parameters": {
-                "sampleCount": 1,
-                "aspectRatio": aspect_ratio,
-                "safetyFilterLevel": "block_few",
-                "personGeneration": "allow_adult",
-            },
+            "contents": [{"parts": [{"text": full_prompt}]}],
+            "generationConfig": {"responseModalities": ["IMAGE"]},
         },
         timeout=90,
     )
 
     data = r.json()
+
     if "error" in data:
         raise ValueError(f"Gemini API ошибка: {data['error'].get('message', data['error'])}")
 
-    predictions = data.get("predictions") or []
-    if not predictions:
-        raise ValueError("Gemini не вернул изображение. Проверь промт — возможно он нарушает политику.")
+    candidates = data.get("candidates") or []
+    if not candidates:
+        raise ValueError("Gemini не вернул кандидатов. Проверь промт или лимиты.")
 
-    b64 = predictions[0].get("bytesBase64Encoded", "")
-    if not b64:
-        raise ValueError("Gemini вернул пустое изображение.")
-    return b64
+    parts = candidates[0].get("content", {}).get("parts") or []
+    for part in parts:
+        inline = part.get("inlineData") or part.get("inline_data")
+        if inline:
+            b64 = inline.get("data", "")
+            if b64:
+                return b64
+
+    raise ValueError("Gemini не вернул изображение. Возможно промт нарушает политику контента.")
