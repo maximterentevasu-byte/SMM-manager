@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-import anthropic
+import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,15 +42,25 @@ async def _get_business(business_id: str, user: User, db: AsyncSession) -> Busin
 
 
 def _claude_sync(system: str, messages: list, max_tokens: int = 2000) -> str:
-    """Синхронный вызов Claude — запускать через asyncio.to_thread."""
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-    resp = client.messages.create(
-        model=_MODEL,
-        max_tokens=max_tokens,
-        system=system,
-        messages=messages,
+    """Прямой вызов Anthropic API через httpx — без SDK, явный таймаут 120с."""
+    r = httpx.post(
+        "https://api.anthropic.com/v1/messages",
+        headers={
+            "x-api-key": settings.ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        json={
+            "model": _MODEL,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": messages,
+        },
+        timeout=120,
     )
-    return resp.content[0].text.strip()
+    if r.status_code != 200:
+        raise ValueError(f"Anthropic {r.status_code}: {r.text[:300]}")
+    return r.json()["content"][0]["text"].strip()
 
 
 # ─── 1. Генерация текста поста ────────────────────────────────────────────────
