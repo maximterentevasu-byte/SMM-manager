@@ -31,6 +31,7 @@ const BRAND_VOICES = [
 
 type FormData = {
   name: string; niche: string; usp: string; price_segment: string; geo: string;
+  address: string; contact_info: string; products_raw: string; active_promotions: string;
   audience_primary: string; audience_pains: string[]; audience_objections: string[];
   competitors: { name: string; url: string }[];
   platforms: string[]; platform_goals: Record<string, string>;
@@ -43,6 +44,7 @@ type FormData = {
 
 const INITIAL: FormData = {
   name: "", niche: "", usp: "", price_segment: "middle", geo: "",
+  address: "", contact_info: "", products_raw: "", active_promotions: "",
   audience_primary: "", audience_pains: ["", "", ""], audience_objections: ["", ""],
   competitors: [{ name: "", url: "" }],
   platforms: ["telegram"], platform_goals: { telegram: "loyalty", vk: "sales" },
@@ -90,6 +92,10 @@ export default function OnboardingPage() {
     try {
       const payload = {
         ...form,
+        products: form.products_raw
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean),
         audience_pains: form.audience_pains.filter(Boolean),
         audience_objections: form.audience_objections.filter(Boolean),
         competitors: form.competitors
@@ -207,6 +213,32 @@ export default function OnboardingPage() {
                 placeholder="Москва, Марьино" style={inp} />
             </div>
             <div>
+              <label style={lbl}>Адрес магазина / офиса</label>
+              <input value={form.address} onChange={(e) => set("address", e.target.value)}
+                placeholder="ул. Ленина, 12, ТЦ Радуга, 2 этаж" style={inp} />
+              <p style={hint}>AI будет указывать этот адрес в постах — не придумывать свой</p>
+            </div>
+            <div>
+              <label style={lbl}>Контакты (телефон, сайт, ссылки)</label>
+              <input value={form.contact_info} onChange={(e) => set("contact_info", e.target.value)}
+                placeholder="+7 999 123-45-67, pickme.ru, @pickme_bot" style={inp} />
+              <p style={hint}>Эти данные появятся в постах вместо выдуманных ссылок</p>
+            </div>
+            <div>
+              <label style={lbl}>Товары / услуги *</label>
+              <textarea value={form.products_raw} onChange={(e) => set("products_raw", e.target.value)}
+                placeholder={"Японские чипсы со вкусом умами\nКорейская лапша Shin Ramyun\nТайские конфеты с манго\nАзиатские соусы и напитки"}
+                style={{ ...inp, minHeight: 100, resize: "vertical" }} />
+              <p style={hint}>Каждый товар с новой строки. AI будет писать только о том, что здесь указано</p>
+            </div>
+            <div>
+              <label style={lbl}>Текущие акции и спецпредложения</label>
+              <textarea value={form.active_promotions} onChange={(e) => set("active_promotions", e.target.value)}
+                placeholder="Скидка 10% на первый заказ через бота. Каждый четверг — дегустация новинок."
+                style={{ ...inp, minHeight: 70, resize: "vertical" }} />
+              <p style={hint}>Если акций нет — оставьте пустым. AI не будет придумывать акции сам</p>
+            </div>
+            <div>
               <label style={lbl}>Ценовой сегмент</label>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
                 {PRICE_SEGMENTS.map((ps) => (
@@ -219,8 +251,8 @@ export default function OnboardingPage() {
                 ))}
               </div>
             </div>
-            <button onClick={() => setStep(1)} disabled={!form.name || !form.niche || !form.usp || !form.geo}
-              style={btnNext(!form.name || !form.niche || !form.usp || !form.geo)}>
+            <button onClick={() => setStep(1)} disabled={!form.name || !form.niche || !form.usp || !form.geo || !form.products_raw}
+              style={btnNext(!form.name || !form.niche || !form.usp || !form.geo || !form.products_raw)}>
               Далее →
             </button>
           </div>

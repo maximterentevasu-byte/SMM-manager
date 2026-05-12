@@ -104,11 +104,33 @@ async def generate_ideas_for_slots(slots_meta: list, business_profile: dict) -> 
             for s in batch
         ]
 
+        products_list = business_profile.get('products', [])
+        products_str = ", ".join(products_list) if products_list else "не указан"
+        address = business_profile.get('address', '')
+        contact_info = business_profile.get('contact_info', '')
+        active_promotions = business_profile.get('active_promotions', '')
+        usp = business_profile.get('usp', '')
+
         prompt = f"""Ты SMM-стратег. Придумай конкретные идеи постов для каждого слота.
 
-Бизнес: {business_profile.get('name', '')}
-Ниша: {business_profile.get('niche', '')}
-Голос бренда: {business_profile.get('brand_voice', '')}
+ПРОФИЛЬ БИЗНЕСА:
+- Название: {business_profile.get('name', '')}
+- Ниша: {business_profile.get('niche', '')}
+- УТП: {usp}
+- Голос бренда: {business_profile.get('brand_voice', '')}
+- Аудитория: {business_profile.get('audience_primary', '')}
+- Товары/услуги: {products_str}
+- Адрес: {address if address else 'не указан'}
+- Контакты: {contact_info if contact_info else 'не указаны'}
+- Текущие акции: {active_promotions if active_promotions else 'не указаны'}
+
+⛔ СТРОГИЕ ЗАПРЕТЫ (нарушение делает пост непригодным):
+- НИКОГДА не придумывай адреса, улицы, метро — используй только то, что указано выше
+- НИКОГДА не придумывай акции, скидки, механики — только те, что указаны выше
+- НИКОГДА не придумывай товары, которых нет в списке товаров выше
+- НИКОГДА не придумывай имена сотрудников, клиентов, блогеров
+- НИКОГДА не указывай конкретные даты событий — пиши "скоро", "в этом месяце"
+- Если нужного факта нет в профиле — обходись без него или замени на общее описание
 
 Слоты:
 {json.dumps(batch_simple, ensure_ascii=False, indent=2)}

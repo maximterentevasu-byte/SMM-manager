@@ -1,11 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from pydantic import BaseModel
 from app.database import get_db
 from app.models.models import User, Business
 from app.api.auth import get_current_user
 
 router = APIRouter()
+
+
+class RefineStrategyRequest(BaseModel):
+    message: str
 
 
 @router.get("/")
@@ -48,6 +53,44 @@ async def get_strategy(
         "strategy": business.strategy,
         "ready": business.strategy is not None
     }
+
+
+@router.get("/{business_id}/profile")
+async def get_profile(
+    business_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Business).where(Business.id == business_id, Business.user_id == current_user.id)
+    )
+    business = result.scalar_one_or_none()
+    if not business:
+        raise HTTPException(404, "Не найдено")
+    return {"profile": business.profile, "name": business.name}
+
+
+@router.post("/{business_id}/refine-strategy")
+async def refine_strategy_endpoint(
+    business_id: str,
+    body: RefineStrategyRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Business).where(Business.id == business_id, Business.user_id == current_user.id)
+    )
+    business = result.scalar_one_or_none()
+    if not business:
+        raise HTTPException(404, "Не найдено")
+    if not business.strategy:
+        raise HTTPException(400, "Стратегия не сгенерирована")
+
+    from app.agents.strategy_agent import refine_strategy
+    new_strategy = await refine_strategy(business.strategy, body.message, business.profile or {})
+    business.strategy = new_strategy
+    await db.commit()
+    return {"strategy": new_strategy, "status": "updated"}
 
 
 @router.post("/{business_id}/generate-strategy")

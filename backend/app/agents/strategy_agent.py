@@ -5,6 +5,27 @@ from app.config import settings
 client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
 
+async def refine_strategy(current_strategy: list, user_message: str, business_profile: dict) -> list:
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=8000,
+        messages=[{"role": "user", "content": f"""Ты SMM-стратег. Пользователь хочет изменить контент-стратегию.
+
+Текущая стратегия:
+{json.dumps(current_strategy, ensure_ascii=False, indent=2)}
+
+Запрос пользователя: {user_message}
+
+Профиль бизнеса:
+{json.dumps(business_profile, ensure_ascii=False, indent=2)}
+
+Внеси изменения согласно запросу. Верни ПОЛНУЮ обновлённую стратегию в том же JSON формате.
+Только JSON, без markdown и пояснений."""}]
+    )
+    text = response.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+    return json.loads(text)
+
+
 async def generate_strategy(business_profile: dict) -> list[dict]:
     """
     Генерирует полную контент-стратегию на 3 месяца

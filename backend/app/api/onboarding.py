@@ -19,6 +19,10 @@ class BusinessProfileRequest(BaseModel):
     usp: str
     price_segment: str
     geo: str
+    address: Optional[str] = None          # Реальный адрес магазина/офиса
+    contact_info: Optional[str] = None     # Телефон, сайт, ссылки
+    products: list[str] = []               # Реальный список товаров/услуг
+    active_promotions: Optional[str] = None  # Текущие акции (или пусто)
     audience_primary: str
     audience_pains: list[str]
     audience_objections: list[str]

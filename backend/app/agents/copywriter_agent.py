@@ -36,14 +36,32 @@ async def generate_post_text(slot, business_profile: dict) -> dict:
     rubric = slot.rubric
     idea = slot.idea or {}
 
-    prompt = f"""Ты SMM-копирайтер для бренда "{business_profile.get('business', {}).get('name', 'бизнес')}".
+    products_list = business_profile.get('products', [])
+    products_str = ", ".join(products_list) if products_list else "не указан"
+    address = business_profile.get('address', '')
+    contact_info = business_profile.get('contact_info', '')
+    active_promotions = business_profile.get('active_promotions', '')
 
-ПРОФИЛЬ БРЕНДА:
-- Ниша: {business_profile.get('business', {}).get('niche', '')}
+    prompt = f"""Ты SMM-копирайтер для бренда "{business_profile.get('name', business_profile.get('business', {}).get('name', 'бизнес'))}".
+
+ФАКТЫ О БИЗНЕСЕ (используй ТОЛЬКО их — ничего не придумывай):
+- Ниша: {business_profile.get('niche', business_profile.get('business', {}).get('niche', ''))}
 - Голос бренда: {business_profile.get('brand_voice', '')}
-- Аудитория: {business_profile.get('audience', {}).get('primary', '')}
-- Боли аудитории: {', '.join(business_profile.get('audience', {}).get('pains', []))}
+- Аудитория: {business_profile.get('audience_primary', business_profile.get('audience', {}).get('primary', ''))}
+- Боли аудитории: {', '.join(business_profile.get('audience_pains', business_profile.get('audience', {}).get('pains', [])))}
+- Товары/услуги: {products_str}
+- Адрес: {address if address else 'не указан — не упоминай адрес'}
+- Контакты: {contact_info if contact_info else 'не указаны — не упоминай контакты'}
+- Текущие акции: {active_promotions if active_promotions else 'нет активных акций — не придумывай'}
 - Запрещено: {', '.join(business_profile.get('content_restrictions', []))}
+
+⛔ СТРОГИЕ ЗАПРЕТЫ:
+- НЕ придумывай адреса, улицы, метро, ориентиры
+- НЕ придумывай акции, скидки, конкурсы, механики призов
+- НЕ придумывай товары, которых нет в списке выше
+- НЕ придумывай имена сотрудников, клиентов, блогеров
+- НЕ указывай конкретные даты, которых нет в профиле
+- Если факта нет — пиши обобщённо или обойди эту деталь
 
 ПЛОЩАДКА: {platform_spec['notes']}
 
