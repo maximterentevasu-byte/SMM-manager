@@ -50,9 +50,12 @@ export default function AnalyticsPage() {
   const [showSetup, setShowSetup] = useState(false);
 
   const [tgCredsStatus, setTgCredsStatus] = useState<TGCredsStatus | null>(null);
-  const [tgCreds, setTgCreds] = useState({ api_id: "", api_hash: "", session: "" });
-  const [savingCreds, setSavingCreds] = useState(false);
-  const [credsMsg, setCredsMsg] = useState("");
+  const [tgPhone, setTgPhone] = useState("");
+  const [tgCode, setTgCode] = useState("");
+  const [tgCodeHash, setTgCodeHash] = useState("");
+  const [tgStep, setTgStep] = useState<1 | 2>(1);
+  const [tgPhoneLoading, setTgPhoneLoading] = useState(false);
+  const [tgPhoneMsg, setTgPhoneMsg] = useState("");
 
   const [vkCredsStatus, setVkCredsStatus] = useState<{ configured: boolean; has_connection: boolean } | null>(null);
   const [vkUserToken, setVkUserToken] = useState("");
@@ -115,21 +118,38 @@ export default function AnalyticsPage() {
     }
   };
 
-  const saveTgCreds = async () => {
-    setSavingCreds(true);
-    setCredsMsg("");
+  const sendTgCode = async () => {
+    setTgPhoneLoading(true);
+    setTgPhoneMsg("");
     try {
-      await api.post(`/analytics/${businessId}/tg-credentials`, {
-        api_id: parseInt(tgCreds.api_id),
-        api_hash: tgCreds.api_hash,
-        session: tgCreds.session,
+      const { data } = await api.post(`/analytics/${businessId}/tg-send-code`, { phone: tgPhone });
+      setTgCodeHash(data.phone_code_hash);
+      setTgStep(2);
+      setTgPhoneMsg("Код отправлен в Telegram. Введи его ниже.");
+    } catch (e: any) {
+      setTgPhoneMsg(e?.response?.data?.detail || "Ошибка отправки кода");
+    } finally {
+      setTgPhoneLoading(false);
+    }
+  };
+
+  const signInTg = async () => {
+    setTgPhoneLoading(true);
+    setTgPhoneMsg("");
+    try {
+      await api.post(`/analytics/${businessId}/tg-sign-in`, {
+        phone: tgPhone,
+        code: tgCode,
+        phone_code_hash: tgCodeHash,
       });
       setTgCredsStatus((prev) => prev ? { ...prev, configured: true } : null);
-      setCredsMsg("✓ Реквизиты сохранены. Теперь нажмите «Собрать сейчас».");
+      setTgPhoneMsg("✓ Telegram подключён! Нажмите «Собрать сейчас».");
+      setTgStep(1);
+      setTgCode("");
     } catch (e: any) {
-      setCredsMsg(e?.response?.data?.detail || "Ошибка сохранения");
+      setTgPhoneMsg(e?.response?.data?.detail || "Ошибка входа");
     } finally {
-      setSavingCreds(false);
+      setTgPhoneLoading(false);
     }
   };
 
@@ -328,26 +348,36 @@ export default function AnalyticsPage() {
                   </div>
                 )}
                 <WeeklyTable rows={tgData} cols={tg_cols} emptyText="Нет данных по Telegram" />
-                {/* Форма MTProto под таблицей в базовом режиме */}
+                {/* Форма входа по телефону под таблицей в базовом режиме */}
                 {isBasicMode && (
                   <div style={{ marginTop: 24 }}>
-                    <TGCredsForm
-                      creds={tgCreds}
-                      onChange={setTgCreds}
-                      onSave={saveTgCreds}
-                      saving={savingCreds}
-                      msg={credsMsg}
+                    <TGPhoneForm
+                      step={tgStep}
+                      phone={tgPhone}
+                      code={tgCode}
+                      loading={tgPhoneLoading}
+                      msg={tgPhoneMsg}
+                      onPhoneChange={setTgPhone}
+                      onCodeChange={setTgCode}
+                      onSendCode={sendTgCode}
+                      onSignIn={signInTg}
+                      onBack={() => { setTgStep(1); setTgPhoneMsg(""); }}
                     />
                   </div>
                 )}
               </>
             ) : tgCredsStatus?.has_connection ? (
-              <TGCredsForm
-                creds={tgCreds}
-                onChange={setTgCreds}
-                onSave={saveTgCreds}
-                saving={savingCreds}
-                msg={credsMsg}
+              <TGPhoneForm
+                step={tgStep}
+                phone={tgPhone}
+                code={tgCode}
+                loading={tgPhoneLoading}
+                msg={tgPhoneMsg}
+                onPhoneChange={setTgPhone}
+                onCodeChange={setTgCode}
+                onSendCode={sendTgCode}
+                onSignIn={signInTg}
+                onBack={() => { setTgStep(1); setTgPhoneMsg(""); }}
               />
             ) : (
               <NoConnectionState platform="Telegram" />
@@ -463,120 +493,106 @@ function NoConnectionState({ platform }: { platform: string }) {
   );
 }
 
-// ─── TG Credentials Form ────────────────────────────────────────────────────
+// ─── TG Phone Auth Form ──────────────────────────────────────────────────────
 
-type TGCredsFormProps = {
-  creds: { api_id: string; api_hash: string; session: string };
-  onChange: (v: { api_id: string; api_hash: string; session: string }) => void;
-  onSave: () => void;
-  saving: boolean;
+type TGPhoneFormProps = {
+  step: 1 | 2;
+  phone: string;
+  code: string;
+  loading: boolean;
   msg: string;
+  onPhoneChange: (v: string) => void;
+  onCodeChange: (v: string) => void;
+  onSendCode: () => void;
+  onSignIn: () => void;
+  onBack: () => void;
 };
 
-function TGCredsForm({ creds, onChange, onSave, saving, msg }: TGCredsFormProps) {
-  const [showScript, setShowScript] = useState(false);
-  const canSave = creds.api_id && creds.api_hash && creds.session;
-
-  const inp = (placeholder: string, key: "api_id" | "api_hash" | "session", type = "text") => (
-    <input
-      type={type}
-      placeholder={placeholder}
-      value={creds[key]}
-      onChange={(e) => onChange({ ...creds, [key]: e.target.value })}
-      style={{ width: "100%", padding: "10px 14px", border: "1px solid #E0DED8",
-        borderRadius: 10, fontSize: 13, fontFamily: "inherit",
-        background: "#FAFAF8", outline: "none", boxSizing: "border-box" }}
-    />
-  );
+function TGPhoneForm({ step, phone, code, loading, msg, onPhoneChange, onCodeChange, onSendCode, onSignIn, onBack }: TGPhoneFormProps) {
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "10px 14px", border: "1px solid #E0DED8",
+    borderRadius: 10, fontSize: 14, fontFamily: "inherit",
+    background: "#FAFAF8", outline: "none", boxSizing: "border-box",
+  };
 
   return (
-    <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16, padding: "32px" }}>
+    <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16, padding: "32px", maxWidth: 480 }}>
       <div style={{ fontSize: 28, marginBottom: 10 }}>✈</div>
       <h3 style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", margin: "0 0 6px" }}>
         Подключи аналитику Telegram
       </h3>
       <p style={{ color: "#888", fontSize: 14, margin: "0 0 24px", lineHeight: 1.6 }}>
-        Для сбора статистики канала нужны MTProto-реквизиты вашего аккаунта Telegram.
-        Это отдельно от бот-токена — данные вводятся один раз.
+        Введи номер телефона от аккаунта Telegram — пришлём код подтверждения прямо в приложение.
       </p>
 
-      {/* Step 1 */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, color: "#1a1a1a", marginBottom: 10 }}>
-          Шаг 1. Получи API ID и API Hash
-        </div>
-        <ol style={{ margin: "0 0 0 18px", padding: 0, color: "#555", fontSize: 13, lineHeight: 2 }}>
-          <li>Зайди на <strong>my.telegram.org</strong> и войди в аккаунт Telegram</li>
-          <li>Выбери <strong>API development tools</strong></li>
-          <li>Создай приложение (название и платформа — произвольные)</li>
-          <li>Скопируй <code style={{ background: "#EAE8E2", padding: "1px 6px", borderRadius: 4 }}>App api_id</code> и <code style={{ background: "#EAE8E2", padding: "1px 6px", borderRadius: 4 }}>App api_hash</code></li>
-        </ol>
-        <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-          <div style={{ flex: 1 }}>{inp("API ID (число)", "api_id")}</div>
-          <div style={{ flex: 2 }}>{inp("API Hash (строка из 32 символов)", "api_hash")}</div>
-        </div>
-      </div>
-
-      {/* Step 2 */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, color: "#1a1a1a", marginBottom: 10 }}>
-          Шаг 2. Сгенерируй строку сессии (один раз)
-        </div>
-        <p style={{ margin: "0 0 10px", color: "#555", fontSize: 13, lineHeight: 1.6 }}>
-          Строка сессии позволяет серверу читать статистику канала от имени твоего аккаунта.
-          Запусти этот скрипт на любом компьютере с Python 3:
-        </p>
-        <button
-          onClick={() => setShowScript((v) => !v)}
-          style={{ background: "none", border: "1px solid #E0DED8", borderRadius: 8,
-            padding: "6px 14px", cursor: "pointer", fontSize: 12, color: "#666", marginBottom: 8 }}>
-          {showScript ? "▲ Скрыть скрипт" : "▼ Показать скрипт генерации"}
-        </button>
-        {showScript && (
-          <pre style={{ background: "#1a1a1a", color: "#4ade80", padding: "14px 16px",
-            borderRadius: 10, fontFamily: "monospace", fontSize: 12,
-            margin: "0 0 10px", overflowX: "auto", whiteSpace: "pre-wrap" }}>
-{`pip install telethon
-
-python -c "
-from telethon.sync import TelegramClient
-from telethon.sessions import StringSession
-api_id = int(input('Введи api_id: '))
-api_hash = input('Введи api_hash: ')
-with TelegramClient(StringSession(), api_id, api_hash) as c:
-    print('\\nТвоя строка сессии:')
-    print(c.session.save())
-"`}
-          </pre>
-        )}
-        <p style={{ margin: "0 0 10px", color: "#888", fontSize: 12 }}>
-          Скрипт попросит ввести телефон и код из Telegram — это безопасно, данные не покидают твой компьютер.
-          Скопируй длинную строку, которую напечатает скрипт.
-        </p>
-        <textarea
-          placeholder="Вставь строку сессии сюда (начинается с 1Bv...)"
-          value={creds.session}
-          onChange={(e) => onChange({ ...creds, session: e.target.value })}
-          rows={3}
-          style={{ width: "100%", padding: "10px 14px", border: "1px solid #E0DED8",
-            borderRadius: 10, fontSize: 12, fontFamily: "monospace",
-            background: "#FAFAF8", resize: "vertical", boxSizing: "border-box" }}
-        />
-      </div>
-
-      {/* Save */}
-      <button
-        onClick={onSave}
-        disabled={saving || !canSave}
-        style={{ padding: "11px 28px", background: canSave ? "#1a1a1a" : "#ccc",
-          color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600,
-          cursor: canSave ? "pointer" : "not-allowed" }}>
-        {saving ? "Сохраняю..." : "Сохранить реквизиты"}
-      </button>
+      {step === 1 ? (
+        <>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#444", display: "block", marginBottom: 6 }}>
+              Номер телефона
+            </label>
+            <input
+              type="tel"
+              placeholder="+79001234567"
+              value={phone}
+              onChange={(e) => onPhoneChange(e.target.value)}
+              style={inputStyle}
+            />
+            <div style={{ fontSize: 11, color: "#aaa", marginTop: 4 }}>
+              Укажи в международном формате: +7...
+            </div>
+          </div>
+          <button
+            onClick={onSendCode}
+            disabled={loading || !phone.trim()}
+            style={{ padding: "11px 28px", background: phone.trim() ? "#1a1a1a" : "#ccc",
+              color: "#fff", border: "none", borderRadius: 10, fontSize: 14,
+              fontWeight: 600, cursor: phone.trim() ? "pointer" : "not-allowed" }}>
+            {loading ? "Отправляю..." : "Получить код →"}
+          </button>
+        </>
+      ) : (
+        <>
+          <div style={{ background: "#F0F4FF", border: "1px solid #C7D4F5", borderRadius: 10,
+            padding: "12px 16px", marginBottom: 16, fontSize: 13, color: "#2D4A9A" }}>
+            Код отправлен в Telegram на номер <strong>{phone}</strong>. Открой приложение и введи его ниже.
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#444", display: "block", marginBottom: 6 }}>
+              Код из Telegram
+            </label>
+            <input
+              type="text"
+              placeholder="12345"
+              value={code}
+              onChange={(e) => onCodeChange(e.target.value)}
+              style={{ ...inputStyle, fontSize: 20, letterSpacing: 6, textAlign: "center" }}
+              maxLength={6}
+            />
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              onClick={onBack}
+              style={{ padding: "11px 18px", background: "#F0F0F0",
+                color: "#444", border: "none", borderRadius: 10, fontSize: 14,
+                fontWeight: 500, cursor: "pointer" }}>
+              ← Назад
+            </button>
+            <button
+              onClick={onSignIn}
+              disabled={loading || !code.trim()}
+              style={{ padding: "11px 28px", background: code.trim() ? "#1a1a1a" : "#ccc",
+                color: "#fff", border: "none", borderRadius: 10, fontSize: 14,
+                fontWeight: 600, cursor: code.trim() ? "pointer" : "not-allowed", flex: 1 }}>
+              {loading ? "Подключаю..." : "Подтвердить и подключить"}
+            </button>
+          </div>
+        </>
+      )}
 
       {msg && (
-        <div style={{ marginTop: 12, fontSize: 13,
-          color: msg.startsWith("✓") ? "#0F6E56" : "#A32D2D" }}>
+        <div style={{ marginTop: 14, fontSize: 13,
+          color: msg.startsWith("✓") ? "#0F6E56" : msg.startsWith("Код") ? "#2D4A9A" : "#A32D2D" }}>
           {msg}
         </div>
       )}
@@ -596,64 +612,61 @@ type VKUserTokenFormProps = {
 };
 
 function VKUserTokenForm({ token, onChange, onSave, saving, msg, configured }: VKUserTokenFormProps) {
-  const [showSteps, setShowSteps] = useState(false);
+  const VK_OAUTH_URL =
+    "https://oauth.vk.com/authorize?client_id=2685278&display=page" +
+    "&redirect_uri=https://oauth.vk.com/blank.html" +
+    "&scope=groups,wall,stats,offline&response_type=token&v=5.199";
+
+  const step = (emoji: string, text: React.ReactNode) => (
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
+      <span style={{ fontSize: 20, lineHeight: 1.4 }}>{emoji}</span>
+      <div style={{ fontSize: 14, color: "#444", lineHeight: 1.6 }}>{text}</div>
+    </div>
+  );
 
   return (
-    <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16, padding: "32px" }}>
+    <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16, padding: "32px", maxWidth: 520 }}>
       <div style={{ fontSize: 28, marginBottom: 10 }}>В</div>
       <h3 style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", margin: "0 0 8px" }}>
         Подключи аналитику ВКонтакте
       </h3>
-      <p style={{ color: "#888", fontSize: 14, margin: "0 0 20px", lineHeight: 1.6 }}>
-        VK API запрещает чтение стены через ключ сообщества. Для сбора статистики нужен
-        <strong> пользовательский токен</strong> с правом <code style={{ background: "#EAE8E2",
-          padding: "1px 6px", borderRadius: 4 }}>wall</code>.
+      <p style={{ color: "#888", fontSize: 14, margin: "0 0 24px", lineHeight: 1.6 }}>
+        Следуй 4 шагам ниже — займёт меньше минуты.
       </p>
 
       {configured && (
         <div style={{ background: "#E1F5EE", borderRadius: 10, padding: "10px 14px",
-          fontSize: 13, color: "#0F6E56", marginBottom: 16 }}>
+          fontSize: 13, color: "#0F6E56", marginBottom: 20 }}>
           ✓ Токен сохранён. Нажмите «Собрать сейчас» для обновления данных.
         </div>
       )}
 
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, color: "#1a1a1a", marginBottom: 10 }}>
-          Как получить пользовательский токен
-        </div>
-        <button
-          onClick={() => setShowSteps((v) => !v)}
-          style={{ background: "none", border: "1px solid #E0DED8", borderRadius: 8,
-            padding: "6px 14px", cursor: "pointer", fontSize: 12, color: "#666", marginBottom: 10 }}>
-          {showSteps ? "▲ Скрыть инструкцию" : "▼ Показать инструкцию"}
-        </button>
-        {showSteps && (
-          <div style={{ background: "#F8F7F4", borderRadius: 12, padding: "16px 20px",
-            fontSize: 13, color: "#444", lineHeight: 1.8 }}>
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>Через VK ID (самый простой способ):</div>
-            <ol style={{ margin: "0 0 12px 18px" }}>
-              <li>Зайди на <strong>vkid.vk.com</strong> → «Мои приложения» → создай Standalone-приложение</li>
-              <li>Скопируй ID приложения (числовой)</li>
-              <li>Открой в браузере ссылку (вставь свой ID приложения):</li>
-            </ol>
-            <pre style={{ background: "#1a1a1a", color: "#4ade80", padding: "10px 14px",
-              borderRadius: 8, fontFamily: "monospace", fontSize: 11,
-              margin: "0 0 12px", overflowX: "auto", whiteSpace: "pre-wrap" }}>
-{`https://oauth.vk.com/authorize?client_id=ТУТ_APP_ID&display=page&redirect_uri=https://oauth.vk.com/blank.html&scope=wall,groups,stats,offline&response_type=token&v=5.131`}
-            </pre>
-            <ol start={4} style={{ margin: "0 0 0 18px" }}>
-              <li>Разреши доступ → тебя перенаправит на пустую страницу</li>
-              <li>В адресной строке найди <code style={{ background: "#EAE8E2", padding: "1px 5px",
-                borderRadius: 4 }}>access_token=</code> — скопируй всё до следующего <code
-                style={{ background: "#EAE8E2", padding: "1px 5px", borderRadius: 4 }}>&amp;</code></li>
-            </ol>
-          </div>
-        )}
+      <div style={{ background: "#F8F7F4", borderRadius: 12, padding: "16px 20px", marginBottom: 20 }}>
+        {step("🚀", (
+          <>
+            Открой{" "}
+            <a href={VK_OAUTH_URL} target="_blank" rel="noopener noreferrer"
+              style={{ color: "#4680C2", fontWeight: 600, textDecoration: "underline" }}>
+              эту ссылку
+            </a>
+            {" "}в браузере
+          </>
+        ))}
+        {step("🔐", "Войди в ВКонтакте и разреши доступ")}
+        {step("✅", <>Тебя перебросит на пустую страницу — смотри на <strong>адресную строку</strong></>)}
+        {step("🔥", (
+          <>
+            Найди в URL часть{" "}
+            <code style={{ background: "#EAE8E2", padding: "1px 6px", borderRadius: 4, fontSize: 12 }}>access_token=</code>
+            {" "}— скопируй всё <strong>после неё и до ближайшего</strong>{" "}
+            <code style={{ background: "#EAE8E2", padding: "1px 6px", borderRadius: 4, fontSize: 12 }}>&amp;</code>
+          </>
+        ))}
       </div>
 
       <div style={{ marginBottom: 16 }}>
         <label style={{ fontSize: 13, fontWeight: 600, color: "#444", display: "block", marginBottom: 6 }}>
-          Пользовательский токен VK
+          Вставь токен сюда
         </label>
         <input
           type="password"
@@ -665,7 +678,7 @@ function VKUserTokenForm({ token, onChange, onSave, saving, msg, configured }: V
             outline: "none", boxSizing: "border-box" }}
         />
         <div style={{ fontSize: 11, color: "#aaa", marginTop: 4 }}>
-          Хранится в зашифрованном виде. Нужны права: wall, groups, stats, offline.
+          Токен хранится в зашифрованном виде.
         </div>
       </div>
 

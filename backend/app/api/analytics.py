@@ -19,6 +19,9 @@ from app.services.publishers import decrypt_token, encrypt_token
 
 router = APIRouter()
 
+# Хранит незавершённые Telethon-клиенты между запросами send-code → sign-in
+_pending_tg_clients: dict = {}
+
 
 # ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -143,6 +146,87 @@ async def get_vk_credentials_status(
 
 class VKCredentialsIn(BaseModel):
     user_token: str
+
+
+class TGPhoneIn(BaseModel):
+    phone: str
+
+
+class TGCodeIn(BaseModel):
+    phone: str
+    code: str
+    phone_code_hash: str
+
+
+def _tg_send_code_sync(api_id: int, api_hash: str, phone: str):
+    from telethon.sync import TelegramClient
+    from telethon.sessions import StringSession
+    client = TelegramClient(StringSession(), api_id, api_hash)
+    client.connect()
+    sent = client.send_code_request(phone)
+    return client, sent.phone_code_hash
+
+
+def _tg_sign_in_sync(client, phone: str, code: str, phone_code_hash: str) -> str:
+    client.sign_in(phone, code, phone_code_hash=phone_code_hash)
+    session_str = client.session.save()
+    client.disconnect()
+    return session_str
+
+
+@router.post("/{business_id}/tg-send-code")
+async def tg_send_code(
+    business_id: str,
+    req: TGPhoneIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_business(business_id, current_user, db)
+    conn = await _get_connection(business_id, "telegram", db)
+    if not conn:
+        raise HTTPException(400, "Telegram-канал не подключён. Сначала подключи в разделе Платформы.")
+    from app.config import settings
+    api_id = int(settings.TG_API_ID)
+    api_hash = settings.TG_API_HASH
+    try:
+        client, phone_code_hash = await asyncio.to_thread(
+            _tg_send_code_sync, api_id, api_hash, req.phone
+        )
+        _pending_tg_clients[business_id] = {
+            "client": client, "phone": req.phone,
+            "api_id": api_id, "api_hash": api_hash,
+        }
+        return {"phone_code_hash": phone_code_hash, "status": "code_sent"}
+    except Exception as e:
+        raise HTTPException(400, f"Ошибка отправки кода: {str(e)}")
+
+
+@router.post("/{business_id}/tg-sign-in")
+async def tg_sign_in(
+    business_id: str,
+    req: TGCodeIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_business(business_id, current_user, db)
+    conn = await _get_connection(business_id, "telegram", db)
+    if not conn:
+        raise HTTPException(400, "Telegram-канал не подключён.")
+    pending = _pending_tg_clients.get(business_id)
+    if not pending:
+        raise HTTPException(400, "Сессия устарела. Запроси код повторно.")
+    try:
+        session_str = await asyncio.to_thread(
+            _tg_sign_in_sync, pending["client"], req.phone, req.code, req.phone_code_hash
+        )
+        _pending_tg_clients.pop(business_id, None)
+        conn.tg_api_id = str(pending["api_id"])
+        conn.tg_api_hash = pending["api_hash"]
+        conn.tg_session_encrypted = encrypt_token(session_str)
+        await db.commit()
+        return {"status": "connected"}
+    except Exception as e:
+        raise HTTPException(400, f"Ошибка входа: {str(e)}")
 
 
 @router.post("/{business_id}/vk-credentials")
