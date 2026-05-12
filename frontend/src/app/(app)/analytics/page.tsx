@@ -77,10 +77,31 @@ export default function AnalyticsPage() {
     setCollecting(true);
     setCollectMsg("");
     try {
-      await api.post(`/analytics/${businessId}/collect`);
-      setCollectMsg("Сбор запущен. Данные появятся через 1–5 минут — обнови страницу.");
-    } catch {
-      setCollectMsg("Ошибка запуска сбора");
+      const { data } = await api.post(`/analytics/${businessId}/collect`);
+      const parts: string[] = [];
+      if (data.vk) {
+        parts.push(data.vk.error
+          ? `ВКонтакте: ${data.vk.error}`
+          : `ВКонтакте: собрано ${data.vk.weeks} нед.`);
+      }
+      if (data.tg) {
+        parts.push(data.tg.error
+          ? `Telegram: ${data.tg.error}`
+          : `Telegram: собрано ${data.tg.weeks} нед.`);
+      }
+      const hasData = (data.vk && !data.vk.error) || (data.tg && !data.tg.error);
+      setCollectMsg((hasData ? "✓ " : "⚠ ") + (parts.join(" · ") || "Нет подключённых платформ"));
+      if (hasData) {
+        // перезагружаем данные
+        const [tgRes, vkRes] = await Promise.allSettled([
+          api.get(`/analytics/${businessId}/tg`),
+          api.get(`/analytics/${businessId}/vk`),
+        ]);
+        if (tgRes.status === "fulfilled") setTgData(tgRes.value.data);
+        if (vkRes.status === "fulfilled") setVkData(vkRes.value.data);
+      }
+    } catch (e: any) {
+      setCollectMsg("⚠ " + (e?.response?.data?.detail || "Ошибка сбора"));
     } finally {
       setCollecting(false);
     }
@@ -207,8 +228,9 @@ export default function AnalyticsPage() {
 
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "2rem" }}>
         {collectMsg && (
-          <div style={{ marginBottom: 16, padding: "12px 16px", background: "#E1F5EE",
-            borderRadius: 10, fontSize: 13, color: "#0F6E56" }}>
+          <div style={{ marginBottom: 16, padding: "12px 16px", borderRadius: 10, fontSize: 13,
+            background: collectMsg.startsWith("✓") ? "#E1F5EE" : "#FFF3CD",
+            color: collectMsg.startsWith("✓") ? "#0F6E56" : "#856404" }}>
             {collectMsg}
           </div>
         )}

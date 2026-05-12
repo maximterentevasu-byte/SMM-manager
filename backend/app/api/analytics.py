@@ -1,8 +1,9 @@
 import asyncio
+import uuid
 from io import BytesIO
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,7 @@ from sqlalchemy import select, delete
 from app.database import get_db
 from app.models.models import User, Business, PlatformConnection, TGWeeklyStats, VKWeeklyStats
 from app.api.auth import get_current_user
+from app.services.publishers import decrypt_token
 
 router = APIRouter()
 
@@ -138,23 +140,114 @@ async def save_tg_credentials(
     return {"status": "saved"}
 
 
-# ─── Trigger collection (BackgroundTasks, не требует Celery) ─────────────────
+# ─── Collect: прямой вызов в рамках запроса через asyncio.to_thread ───────────
 
-def _bg_collect(business_id: str):
-    from app.workers.analytics_tasks import _collect
-    asyncio.run(_collect(business_id))
+async def _save_vk(db: AsyncSession, business_id: str, vk: PlatformConnection) -> dict:
+    """Собирает VK-аналитику и сохраняет в БД. Возвращает статус."""
+    from app.services.analytics_vk import collect_vk_weekly
+    token = decrypt_token(vk.token_encrypted)
+    weekly, posts = await asyncio.to_thread(collect_vk_weekly, vk.external_page_id, token)
+    if not weekly:
+        return {"weeks": 0, "error": "Постов не найдено или VK API не вернул данных"}
+
+    await db.execute(
+        delete(VKWeeklyStats).where(
+            VKWeeklyStats.business_id == business_id,
+            VKWeeklyStats.group_id == vk.external_page_id.lstrip("-"),
+        )
+    )
+    for w in weekly:
+        ws_date = datetime.fromisoformat(w["week_start"])
+        we_date = datetime.fromisoformat(w["week_end"])
+        week_posts = [p for p in posts if w["week_start"] <= p["date"][:10] <= w["week_end"]]
+        db.add(VKWeeklyStats(
+            id=uuid.uuid4(),
+            business_id=uuid.UUID(business_id),
+            group_id=w["group_id"],
+            group_name=w["group_name"],
+            week_start=ws_date,
+            week_end=we_date,
+            stats={k: v for k, v in w.items()
+                   if k not in ("group_id", "group_name", "week_start", "week_end")},
+            posts=week_posts,
+        ))
+    await db.commit()
+    return {"weeks": len(weekly)}
+
+
+async def _save_tg(db: AsyncSession, business_id: str, tg: PlatformConnection) -> dict:
+    """Собирает TG-аналитику и сохраняет в БД. Возвращает статус."""
+    from app.services.analytics_tg import collect_tg_weekly
+    from app.config import settings
+
+    api_id = int(tg.tg_api_id) if tg.tg_api_id else settings.TG_API_ID
+    api_hash = tg.tg_api_hash if tg.tg_api_hash else settings.TG_API_HASH
+    session = (
+        decrypt_token(tg.tg_session_encrypted)
+        if tg.tg_session_encrypted
+        else settings.TG_STRING_SESSION
+    )
+    if not (api_id and session):
+        return {"weeks": 0, "error": "MTProto-реквизиты не настроены"}
+
+    weekly, posts = await asyncio.to_thread(
+        collect_tg_weekly, api_id, api_hash, session, tg.external_page_id
+    )
+    if not weekly:
+        return {"weeks": 0, "error": "Постов не найдено"}
+
+    await db.execute(
+        delete(TGWeeklyStats).where(
+            TGWeeklyStats.business_id == business_id,
+            TGWeeklyStats.channel_id == tg.external_page_id,
+        )
+    )
+    for w in weekly:
+        ws_date = datetime.fromisoformat(w["week_start"])
+        we_date = datetime.fromisoformat(w["week_end"])
+        week_posts = [p for p in posts if w["week_start"] <= p["date"][:10] <= w["week_end"]]
+        db.add(TGWeeklyStats(
+            id=uuid.uuid4(),
+            business_id=uuid.UUID(business_id),
+            channel_id=tg.external_page_id,
+            channel_name=w.get("channel_name", tg.page_name),
+            week_start=ws_date,
+            week_end=we_date,
+            stats={k: v for k, v in w.items()
+                   if k not in ("channel_id", "channel_name", "week_start", "week_end")},
+            posts=week_posts,
+        ))
+    await db.commit()
+    return {"weeks": len(weekly)}
 
 
 @router.post("/{business_id}/collect")
 async def collect_analytics(
     business_id: str,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await _get_business(business_id, current_user, db)
-    background_tasks.add_task(_bg_collect, business_id)
-    return {"status": "started"}
+    result: dict = {}
+
+    vk = await _get_connection(business_id, "vk", db)
+    if vk:
+        try:
+            result["vk"] = await _save_vk(db, business_id, vk)
+        except Exception as e:
+            result["vk"] = {"weeks": 0, "error": str(e)}
+
+    tg = await _get_connection(business_id, "telegram", db)
+    if tg:
+        try:
+            result["tg"] = await _save_tg(db, business_id, tg)
+        except Exception as e:
+            result["tg"] = {"weeks": 0, "error": str(e)}
+
+    if not vk and not tg:
+        return {"status": "no_connections", "detail": "Нет подключённых платформ"}
+
+    return {"status": "done", **result}
 
 
 # ─── Excel export ────────────────────────────────────────────────────────────
