@@ -4,7 +4,11 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git push *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(pip install *)",
+      "Bash(python -c \"import httpx; print\\('ok'\\)\")",
+      "Bash(where python *)",
+      "Bash(C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe -c \"import httpx; key='AIzaSyBd7V3nhbmMBVL7g1yJF4EUrLb4ufNfrfI'; r=httpx.get\\('https://generativelanguage.googleapis.com/v1beta/models?key='+key,timeout=30\\); data=r.json\\(\\); [print\\(m['name'],'|',m.get\\('supportedGenerationMethods'\\)\\) for m in data.get\\('models',[]\\) if any\\(x in m['name'].lower\\(\\) for x in ['image','imagen','flash']\\)]\")"
     ]
   }
 }
