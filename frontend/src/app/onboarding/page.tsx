@@ -9,6 +9,7 @@ const STEPS = [
   { id: "audience",   label: "Аудитория",     icon: "👥" },
   { id: "platforms",  label: "Площадки",      icon: "📱" },
   { id: "voice",      label: "Голос бренда",  icon: "🎯" },
+  { id: "brand",      label: "Стиль",         icon: "🎨" },
   { id: "clarify",    label: "Уточнения",     icon: "🤖" },
   { id: "launch",     label: "Запуск",        icon: "🚀" },
 ];
@@ -35,6 +36,9 @@ type FormData = {
   platforms: string[]; platform_goals: Record<string, string>;
   brand_voice: string; visual_style: string; content_restrictions: string[];
   brand_colors: string[]; logo_url: string;
+  brand_assets_links: string;
+  social_references: string;
+  business_photos_links: string;
 };
 
 const INITIAL: FormData = {
@@ -44,6 +48,9 @@ const INITIAL: FormData = {
   platforms: ["telegram"], platform_goals: { telegram: "loyalty", vk: "sales" },
   brand_voice: "friendly", visual_style: "", content_restrictions: [],
   brand_colors: [], logo_url: "",
+  brand_assets_links: "",
+  social_references: "",
+  business_photos_links: "",
 };
 
 export default function OnboardingPage() {
@@ -100,7 +107,7 @@ export default function OnboardingPage() {
 
       const { data: qs } = await api.post(`/onboarding/clarify/${bId}`);
       setClarifyQs(qs.questions || []);
-      setStep(4);
+      setStep(5);
     } catch {
       setError("Ошибка сохранения. Проверьте что все поля заполнены.");
     } finally {
@@ -112,22 +119,16 @@ export default function OnboardingPage() {
     setLaunching(true);
     setError("");
     try {
-      // Сохраняем ответы на уточнения
       for (const q of clarifyQs) {
         const answer = clarifyAs[q.field];
         if (answer) {
           await api.post(`/onboarding/answer-clarification/${businessId}`, {
-            question: q.question,
-            answer,
+            question: q.question, answer,
           });
         }
       }
-
-      // Запускаем генерацию стратегии
-      // Контент-план запустится автоматически после стратегии через Celery
       await api.post(`/businesses/${businessId}/generate-strategy`);
-
-      setStep(5);
+      setStep(6);
     } catch {
       setError("Ошибка запуска. Попробуйте ещё раз.");
     } finally {
@@ -135,19 +136,24 @@ export default function OnboardingPage() {
     }
   };
 
-  const inputStyle: React.CSSProperties = {
+  const inp: React.CSSProperties = {
     width: "100%", padding: "10px 14px", border: "1px solid #E0DED8",
     borderRadius: 10, fontSize: 14, fontFamily: "inherit",
     outline: "none", boxSizing: "border-box", background: "#fff",
   };
-
-  const labelStyle: React.CSSProperties = {
+  const lbl: React.CSSProperties = {
     fontSize: 13, fontWeight: 500, color: "#444", display: "block", marginBottom: 6,
   };
-
-  const hintStyle: React.CSSProperties = {
-    fontSize: 12, color: "#999", marginTop: 4,
+  const hint: React.CSSProperties = { fontSize: 12, color: "#999", marginTop: 4 };
+  const btnBack: React.CSSProperties = {
+    flex: 1, padding: 13, background: "#F1EFE8", color: "#444",
+    border: "none", borderRadius: 12, cursor: "pointer", fontSize: 15,
   };
+  const btnNext = (disabled = false): React.CSSProperties => ({
+    flex: 2, padding: 13, background: disabled ? "#ccc" : "#1a1a1a", color: "#fff",
+    border: "none", borderRadius: 12, cursor: disabled ? "not-allowed" : "pointer",
+    fontSize: 15, fontWeight: 600,
+  });
 
   return (
     <div style={{ minHeight: "100vh", background: "#F8F7F4", fontFamily: "'Segoe UI', sans-serif" }}>
@@ -165,7 +171,7 @@ export default function OnboardingPage() {
             <div key={s.id} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
               <div style={{ width: "100%", height: 3, borderRadius: 2,
                 background: i <= step ? "#1a1a1a" : "#E0DED8", transition: "background 0.3s" }} />
-              <span style={{ fontSize: 10, color: i <= step ? "#1a1a1a" : "#bbb", fontWeight: i === step ? 600 : 400 }}>
+              <span style={{ fontSize: 9, color: i <= step ? "#1a1a1a" : "#bbb", fontWeight: i === step ? 600 : 400, textAlign: "center" }}>
                 {s.icon} {s.label}
               </span>
             </div>
@@ -180,29 +186,28 @@ export default function OnboardingPage() {
               <p style={{ color: "#888", margin: 0, fontSize: 14 }}>Эта информация поможет AI создать персональную стратегию</p>
             </div>
             <div>
-              <label style={labelStyle}>Название бизнеса *</label>
+              <label style={lbl}>Название бизнеса *</label>
               <input value={form.name} onChange={(e) => set("name", e.target.value)}
-                placeholder="Пиццерия Маэстро" style={inputStyle} />
+                placeholder="Пиццерия Маэстро" style={inp} />
             </div>
             <div>
-              <label style={labelStyle}>Ниша / сфера деятельности *</label>
+              <label style={lbl}>Ниша / сфера деятельности *</label>
               <input value={form.niche} onChange={(e) => set("niche", e.target.value)}
-                placeholder="Ресторан, доставка пиццы" style={inputStyle} />
+                placeholder="Ресторан, доставка пиццы" style={inp} />
             </div>
             <div>
-              <label style={labelStyle}>Уникальное торговое предложение *</label>
+              <label style={lbl}>Уникальное торговое предложение *</label>
               <textarea value={form.usp} onChange={(e) => set("usp", e.target.value)}
                 placeholder="Чем вы отличаетесь от конкурентов?"
-                style={{ ...inputStyle, minHeight: 80, resize: "vertical" }} />
-              <p style={hintStyle}>Одним-двумя предложениями</p>
+                style={{ ...inp, minHeight: 80, resize: "vertical" }} />
             </div>
             <div>
-              <label style={labelStyle}>Город / район *</label>
+              <label style={lbl}>Город / район *</label>
               <input value={form.geo} onChange={(e) => set("geo", e.target.value)}
-                placeholder="Москва, Марьино" style={inputStyle} />
+                placeholder="Москва, Марьино" style={inp} />
             </div>
             <div>
-              <label style={labelStyle}>Ценовой сегмент</label>
+              <label style={lbl}>Ценовой сегмент</label>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
                 {PRICE_SEGMENTS.map((ps) => (
                   <div key={ps.value} onClick={() => set("price_segment", ps.value)}
@@ -215,9 +220,7 @@ export default function OnboardingPage() {
               </div>
             </div>
             <button onClick={() => setStep(1)} disabled={!form.name || !form.niche || !form.usp || !form.geo}
-              style={{ padding: 13, background: "#1a1a1a", color: "#fff", border: "none",
-                borderRadius: 12, cursor: "pointer", fontSize: 15, fontWeight: 600,
-                opacity: (!form.name || !form.niche || !form.usp || !form.geo) ? 0.4 : 1 }}>
+              style={btnNext(!form.name || !form.niche || !form.usp || !form.geo)}>
               Далее →
             </button>
           </div>
@@ -231,38 +234,30 @@ export default function OnboardingPage() {
               <p style={{ color: "#888", margin: 0, fontSize: 14 }}>AI будет писать посты именно для этих людей</p>
             </div>
             <div>
-              <label style={labelStyle}>Основная аудитория *</label>
+              <label style={lbl}>Основная аудитория *</label>
               <input value={form.audience_primary} onChange={(e) => set("audience_primary", e.target.value)}
-                placeholder="Семьи с детьми 28-45 лет" style={inputStyle} />
+                placeholder="Семьи с детьми 28-45 лет" style={inp} />
             </div>
             <div>
-              <label style={labelStyle}>Главные боли клиентов</label>
+              <label style={lbl}>Главные боли клиентов</label>
               {form.audience_pains.map((p, i) => (
                 <input key={i} value={p} onChange={(e) => setPain(i, e.target.value)}
                   placeholder={["Не знают что заказать на ужин", "Хочется быстро и вкусно", "Устали готовить"][i]}
-                  style={{ ...inputStyle, marginBottom: 8 }} />
+                  style={{ ...inp, marginBottom: 8 }} />
               ))}
             </div>
             <div>
-              <label style={labelStyle}>Типичные возражения</label>
+              <label style={lbl}>Типичные возражения</label>
               {form.audience_objections.map((o, i) => (
                 <input key={i} value={o} onChange={(e) => setObj(i, e.target.value)}
                   placeholder={["Дорого", "Долго доставляют"][i]}
-                  style={{ ...inputStyle, marginBottom: 8 }} />
+                  style={{ ...inp, marginBottom: 8 }} />
               ))}
             </div>
             <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setStep(0)}
-                style={{ flex: 1, padding: 13, background: "#F1EFE8", color: "#444",
-                  border: "none", borderRadius: 12, cursor: "pointer", fontSize: 15 }}>
-                ← Назад
-              </button>
+              <button onClick={() => setStep(0)} style={btnBack}>← Назад</button>
               <button onClick={() => setStep(2)} disabled={!form.audience_primary}
-                style={{ flex: 2, padding: 13, background: "#1a1a1a", color: "#fff", border: "none",
-                  borderRadius: 12, cursor: "pointer", fontSize: 15, fontWeight: 600,
-                  opacity: !form.audience_primary ? 0.4 : 1 }}>
-                Далее →
-              </button>
+                style={btnNext(!form.audience_primary)}>Далее →</button>
             </div>
           </div>
         )}
@@ -275,9 +270,9 @@ export default function OnboardingPage() {
               <p style={{ color: "#888", margin: 0, fontSize: 14 }}>Выберите площадки и цель для каждой</p>
             </div>
             {[
-              { id: "telegram", label: "Telegram",      icon: "✈", desc: "Канал / группа" },
-              { id: "vk",       label: "ВКонтакте",     icon: "В", desc: "Группа / публичная страница" },
-              { id: "ok",       label: "Одноклассники", icon: "О", desc: "Группа" },
+              { id: "telegram", label: "Telegram", icon: "✈", desc: "Канал / группа" },
+              { id: "vk", label: "ВКонтакте", icon: "В", desc: "Группа / публичная страница" },
+              { id: "ok", label: "Одноклассники", icon: "О", desc: "Группа" },
             ].map((pl) => (
               <div key={pl.id} style={{ border: `1.5px solid ${form.platforms.includes(pl.id) ? "#1a1a1a" : "#E0DED8"}`,
                 borderRadius: 12, overflow: "hidden" }}>
@@ -301,7 +296,7 @@ export default function OnboardingPage() {
                 </div>
                 {form.platforms.includes(pl.id) && (
                   <div style={{ padding: "12px 16px", borderTop: "1px solid #EAE8E2", background: "#fff" }}>
-                    <label style={{ ...labelStyle, marginBottom: 8 }}>Цель для {pl.label}</label>
+                    <label style={{ ...lbl, marginBottom: 8 }}>Цель для {pl.label}</label>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {[{ v: "sales", l: "Продажи" }, { v: "loyalty", l: "Лояльность" }, { v: "reach", l: "Охват" }].map((g) => (
                         <button key={g.v}
@@ -319,17 +314,9 @@ export default function OnboardingPage() {
               </div>
             ))}
             <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setStep(1)}
-                style={{ flex: 1, padding: 13, background: "#F1EFE8", color: "#444",
-                  border: "none", borderRadius: 12, cursor: "pointer", fontSize: 15 }}>
-                ← Назад
-              </button>
+              <button onClick={() => setStep(1)} style={btnBack}>← Назад</button>
               <button onClick={() => setStep(3)} disabled={form.platforms.length === 0}
-                style={{ flex: 2, padding: 13, background: "#1a1a1a", color: "#fff", border: "none",
-                  borderRadius: 12, cursor: "pointer", fontSize: 15, fontWeight: 600,
-                  opacity: form.platforms.length === 0 ? 0.4 : 1 }}>
-                Далее →
-              </button>
+                style={btnNext(form.platforms.length === 0)}>Далее →</button>
             </div>
           </div>
         )}
@@ -342,7 +329,7 @@ export default function OnboardingPage() {
               <p style={{ color: "#888", margin: 0, fontSize: 14 }}>Как вы общаетесь с клиентами?</p>
             </div>
             <div>
-              <label style={labelStyle}>Тональность общения</label>
+              <label style={lbl}>Тональность общения</label>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
                 {BRAND_VOICES.map((bv) => (
                   <div key={bv.value} onClick={() => set("brand_voice", bv.value)}
@@ -357,14 +344,14 @@ export default function OnboardingPage() {
               </div>
             </div>
             <div>
-              <label style={labelStyle}>Визуальный стиль *</label>
+              <label style={lbl}>Визуальный стиль *</label>
               <textarea value={form.visual_style} onChange={(e) => set("visual_style", e.target.value)}
                 placeholder="Тёплые тона, фото еды крупным планом, уютная атмосфера"
-                style={{ ...inputStyle, minHeight: 80, resize: "vertical" }} />
-              <p style={hintStyle}>Опишите как должны выглядеть картинки к постам</p>
+                style={{ ...inp, minHeight: 80, resize: "vertical" }} />
+              <p style={hint}>Опишите как должны выглядеть картинки к постам</p>
             </div>
             <div>
-              <label style={labelStyle}>Что нельзя публиковать?</label>
+              <label style={lbl}>Что нельзя публиковать?</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {["алкоголь", "политика", "конкуренты", "скидки", "агрессивные продажи"].map((r) => (
                   <button key={r}
@@ -381,25 +368,91 @@ export default function OnboardingPage() {
                 ))}
               </div>
             </div>
-            {error && <p style={{ color: "#A32D2D", fontSize: 13 }}>{error}</p>}
             <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setStep(2)}
-                style={{ flex: 1, padding: 13, background: "#F1EFE8", color: "#444",
-                  border: "none", borderRadius: 12, cursor: "pointer", fontSize: 15 }}>
-                ← Назад
-              </button>
-              <button onClick={saveAndClarify} disabled={loading || !form.visual_style}
-                style={{ flex: 2, padding: 13, background: "#1a1a1a", color: "#fff", border: "none",
-                  borderRadius: 12, cursor: "pointer", fontSize: 15, fontWeight: 600,
-                  opacity: (loading || !form.visual_style) ? 0.6 : 1 }}>
+              <button onClick={() => setStep(2)} style={btnBack}>← Назад</button>
+              <button onClick={() => setStep(4)} disabled={!form.visual_style}
+                style={btnNext(!form.visual_style)}>Далее →</button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 4: Фирменный стиль */}
+        {step === 4 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div>
+              <h2 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 6px" }}>Материалы бренда</h2>
+              <p style={{ color: "#888", margin: 0, fontSize: 14 }}>
+                AI проанализирует их при создании стратегии и контент-плана
+              </p>
+            </div>
+
+            {/* Вопрос 1 */}
+            <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, padding: 20 }}>
+              <label style={{ ...lbl, fontSize: 14, marginBottom: 10 }}>
+                🎨 Фирменный стиль
+              </label>
+              <p style={{ color: "#888", fontSize: 13, margin: "0 0 12px", lineHeight: 1.6 }}>
+                Прикрепите ссылки на элементы фирменного стиля: логотип, брендбук, макеты, маскот, вывеска.
+                Можно загрузить на Google Drive, Яндекс Диск или Notion и вставить ссылку.
+              </p>
+              <textarea
+                value={form.brand_assets_links}
+                onChange={(e) => set("brand_assets_links", e.target.value)}
+                placeholder={"https://drive.google.com/...\nhttps://www.figma.com/..."}
+                style={{ ...inp, minHeight: 90, resize: "vertical" }}
+              />
+              <p style={hint}>Необязательно — можно пропустить если материалов нет</p>
+            </div>
+
+            {/* Вопрос 2 */}
+            <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, padding: 20 }}>
+              <label style={{ ...lbl, fontSize: 14, marginBottom: 10 }}>
+                📱 Референсы соцсетей
+              </label>
+              <p style={{ color: "#888", fontSize: 13, margin: "0 0 12px", lineHeight: 1.6 }}>
+                Укажите ссылки на аккаунты компаний в соцсетях, чей стиль вам нравится и хотелось бы перенять.
+              </p>
+              <textarea
+                value={form.social_references}
+                onChange={(e) => set("social_references", e.target.value)}
+                placeholder={"https://vk.com/dodopizza\nhttps://t.me/burgerkingrussia\nhttps://instagram.com/..."}
+                style={{ ...inp, minHeight: 90, resize: "vertical" }}
+              />
+              <p style={hint}>Необязательно — можно указать 1-5 аккаунтов</p>
+            </div>
+
+            {/* Вопрос 3 */}
+            <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, padding: 20 }}>
+              <label style={{ ...lbl, fontSize: 14, marginBottom: 10 }}>
+                📸 Фото вашего заведения / продукта
+              </label>
+              <p style={{ color: "#888", fontSize: 13, margin: "0 0 12px", lineHeight: 1.6 }}>
+                Пришлите ссылки на фотографии магазина, студии, салона, кухни или продуктов.
+                Это поможет AI создавать более точные промты для генерации картинок.
+              </p>
+              <textarea
+                value={form.business_photos_links}
+                onChange={(e) => set("business_photos_links", e.target.value)}
+                placeholder={"https://drive.google.com/...\nhttps://disk.yandex.ru/..."}
+                style={{ ...inp, minHeight: 90, resize: "vertical" }}
+              />
+              <p style={hint}>Необязательно — можно пропустить</p>
+            </div>
+
+            {error && <p style={{ color: "#A32D2D", fontSize: 13 }}>{error}</p>}
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setStep(3)} style={btnBack}>← Назад</button>
+              <button onClick={saveAndClarify} disabled={loading}
+                style={{ ...btnNext(loading), flex: 2 }}>
                 {loading ? "Сохраняю..." : "Далее →"}
               </button>
             </div>
           </div>
         )}
 
-        {/* STEP 4: Уточнения */}
-        {step === 4 && (
+        {/* STEP 5: Уточнения */}
+        {step === 5 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
@@ -407,53 +460,50 @@ export default function OnboardingPage() {
                 <h2 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>AI изучил ваш профиль</h2>
               </div>
               <p style={{ color: "#888", margin: 0, fontSize: 14 }}>
-                Чтобы создать точную стратегию, уточните несколько деталей
+                Уточните несколько деталей для точной стратегии
               </p>
             </div>
             {clarifyQs.length === 0 ? (
               <div style={{ padding: "2rem", textAlign: "center", color: "#888",
                 background: "#F8F7F4", borderRadius: 12 }}>
-                <p>AI не нашёл пробелов — профиль заполнен отлично!</p>
+                <p>Профиль заполнен отлично — пробелов нет!</p>
               </div>
             ) : (
               clarifyQs.map((q, i) => (
                 <div key={i} style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, padding: 16 }}>
-                  <label style={{ ...labelStyle, fontSize: 14, lineHeight: 1.5, marginBottom: 10 }}>
+                  <label style={{ ...lbl, fontSize: 14, lineHeight: 1.5, marginBottom: 10 }}>
                     {i + 1}. {q.question}
                   </label>
-                  <textarea
-                    value={clarifyAs[q.field] || ""}
+                  <textarea value={clarifyAs[q.field] || ""}
                     onChange={(e) => setClarifyAs({ ...clarifyAs, [q.field]: e.target.value })}
                     placeholder="Ваш ответ..."
-                    style={{ ...inputStyle, minHeight: 70, resize: "vertical" }} />
+                    style={{ ...inp, minHeight: 70, resize: "vertical" }} />
                 </div>
               ))
             )}
             {error && <p style={{ color: "#A32D2D", fontSize: 13 }}>{error}</p>}
             <button onClick={launch} disabled={launching}
-              style={{ padding: 15, background: "#1a1a1a", color: "#fff", border: "none",
-                borderRadius: 12, cursor: "pointer", fontSize: 16, fontWeight: 700,
-                opacity: launching ? 0.6 : 1 }}>
+              style={{ padding: 15, background: launching ? "#888" : "#1a1a1a", color: "#fff",
+                border: "none", borderRadius: 12, cursor: "pointer", fontSize: 16, fontWeight: 700 }}>
               {launching ? "Запускаю AI... ⏳" : "🚀 Запустить платформу"}
             </button>
           </div>
         )}
 
-        {/* STEP 5: Запущено */}
-        {step === 5 && (
+        {/* STEP 6: Запущено */}
+        {step === 6 && (
           <div style={{ textAlign: "center", padding: "3rem 0" }}>
             <div style={{ fontSize: 72, marginBottom: 16 }}>🎉</div>
             <h2 style={{ fontSize: 26, fontWeight: 700, margin: "0 0 12px" }}>Платформа запущена!</h2>
             <p style={{ color: "#666", fontSize: 15, maxWidth: 400, margin: "0 auto 32px", lineHeight: 1.6 }}>
-              AI генерирует контент-стратегию и контент-план на этот месяц.
-              Обычно это занимает 1-2 минуты.
+              AI генерирует стратегию и контент-план. Обычно это занимает 1-2 минуты.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 340, margin: "0 auto 32px" }}>
               {[
                 { icon: "📋", text: "Контент-стратегия для ваших площадок" },
                 { icon: "📅", text: "Контент-план на текущий месяц" },
                 { icon: "✍️", text: "Тексты постов под ваш голос бренда" },
-                { icon: "🖼",  text: "AI-картинки для каждого поста" },
+                { icon: "🖼", text: "AI-картинки для каждого поста" },
               ].map((item, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 12,
                   padding: "12px 16px", background: "#fff", borderRadius: 10,
