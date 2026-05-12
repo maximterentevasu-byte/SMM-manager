@@ -41,7 +41,7 @@ export default function PostCreatorPage() {
 
   useEffect(() => {
     if (!businessId) return;
-    api.get(`/businesses/${businessId}/platforms`).then(({ data }) => {
+    api.get(`/platforms/list/${businessId}`).then(({ data }) => {
       setConnectedPlatforms(
         (data || []).filter((p: any) => p.is_active).map((p: any) => ({
           platform: p.platform as Platform,
@@ -82,9 +82,7 @@ export default function PostCreatorPage() {
       const fd = new FormData();
       fd.append("idea", idea);
       if (ideaFile) fd.append("file", ideaFile);
-      const { data } = await api.post(`/post-creator/${businessId}/generate-text`, fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const { data } = await api.post(`/post-creator/${businessId}/generate-text`, fd);
       setPostText(data.text);
     } catch (e: any) {
       setPostText("Ошибка: " + (e?.response?.data?.detail || "не удалось сгенерировать"));
