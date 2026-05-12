@@ -10,6 +10,7 @@ _MIGRATIONS = [
     "ALTER TABLE platform_connections ADD COLUMN IF NOT EXISTS tg_api_id VARCHAR(50)",
     "ALTER TABLE platform_connections ADD COLUMN IF NOT EXISTS tg_api_hash VARCHAR(255)",
     "ALTER TABLE platform_connections ADD COLUMN IF NOT EXISTS tg_session_encrypted TEXT",
+    "ALTER TABLE platform_connections ADD COLUMN IF NOT EXISTS vk_user_token_encrypted TEXT",
 ]
 
 

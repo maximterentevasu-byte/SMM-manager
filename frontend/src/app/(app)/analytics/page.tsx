@@ -54,6 +54,11 @@ export default function AnalyticsPage() {
   const [savingCreds, setSavingCreds] = useState(false);
   const [credsMsg, setCredsMsg] = useState("");
 
+  const [vkCredsStatus, setVkCredsStatus] = useState<{ configured: boolean; has_connection: boolean } | null>(null);
+  const [vkUserToken, setVkUserToken] = useState("");
+  const [savingVkCreds, setSavingVkCreds] = useState(false);
+  const [vkCredsMsg, setVkCredsMsg] = useState("");
+
   const [businessId] = useState(() =>
     typeof window !== "undefined" ? localStorage.getItem("businessId") || "" : ""
   );
@@ -71,6 +76,9 @@ export default function AnalyticsPage() {
     api.get(`/analytics/${businessId}/tg-credentials`)
       .then(({ data }) => setTgCredsStatus(data))
       .catch(() => setTgCredsStatus({ configured: false, has_connection: false }));
+    api.get(`/analytics/${businessId}/vk-credentials`)
+      .then(({ data }) => setVkCredsStatus(data))
+      .catch(() => setVkCredsStatus({ configured: false, has_connection: false }));
   }, [businessId]);
 
   const collect = async () => {
@@ -122,6 +130,20 @@ export default function AnalyticsPage() {
       setCredsMsg(e?.response?.data?.detail || "Ошибка сохранения");
     } finally {
       setSavingCreds(false);
+    }
+  };
+
+  const saveVkCreds = async () => {
+    setSavingVkCreds(true);
+    setVkCredsMsg("");
+    try {
+      await api.post(`/analytics/${businessId}/vk-credentials`, { user_token: vkUserToken });
+      setVkCredsStatus((prev) => prev ? { ...prev, configured: true } : null);
+      setVkCredsMsg("✓ Токен сохранён. Нажмите «Собрать сейчас».");
+    } catch (e: any) {
+      setVkCredsMsg(e?.response?.data?.detail || "Ошибка сохранения");
+    } finally {
+      setSavingVkCreds(false);
     }
   };
 
@@ -353,8 +375,17 @@ export default function AnalyticsPage() {
                 )}
                 <WeeklyTable rows={vkData} cols={vk_cols} emptyText="Нет данных по ВКонтакте" />
               </>
+            ) : vkCredsStatus?.has_connection ? (
+              <VKUserTokenForm
+                token={vkUserToken}
+                onChange={setVkUserToken}
+                onSave={saveVkCreds}
+                saving={savingVkCreds}
+                msg={vkCredsMsg}
+                configured={vkCredsStatus.configured}
+              />
             ) : (
-              <VKEmptyState />
+              <NoConnectionState platform="ВКонтакте" />
             )}
           </>
         )}
@@ -541,6 +572,110 @@ with TelegramClient(StringSession(), api_id, api_hash) as c:
           color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600,
           cursor: canSave ? "pointer" : "not-allowed" }}>
         {saving ? "Сохраняю..." : "Сохранить реквизиты"}
+      </button>
+
+      {msg && (
+        <div style={{ marginTop: 12, fontSize: 13,
+          color: msg.startsWith("✓") ? "#0F6E56" : "#A32D2D" }}>
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── VK User Token Form ──────────────────────────────────────────────────────
+
+type VKUserTokenFormProps = {
+  token: string;
+  onChange: (v: string) => void;
+  onSave: () => void;
+  saving: boolean;
+  msg: string;
+  configured: boolean;
+};
+
+function VKUserTokenForm({ token, onChange, onSave, saving, msg, configured }: VKUserTokenFormProps) {
+  const [showSteps, setShowSteps] = useState(false);
+
+  return (
+    <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16, padding: "32px" }}>
+      <div style={{ fontSize: 28, marginBottom: 10 }}>В</div>
+      <h3 style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", margin: "0 0 8px" }}>
+        Подключи аналитику ВКонтакте
+      </h3>
+      <p style={{ color: "#888", fontSize: 14, margin: "0 0 20px", lineHeight: 1.6 }}>
+        VK API запрещает чтение стены через ключ сообщества. Для сбора статистики нужен
+        <strong> пользовательский токен</strong> с правом <code style={{ background: "#EAE8E2",
+          padding: "1px 6px", borderRadius: 4 }}>wall</code>.
+      </p>
+
+      {configured && (
+        <div style={{ background: "#E1F5EE", borderRadius: 10, padding: "10px 14px",
+          fontSize: 13, color: "#0F6E56", marginBottom: 16 }}>
+          ✓ Токен сохранён. Нажмите «Собрать сейчас» для обновления данных.
+        </div>
+      )}
+
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, color: "#1a1a1a", marginBottom: 10 }}>
+          Как получить пользовательский токен
+        </div>
+        <button
+          onClick={() => setShowSteps((v) => !v)}
+          style={{ background: "none", border: "1px solid #E0DED8", borderRadius: 8,
+            padding: "6px 14px", cursor: "pointer", fontSize: 12, color: "#666", marginBottom: 10 }}>
+          {showSteps ? "▲ Скрыть инструкцию" : "▼ Показать инструкцию"}
+        </button>
+        {showSteps && (
+          <div style={{ background: "#F8F7F4", borderRadius: 12, padding: "16px 20px",
+            fontSize: 13, color: "#444", lineHeight: 1.8 }}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>Через VK ID (самый простой способ):</div>
+            <ol style={{ margin: "0 0 12px 18px" }}>
+              <li>Зайди на <strong>vkid.vk.com</strong> → «Мои приложения» → создай Standalone-приложение</li>
+              <li>Скопируй ID приложения (числовой)</li>
+              <li>Открой в браузере ссылку (вставь свой ID приложения):</li>
+            </ol>
+            <pre style={{ background: "#1a1a1a", color: "#4ade80", padding: "10px 14px",
+              borderRadius: 8, fontFamily: "monospace", fontSize: 11,
+              margin: "0 0 12px", overflowX: "auto", whiteSpace: "pre-wrap" }}>
+{`https://oauth.vk.com/authorize?client_id=ТУТ_APP_ID&display=page&redirect_uri=https://oauth.vk.com/blank.html&scope=wall,groups,stats,offline&response_type=token&v=5.131`}
+            </pre>
+            <ol start={4} style={{ margin: "0 0 0 18px" }}>
+              <li>Разреши доступ → тебя перенаправит на пустую страницу</li>
+              <li>В адресной строке найди <code style={{ background: "#EAE8E2", padding: "1px 5px",
+                borderRadius: 4 }}>access_token=</code> — скопируй всё до следующего <code
+                style={{ background: "#EAE8E2", padding: "1px 5px", borderRadius: 4 }}>&amp;</code></li>
+            </ol>
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ fontSize: 13, fontWeight: 600, color: "#444", display: "block", marginBottom: 6 }}>
+          Пользовательский токен VK
+        </label>
+        <input
+          type="password"
+          placeholder="vk1.a.xxxxxx..."
+          value={token}
+          onChange={(e) => onChange(e.target.value)}
+          style={{ width: "100%", padding: "10px 14px", border: "1px solid #E0DED8",
+            borderRadius: 10, fontSize: 13, background: "#FAFAF8",
+            outline: "none", boxSizing: "border-box" }}
+        />
+        <div style={{ fontSize: 11, color: "#aaa", marginTop: 4 }}>
+          Хранится в зашифрованном виде. Нужны права: wall, groups, stats, offline.
+        </div>
+      </div>
+
+      <button
+        onClick={onSave}
+        disabled={saving || !token}
+        style={{ padding: "11px 28px", background: token ? "#4680C2" : "#ccc",
+          color: "#fff", border: "none", borderRadius: 10, fontSize: 14,
+          fontWeight: 600, cursor: token ? "pointer" : "not-allowed" }}>
+        {saving ? "Сохраняю..." : "Сохранить токен"}
       </button>
 
       {msg && (

@@ -15,7 +15,7 @@ from app.models.models import (
     TGWeeklyStats, VKWeeklyStats, ContentSlot, PlanStatus, Platform,
 )
 from app.api.auth import get_current_user
-from app.services.publishers import decrypt_token
+from app.services.publishers import decrypt_token, encrypt_token
 
 router = APIRouter()
 
@@ -124,6 +124,43 @@ async def get_tg_credentials_status(
     }
 
 
+@router.get("/{business_id}/vk-credentials")
+async def get_vk_credentials_status(
+    business_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_business(business_id, current_user, db)
+    conn = await _get_connection(business_id, "vk", db)
+    if not conn:
+        return {"configured": False, "has_connection": False}
+    return {
+        "configured": bool(conn.vk_user_token_encrypted),
+        "has_connection": True,
+        "group_name": conn.page_name,
+    }
+
+
+class VKCredentialsIn(BaseModel):
+    user_token: str
+
+
+@router.post("/{business_id}/vk-credentials")
+async def save_vk_credentials(
+    business_id: str,
+    req: VKCredentialsIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_business(business_id, current_user, db)
+    conn = await _get_connection(business_id, "vk", db)
+    if not conn:
+        raise HTTPException(400, "VK-сообщество не подключено. Сначала подключи в разделе Платформы.")
+    conn.vk_user_token_encrypted = encrypt_token(req.user_token)
+    await db.commit()
+    return {"status": "saved"}
+
+
 @router.post("/{business_id}/tg-credentials")
 async def save_tg_credentials(
     business_id: str,
@@ -148,8 +185,19 @@ async def save_tg_credentials(
 async def _save_vk(db: AsyncSession, business_id: str, vk: PlatformConnection) -> dict:
     """Собирает VK-аналитику и сохраняет в БД. Возвращает статус."""
     from app.services.analytics_vk import collect_vk_weekly
-    token = decrypt_token(vk.token_encrypted)
-    weekly, posts = await asyncio.to_thread(collect_vk_weekly, vk.external_page_id, token)
+
+    community_token = decrypt_token(vk.token_encrypted)
+    user_token = decrypt_token(vk.vk_user_token_encrypted) if vk.vk_user_token_encrypted else None
+
+    if not user_token:
+        return {
+            "weeks": 0,
+            "error": "Нужен VK user token для чтения стены. Добавь его в настройках аналитики.",
+        }
+
+    weekly, posts = await asyncio.to_thread(
+        collect_vk_weekly, vk.external_page_id, community_token, user_token
+    )
     if not weekly:
         return {"weeks": 0, "error": "Постов не найдено или VK API не вернул данных"}
 

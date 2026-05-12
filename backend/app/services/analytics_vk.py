@@ -1,10 +1,10 @@
 """
 Сбор аналитики VK-сообщества.
 
-wall.get вызывается БЕЗ токена (публичный API) — community token не имеет
-права на этот метод (VK error code 27).
-stats.get вызывается С токеном — требует разрешение «Статистика сообщества».
-groups.getById — с токеном (получить members_count), fallback без токена.
+wall.get  — вызывается с user_token (VK user access token).
+            Community token (group auth) не поддерживает wall.get (code 27).
+stats.get — вызывается с community_token (разрешение «Статистика сообщества»).
+groups.getById — community_token или user_token, любой.
 """
 import httpx
 import time
@@ -21,7 +21,6 @@ DAY_RU = {
 
 
 def _req(method: str, params: dict, timeout: int = 20) -> dict:
-    """HTTP-запрос к VK API с retry на rate-limit ошибки."""
     for attempt in range(4):
         try:
             r = httpx.get(f"{VK_API}/{method}", params={**params, "v": "5.131"}, timeout=timeout)
@@ -42,12 +41,11 @@ def _req(method: str, params: dict, timeout: int = 20) -> dict:
 
 
 def _get_group_info(group_id: str, token: str) -> dict:
-    """Получает инфо о группе: name, members_count."""
     try:
-        resp = _req("groups.getById", {"group_id": group_id, "fields": "members_count",
-                                        "access_token": token})
+        resp = _req("groups.getById", {
+            "group_id": group_id, "fields": "members_count", "access_token": token,
+        })
     except ValueError:
-        # Fallback: без токена (публичный запрос)
         resp = _req("groups.getById", {"group_id": group_id, "fields": "members_count"})
 
     if isinstance(resp, list):
@@ -59,17 +57,20 @@ def _get_group_info(group_id: str, token: str) -> dict:
     return groups[0] if groups else {}
 
 
-def _get_posts(group_id: str) -> list[dict]:
+def _get_posts(group_id: str, user_token: str) -> list[dict]:
     """
-    Читает посты стены через публичный API (без токена).
-    wall.get с community token возвращает code 27 — метод недоступен
-    для group auth, поэтому токен намеренно не передаётся.
+    Читает посты через user token. Community token не работает с wall.get (code 27).
     """
     posts = []
     offset = 0
     owner_id = f"-{group_id}"
     while True:
-        resp = _req("wall.get", {"owner_id": owner_id, "count": 100, "offset": offset})
+        resp = _req("wall.get", {
+            "owner_id": owner_id,
+            "count": 100,
+            "offset": offset,
+            "access_token": user_token,
+        })
         items = resp.get("items", []) if isinstance(resp, dict) else []
         for p in items:
             if p.get("is_pinned") or p.get("marked_as_ads"):
@@ -90,8 +91,7 @@ def _get_posts(group_id: str) -> list[dict]:
     return posts
 
 
-def _get_stats(group_id: str, token: str, date_from: str, date_to: str) -> dict:
-    """Статистика через community token (требует «Статистика сообщества»). Возвращает {} при ошибке."""
+def _get_stats(group_id: str, community_token: str, date_from: str, date_to: str) -> dict:
     try:
         resp = _req("stats.get", {
             "group_id": group_id,
@@ -100,7 +100,7 @@ def _get_stats(group_id: str, token: str, date_from: str, date_to: str) -> dict:
             "interval": "week",
             "intervals_count": 52,
             "extended": 0,
-            "access_token": token,
+            "access_token": community_token,
         })
         if isinstance(resp, list):
             return {item.get("period_from", ""): item for item in resp}
@@ -109,19 +109,22 @@ def _get_stats(group_id: str, token: str, date_from: str, date_to: str) -> dict:
     return {}
 
 
-def collect_vk_weekly(group_id: str, token: str) -> tuple[list[dict], list[dict]]:
+def collect_vk_weekly(
+    group_id: str,
+    community_token: str,
+    user_token: str,
+) -> tuple[list[dict], list[dict]]:
     """Возвращает (weekly_stats, all_posts)."""
     group_id = group_id.lstrip("-")
 
-    group_info = _get_group_info(group_id, token)
+    group_info = _get_group_info(group_id, community_token)
     group_name = group_info.get("name", group_id)
     members = group_info.get("members_count", 0)
 
-    posts = _get_posts(group_id)
+    posts = _get_posts(group_id, user_token)
     if not posts:
         return [], []
 
-    # Группировка по неделям (EKB UTC+5)
     week_posts: dict = defaultdict(list)
     today = date.today()
     for p in posts:
@@ -134,7 +137,7 @@ def collect_vk_weekly(group_id: str, token: str) -> tuple[list[dict], list[dict]
 
     if week_posts:
         all_dates = sorted(week_posts.keys())
-        stats_map = _get_stats(group_id, token, all_dates[0][0].isoformat(), today.isoformat())
+        stats_map = _get_stats(group_id, community_token, all_dates[0][0].isoformat(), today.isoformat())
     else:
         stats_map = {}
 

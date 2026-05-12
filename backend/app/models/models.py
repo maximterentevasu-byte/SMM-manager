@@ -88,6 +88,9 @@ class PlatformConnection(Base):
     tg_api_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     tg_session_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # VK Analytics user token (wall.get требует user token, не community token)
+    vk_user_token_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     business: Mapped["Business"] = relationship(back_populates="platform_connections")
 
 
