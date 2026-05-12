@@ -1,12 +1,7 @@
 """
-API для создания постов вручную:
-  POST /{business_id}/generate-text   — Claude пишет текст поста по идее
-  POST /{business_id}/generate-prompt — Claude пишет промт для картинки
-  POST /{business_id}/generate-image  — Gemini / DALL-E генерирует картинку
-  POST /{business_id}/publish         — сохраняет ContentSlot(ы) в БД
+API для создания постов вручную.
+Все AI-вызовы — нативный async через httpx.AsyncClient (без потоков).
 """
-import asyncio
-import base64
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -20,16 +15,13 @@ from sqlalchemy import select
 from app.api.auth import get_current_user
 from app.config import settings
 from app.database import get_db
-from app.models.models import (
-    Business, ContentSlot, PlanStatus, Platform, User,
-)
+from app.models.models import Business, ContentSlot, PlanStatus, Platform, User
 
 router = APIRouter()
+_CLAUDE_MODEL = "claude-sonnet-4-6"
 
-_MODEL = "claude-sonnet-4-6"
 
-
-# ─── helpers ─────────────────────────────────────────────────────────────────
+# ─── DB helper ───────────────────────────────────────────────────────────────
 
 async def _get_business(business_id: str, user: User, db: AsyncSession) -> Business:
     r = await db.execute(
@@ -41,58 +33,32 @@ async def _get_business(business_id: str, user: User, db: AsyncSession) -> Busin
     return biz
 
 
-def _claude_sync(system: str, user_text: str, max_tokens: int = 2000) -> str:
-    """Прямой вызов Anthropic API через httpx, таймаут 120с."""
-    r = httpx.post(
-        "https://api.anthropic.com/v1/messages",
-        headers={
-            "x-api-key": settings.ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        },
-        json={
-            "model": _MODEL,
-            "max_tokens": max_tokens,
-            "system": system,
-            "messages": [{"role": "user", "content": user_text}],
-        },
-        timeout=120,
-    )
-    if r.status_code != 200:
-        raise ValueError(f"Anthropic {r.status_code}: {r.text[:300]}")
-    return r.json()["content"][0]["text"].strip()
+# ─── Async AI helpers ─────────────────────────────────────────────────────────
 
-
-def _gemini_text_sync(system: str, user_text: str, max_tokens: int = 1200) -> str:
-    """Gemini 2.5 Flash для текста — быстро, GEMINI_API_KEY уже есть."""
-    r = httpx.post(
+async def _gemini_text(client: httpx.AsyncClient, system: str, user_text: str, max_tokens: int) -> str:
+    r = await client.post(
         f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={settings.GEMINI_API_KEY}",
         json={
             "contents": [{"parts": [{"text": f"{system}\n\n{user_text}"}]}],
             "generationConfig": {"maxOutputTokens": max_tokens},
         },
-        timeout=60,
     )
     if r.status_code != 200:
         raise ValueError(f"Gemini {r.status_code}: {r.text[:200]}")
-    candidates = r.json().get("candidates", [])
-    if not candidates:
-        raise ValueError("Gemini не вернул текст")
-    parts = candidates[0].get("content", {}).get("parts", [])
+    cands = r.json().get("candidates", [])
+    if not cands:
+        raise ValueError("Gemini: нет кандидатов")
+    parts = cands[0].get("content", {}).get("parts", [])
     text = parts[0].get("text", "").strip() if parts else ""
     if not text:
-        raise ValueError("Gemini вернул пустой текст")
+        raise ValueError("Gemini: пустой ответ")
     return text
 
 
-def _gpt_sync(system: str, user_text: str, max_tokens: int = 2000) -> str:
-    """OpenAI GPT-4o-mini как запасной вариант."""
-    r = httpx.post(
+async def _gpt_text(client: httpx.AsyncClient, system: str, user_text: str, max_tokens: int) -> str:
+    r = await client.post(
         "https://api.openai.com/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
-            "content-type": "application/json",
-        },
+        headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
         json={
             "model": "gpt-4o-mini",
             "max_tokens": max_tokens,
@@ -101,35 +67,54 @@ def _gpt_sync(system: str, user_text: str, max_tokens: int = 2000) -> str:
                 {"role": "user", "content": user_text},
             ],
         },
-        timeout=120,
     )
     if r.status_code != 200:
-        raise ValueError(f"OpenAI {r.status_code}: {r.text[:300]}")
+        raise ValueError(f"OpenAI {r.status_code}: {r.text[:200]}")
     return r.json()["choices"][0]["message"]["content"].strip()
 
 
-def _generate_text(system: str, user_text: str, max_tokens: int = 1200) -> str:
-    """Gemini Flash (2-5с) → GPT-4o-mini → Claude."""
+async def _claude_text(client: httpx.AsyncClient, system: str, user_text: str, max_tokens: int) -> str:
+    r = await client.post(
+        "https://api.anthropic.com/v1/messages",
+        headers={
+            "x-api-key": settings.ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+        },
+        json={
+            "model": _CLAUDE_MODEL,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": [{"role": "user", "content": user_text}],
+        },
+    )
+    if r.status_code != 200:
+        raise ValueError(f"Claude {r.status_code}: {r.text[:200]}")
+    return r.json()["content"][0]["text"].strip()
+
+
+async def _generate_text(system: str, user_text: str, max_tokens: int = 1200) -> str:
+    """Gemini → GPT → Claude, все вызовы нативно async."""
     errors: list[str] = []
+    async with httpx.AsyncClient(timeout=60) as client:
+        if settings.GEMINI_API_KEY:
+            try:
+                return await _gemini_text(client, system, user_text, max_tokens)
+            except Exception as e:
+                errors.append(f"Gemini: {e}")
 
-    if settings.GEMINI_API_KEY:
-        try:
-            return _gemini_text_sync(system, user_text, max_tokens)
-        except Exception as e:
-            errors.append(f"Gemini: {e}")
+        if settings.OPENAI_API_KEY:
+            try:
+                return await _gpt_text(client, system, user_text, max_tokens)
+            except Exception as e:
+                errors.append(f"GPT: {e}")
 
-    if settings.OPENAI_API_KEY:
-        try:
-            return _gpt_sync(system, user_text, max_tokens)
-        except Exception as e:
-            errors.append(f"GPT: {e}")
+        if settings.ANTHROPIC_API_KEY:
+            try:
+                return await _claude_text(client, system, user_text, max_tokens)
+            except Exception as e:
+                errors.append(f"Claude: {e}")
 
-    try:
-        return _claude_sync(system, user_text, max_tokens)
-    except Exception as e:
-        errors.append(f"Claude: {e}")
-
-    raise ValueError(" | ".join(errors) or "Нет доступных AI провайдеров")
+    raise HTTPException(500, "Ошибка генерации: " + " | ".join(errors))
 
 
 # ─── 1. Генерация текста поста ────────────────────────────────────────────────
@@ -170,11 +155,7 @@ async def generate_post_text(
         "• Не добавляй никаких пояснений — только текст поста"
     )
 
-    try:
-        text = await asyncio.to_thread(_generate_text, system, f"Идея поста: {body.idea}")
-    except Exception as e:
-        raise HTTPException(500, f"Ошибка генерации: {e}")
-
+    text = await _generate_text(system, f"Идея поста: {body.idea}")
     return {"text": text}
 
 
@@ -207,15 +188,9 @@ async def generate_image_prompt(
         "• Photorealistic or high-quality illustration style\n"
         "• Return ONLY the prompt, no explanations"
     )
-    messages = [{"role": "user", "content": f"Business niche: {niche}\n\nPost text (Russian):\n{body.post_text}\n\nWrite the image generation prompt:"}]
+    user_text = f"Business niche: {niche}\n\nPost text:\n{body.post_text}\n\nWrite the image prompt:"
 
-    user_text = f"Business niche: {niche}\n\nPost text (Russian):\n{body.post_text}\n\nWrite the image generation prompt:"
-
-    try:
-        prompt = await asyncio.to_thread(_generate_text, system, user_text, 400)
-    except Exception as e:
-        raise HTTPException(500, f"Ошибка генерации промта: {e}")
-
+    prompt = await _generate_text(system, user_text, 400)
     return {"prompt": prompt}
 
 
@@ -232,14 +207,12 @@ async def generate_image(
     body: ImageIn,
     current_user: User = Depends(get_current_user),
 ):
+    import asyncio
     from app.services.gemini_image import generate_image_sync
     try:
-        b64 = await asyncio.to_thread(
-            generate_image_sync, body.prompt, body.aspect_ratio
-        )
+        b64 = await asyncio.to_thread(generate_image_sync, body.prompt, body.aspect_ratio)
     except ValueError as e:
         raise HTTPException(400, str(e))
-
     return {"image_base64": b64}
 
 
@@ -266,9 +239,7 @@ async def publish_to_plan(
         raise HTTPException(400, "Выбери хотя бы одну платформу")
 
     scheduled = (
-        datetime.fromisoformat(body.scheduled_at)
-        if body.scheduled_at
-        else datetime.utcnow()
+        datetime.fromisoformat(body.scheduled_at) if body.scheduled_at else datetime.utcnow()
     )
 
     created = []
@@ -277,7 +248,6 @@ async def publish_to_plan(
             platform = Platform(platform_str)
         except ValueError:
             continue
-
         slot = ContentSlot(
             id=uuid.uuid4(),
             business_id=biz.id,
