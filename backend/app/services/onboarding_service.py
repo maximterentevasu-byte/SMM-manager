@@ -1,8 +1,8 @@
 import json
-from anthropic import Anthropic
+from anthropic import AsyncAnthropic
 from app.config import settings
 
-client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
 MODEL = "claude-haiku-4-5-20251001"
 
 
@@ -20,7 +20,7 @@ async def clarify_business_profile(profile: dict) -> list[dict]:
 Верни ТОЛЬКО валидный JSON без markdown:
 [{{"question": "...", "field": "usp", "why_important": "..."}}]"""
 
-    response = client.messages.create(
+    response = await client.messages.create(
         model=MODEL,
         max_tokens=1000,
         messages=[{"role": "user", "content": prompt}]
@@ -35,7 +35,7 @@ async def clarify_business_profile(profile: dict) -> list[dict]:
 
 async def parse_clarification_answer(question: str, answer: str, profile: dict) -> dict:
     """Обновляем профиль на основе ответа пользователя"""
-    response = client.messages.create(
+    response = await client.messages.create(
         model=MODEL,
         max_tokens=1000,
         messages=[{"role": "user", "content": f"""Вопрос был: "{question}"

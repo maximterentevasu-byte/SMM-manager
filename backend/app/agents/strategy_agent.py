@@ -1,12 +1,12 @@
 import json
-from anthropic import Anthropic
+from anthropic import AsyncAnthropic
 from app.config import settings
 
-client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
 
 
 async def refine_strategy(current_strategy: list, user_message: str, business_profile: dict) -> list:
-    response = client.messages.create(
+    response = await client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=8000,
         messages=[{"role": "user", "content": f"""Ты SMM-стратег. Пользователь хочет изменить контент-стратегию.
@@ -33,7 +33,7 @@ async def generate_strategy(business_profile: dict) -> list[dict]:
     """
     platforms = business_profile.get("platforms", ["vk"])
 
-    response = client.messages.create(
+    response = await client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=8000,
         messages=[{
