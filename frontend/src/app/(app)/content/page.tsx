@@ -478,6 +478,8 @@ export default function ContentPage() {
                           background: isDragTarget ? "#F0EDFE" : inCurrentMonth ? "#fff" : "#F9F8F6",
                           transition: "background .1s",
                           position: "relative",
+                          minWidth: 0,
+                          overflow: "hidden",
                         }}
                         onDragOver={e => { e.preventDefault(); setDragOverKey(key); }}
                         onDragLeave={() => setDragOverKey(null)}
@@ -523,27 +525,28 @@ export default function ContentPage() {
                                 opacity: draggingId === slot.id ? 0.4 : 1,
                                 overflow: "hidden",
                                 minWidth: 0,
+                                wordBreak: "break-word",
                               }}
                             >
-                              <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 1, minWidth: 0 }}>
-                                <span style={{ fontSize: 10, fontWeight: 700, color: "#666", flexShrink: 0 }}>
+                              {/* Строка 1: иконка + рубрика (переносится) */}
+                              <div style={{ display: "flex", alignItems: "flex-start", gap: 4, marginBottom: 2 }}>
+                                <span style={{ fontSize: 10, fontWeight: 700, color: "#666", flexShrink: 0, lineHeight: "14px" }}>
                                   {PLATFORM_ICON[slot.platform]}
                                 </span>
-                                <span style={{ fontSize: 10, fontWeight: 600, color: "#333",
-                                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                                  flex: 1, minWidth: 0 }}>
+                                <span style={{ fontSize: 10, fontWeight: 600, color: "#333", lineHeight: 1.3 }}>
                                   {slot.rubric_name}
                                 </span>
-                                <span style={{ fontSize: 9, fontWeight: 600, color: st.color,
-                                  background: st.bg, padding: "1px 4px", borderRadius: 4,
-                                  whiteSpace: "nowrap", flexShrink: 0 }}>
-                                  {st.label}
-                                </span>
                               </div>
-                              {calMode === "week" && (
-                                <div style={{ fontSize: 10, color: "#666",
-                                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                  {topic.substring(0, 70)}
+                              {/* Строка 2: статус */}
+                              <span style={{ fontSize: 9, fontWeight: 600, color: st.color,
+                                background: st.bg, padding: "1px 5px", borderRadius: 4,
+                                display: "inline-block" }}>
+                                {st.label}
+                              </span>
+                              {/* Тема поста в режиме недели */}
+                              {calMode === "week" && topic && (
+                                <div style={{ fontSize: 10, color: "#666", marginTop: 3, lineHeight: 1.3 }}>
+                                  {topic.substring(0, 80)}
                                 </div>
                               )}
                             </div>
