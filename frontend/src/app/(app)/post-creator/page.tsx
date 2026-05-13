@@ -157,14 +157,25 @@ export default function PostCreatorPage() {
     setPublishing(true);
     setPublishMsg("");
     try {
-      await api.post(`/post-creator/${businessId}/publish`, {
+      const { data } = await api.post(`/post-creator/${businessId}/publish`, {
         post_text: postText,
         image_prompt: imagePrompt || null,
         image_base64: imageBase64 || null,
         platforms: selectedPlatforms,
         scheduled_at,
       });
-      setPublishMsg("✓ Пост добавлен в контент-план!");
+      const results: { platform: string; status: string; error?: string }[] = data.results || [];
+      const ok = results.filter((r) => r.status === "published");
+      const fail = results.filter((r) => r.status === "error" || r.status === "no_connection");
+      if (ok.length > 0 && fail.length === 0) {
+        setPublishMsg("✓ Опубликовано в " + ok.map((r) => r.platform).join(", ") + "!");
+      } else if (ok.length > 0) {
+        const failMsg = fail.map((r) => `${r.platform}: ${r.error}`).join("; ");
+        setPublishMsg(`✓ ${ok.map((r) => r.platform).join(", ")} — OK. ⚠ Ошибки: ${failMsg}`);
+      } else {
+        const failMsg = fail.map((r) => `${r.platform}: ${r.error}`).join("; ");
+        setPublishMsg("⚠ " + failMsg);
+      }
     } catch (e: any) {
       setPublishMsg("⚠ " + (e?.response?.data?.detail || "Ошибка публикации"));
     } finally {
@@ -525,7 +536,7 @@ export default function PostCreatorPage() {
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
                 letterSpacing: 0.3,
               }}>
-              {publishing ? "⏳ Добавляю в план..." : "🚀 Отправить на публикацию"}
+              {publishing ? "⏳ Публикую..." : "🚀 Отправить на публикацию"}
             </button>
 
             {publishMsg && (

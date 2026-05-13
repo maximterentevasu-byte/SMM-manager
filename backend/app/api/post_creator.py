@@ -3,9 +3,11 @@ API для создания постов вручную.
 Все AI-вызовы — нативный async через httpx.AsyncClient (без потоков).
 """
 import uuid
+import base64
 from datetime import datetime
 from typing import Optional
 
+import aiohttp
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -15,7 +17,7 @@ from sqlalchemy import select
 from app.api.auth import get_current_user
 from app.config import settings
 from app.database import get_db
-from app.models.models import Business, ContentSlot, PlanStatus, Platform, User
+from app.models.models import Business, ContentSlot, PlanStatus, Platform, PlatformConnection, User
 
 router = APIRouter()
 _CLAUDE_MODEL = "claude-sonnet-4-6"
@@ -226,7 +228,7 @@ async def generate_image(
     return {"image_base64": b64}
 
 
-# ─── 4. Публикация в контент-план ─────────────────────────────────────────────
+# ─── 4. Публикация в соцсети ─────────────────────────────────────────────────
 
 class PublishIn(BaseModel):
     post_text: str
@@ -234,6 +236,71 @@ class PublishIn(BaseModel):
     image_base64: Optional[str] = None
     platforms: list[str]
     scheduled_at: Optional[str] = None
+
+
+async def _publish_to_telegram(session: aiohttp.ClientSession, token: str, chat_id: str,
+                                full_text: str, image_base64: Optional[str]) -> str:
+    base_url = f"https://api.telegram.org/bot{token}"
+    if image_base64:
+        img_bytes = base64.b64decode(image_base64)
+        form = aiohttp.FormData()
+        form.add_field("chat_id", chat_id)
+        form.add_field("caption", full_text[:1024])
+        form.add_field("photo", img_bytes, filename="image.png", content_type="image/png")
+        resp = await session.post(f"{base_url}/sendPhoto", data=form)
+    else:
+        resp = await session.post(
+            f"{base_url}/sendMessage",
+            json={"chat_id": chat_id, "text": full_text[:4096]},
+        )
+    result = await resp.json()
+    if not result.get("ok"):
+        raise ValueError(f"Telegram: {result.get('description', str(result))}")
+    return str(result["result"]["message_id"])
+
+
+async def _publish_to_vk(session: aiohttp.ClientSession, token: str, page_id: str,
+                          full_text: str, image_base64: Optional[str]) -> str:
+    group_id = page_id.lstrip("-")
+    base_params = {"access_token": token, "v": "5.131"}
+    attachment = ""
+
+    if image_base64:
+        img_bytes = base64.b64decode(image_base64)
+        r = await session.get(
+            "https://api.vk.com/method/photos.getWallUploadServer",
+            params={**base_params, "group_id": group_id},
+        )
+        srv = await r.json()
+        if "error" in srv:
+            raise ValueError(f"VK getWallUploadServer: {srv['error']['error_msg']}")
+        upload_url = srv["response"]["upload_url"]
+
+        form = aiohttp.FormData()
+        form.add_field("photo", img_bytes, filename="photo.png", content_type="image/png")
+        r = await session.post(upload_url, data=form)
+        up = await r.json()
+
+        r = await session.post(
+            "https://api.vk.com/method/photos.saveWallPhoto",
+            params={**base_params, "group_id": group_id,
+                    "photo": up.get("photo", ""), "server": up.get("server", ""),
+                    "hash": up.get("hash", "")},
+        )
+        saved = await r.json()
+        if "error" in saved:
+            raise ValueError(f"VK saveWallPhoto: {saved['error']['error_msg']}")
+        ph = saved["response"][0]
+        attachment = f"photo{ph['owner_id']}_{ph['id']}"
+
+    post_params = {**base_params, "owner_id": f"-{group_id}", "message": full_text}
+    if attachment:
+        post_params["attachments"] = attachment
+    r = await session.post("https://api.vk.com/method/wall.post", params=post_params)
+    vk = await r.json()
+    if "error" in vk:
+        raise ValueError(f"VK: {vk['error']['error_msg']}")
+    return str(vk["response"]["post_id"])
 
 
 @router.post("/{business_id}/publish")
@@ -252,25 +319,69 @@ async def publish_to_plan(
         datetime.fromisoformat(body.scheduled_at) if body.scheduled_at else datetime.utcnow()
     )
 
-    created = []
-    for platform_str in body.platforms:
-        try:
-            platform = Platform(platform_str)
-        except ValueError:
-            continue
-        slot = ContentSlot(
-            id=uuid.uuid4(),
-            business_id=biz.id,
-            platform=platform,
-            scheduled_at=scheduled,
-            rubric={"name": "Ручной пост", "type": "custom"},
-            post_text=body.post_text,
-            image_prompt=body.image_prompt,
-            image_base64=body.image_base64,
-            status=PlanStatus.content_ready,
-        )
-        db.add(slot)
-        created.append({"platform": platform_str, "slot_id": str(slot.id)})
+    from app.services.publishers import decrypt_token
+    results = []
+
+    async with aiohttp.ClientSession() as session:
+        for platform_str in body.platforms:
+            try:
+                platform = Platform(platform_str)
+            except ValueError:
+                continue
+
+            conn_result = await db.execute(
+                select(PlatformConnection).where(
+                    PlatformConnection.business_id == biz.id,
+                    PlatformConnection.platform == platform,
+                    PlatformConnection.is_active == True,
+                )
+            )
+            connection = conn_result.scalar_one_or_none()
+
+            slot = ContentSlot(
+                id=uuid.uuid4(),
+                business_id=biz.id,
+                platform=platform,
+                scheduled_at=scheduled,
+                rubric={"name": "Ручной пост", "type": "custom"},
+                post_text=body.post_text,
+                image_prompt=body.image_prompt,
+                image_base64=body.image_base64,
+                status=PlanStatus.content_ready,
+            )
+            db.add(slot)
+
+            if not connection:
+                results.append({"platform": platform_str, "status": "no_connection",
+                                 "error": "Площадка не подключена"})
+                continue
+
+            token = decrypt_token(connection.token_encrypted)
+            full_text = body.post_text
+
+            try:
+                if platform_str == "telegram":
+                    ext_id = await _publish_to_telegram(
+                        session, token, connection.external_page_id,
+                        full_text, body.image_base64,
+                    )
+                elif platform_str == "vk":
+                    ext_id = await _publish_to_vk(
+                        session, token, connection.external_page_id,
+                        full_text, body.image_base64,
+                    )
+                else:
+                    results.append({"platform": platform_str, "status": "unsupported"})
+                    continue
+
+                slot.status = PlanStatus.published
+                slot.published_at = datetime.utcnow()
+                slot.external_post_id = ext_id
+                results.append({"platform": platform_str, "status": "published", "id": ext_id})
+            except Exception as e:
+                slot.status = PlanStatus.failed
+                slot.error_message = str(e)
+                results.append({"platform": platform_str, "status": "error", "error": str(e)})
 
     await db.commit()
-    return {"status": "added_to_plan", "slots": created}
+    return {"status": "done", "results": results}

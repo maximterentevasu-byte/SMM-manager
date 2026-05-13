@@ -1,6 +1,6 @@
 import asyncio
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 import aiohttp
 
@@ -28,7 +28,8 @@ async def _check_queue():
             select(ContentSlot).where(
                 and_(
                     ContentSlot.status == PlanStatus.content_ready,
-                    ContentSlot.scheduled_at <= now
+                    ContentSlot.scheduled_at <= now,
+                    ContentSlot.scheduled_at >= now - timedelta(minutes=15),
                 )
             )
         )
