@@ -23,6 +23,7 @@ class GeneratePlanRequest(BaseModel):
 class UpdateSlotRequest(BaseModel):
     post_text: Optional[str] = None
     status: Optional[str] = None
+    scheduled_at: Optional[str] = None
 
 
 @router.post("/{business_id}/generate-plan")
@@ -93,6 +94,9 @@ async def update_slot(
         slot.post_text = body.post_text
         if slot.status == PlanStatus.planned:
             slot.status = PlanStatus.content_ready
+
+    if body.scheduled_at is not None:
+        slot.scheduled_at = datetime.fromisoformat(body.scheduled_at.replace("Z", "+00:00")).replace(tzinfo=None)
 
     await db.commit()
     return {"status": "updated"}
