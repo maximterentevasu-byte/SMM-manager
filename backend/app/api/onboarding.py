@@ -19,11 +19,12 @@ class BusinessProfileRequest(BaseModel):
     usp: str
     price_segment: str
     geo: str
-    address: Optional[str] = None          # Реальный адрес магазина/офиса
-    contact_info: Optional[str] = None     # Телефон, сайт, ссылки
-    products: list[str] = []               # Реальный список товаров/услуг
-    active_promotions: Optional[str] = None  # Текущие акции (или пусто)
+    address: Optional[str] = None
+    contact_info: Optional[str] = None
+    products: list[str] = []
+    active_promotions: Optional[str] = None
     audience_primary: str
+    audience_non_target: Optional[str] = None
     audience_pains: list[str]
     audience_objections: list[str]
     competitors: list[dict]
@@ -35,6 +36,9 @@ class BusinessProfileRequest(BaseModel):
     content_restrictions: list[str]
     logo_url: Optional[str] = None
     brand_colors: list[str] = []
+    business_goals: Optional[str] = None
+    new_directions: Optional[str] = None
+    smm_metrics: list[str] = []
 
 
 @router.post("/save-profile/{business_id}")

@@ -1,17 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 
 const STEPS = [
-  { id: "business",   label: "Бизнес",       icon: "🏢" },
-  { id: "audience",   label: "Аудитория",     icon: "👥" },
-  { id: "platforms",  label: "Площадки",      icon: "📱" },
-  { id: "voice",      label: "Голос бренда",  icon: "🎯" },
-  { id: "brand",      label: "Стиль",         icon: "🎨" },
-  { id: "clarify",    label: "Уточнения",     icon: "🤖" },
-  { id: "launch",     label: "Запуск",        icon: "🚀" },
+  { id: "business",  label: "Бизнес",      icon: "🏢" },
+  { id: "audience",  label: "Аудитория",    icon: "👥" },
+  { id: "platforms", label: "Площадки",     icon: "📱" },
+  { id: "voice",     label: "Голос бренда", icon: "🎯" },
+  { id: "brand",     label: "Стиль",        icon: "🎨" },
+  { id: "clarify",   label: "Уточнения",    icon: "🤖" },
+  { id: "strategy",  label: "Стратегия",    icon: "📋" },
+  { id: "rubrics",   label: "Рубрики",      icon: "🗂" },
+  { id: "launch",    label: "Запуск",       icon: "🚀" },
 ];
 
 const PRICE_SEGMENTS = [
@@ -29,30 +31,84 @@ const BRAND_VOICES = [
   { value: "fun",       label: "Весёлый и дерзкий",  desc: "Ярко, с иронией и мемами" },
 ];
 
+const SMM_METRICS_OPTIONS = [
+  "Подписчики",
+  "Охваты / Показы",
+  "ER по просмотрам",
+  "ER вовлеченность ЦА",
+  "Вирусность контента",
+];
+
+const PLATFORM_LABELS: Record<string, string> = {
+  telegram: "Telegram",
+  vk: "ВКонтакте",
+  ok: "Одноклассники",
+};
+
+const MIX_COLORS: Record<string, string> = {
+  sales: "#E8744A",
+  educational: "#4A90E8",
+  entertainment: "#52C87A",
+  ugc_triggers: "#9B59B6",
+};
+const MIX_LABELS: Record<string, string> = {
+  sales: "Продажи",
+  educational: "Обучение",
+  entertainment: "Развлечения",
+  ugc_triggers: "UGC",
+};
+
+const RUBRIC_TYPE_COLORS: Record<string, string> = {
+  sales: "#FFEEE6",
+  educational: "#E6F0FF",
+  entertainment: "#E6FFEf",
+};
+const RUBRIC_TYPE_LABELS: Record<string, string> = {
+  sales: "Продажи",
+  educational: "Обучение",
+  entertainment: "Развлечения",
+};
+
 type FormData = {
   name: string; niche: string; usp: string; price_segment: string; geo: string;
   address: string; contact_info: string; products_raw: string; active_promotions: string;
-  audience_primary: string; audience_pains: string[]; audience_objections: string[];
+  business_goals: string; new_directions: string;
+  audience_primary: string; audience_non_target: string;
+  audience_pains: string[]; audience_objections: string[];
+  smm_metrics: string[];
   competitors: { name: string; url: string }[];
   platforms: string[]; platform_goals: Record<string, string>;
   brand_voice: string; visual_style: string; content_restrictions: string[];
   brand_colors: string[]; logo_url: string;
-  brand_assets_links: string;
-  social_references: string;
-  business_photos_links: string;
+  brand_assets_links: string; social_references: string; business_photos_links: string;
+};
+
+type Rubric = {
+  name: string; goal: string; format: string; tone: string;
+  structure: string[]; example_topics: string[];
+  forbidden: string[]; frequency: string; type: string;
+};
+
+type StrategyItem = {
+  platform: string; goal: string; target_audience: string; tone: string;
+  posts_per_week: number; best_posting_times: string[];
+  content_mix: Record<string, number>;
+  content_pillars: string[];
+  rubrics: Rubric[];
 };
 
 const INITIAL: FormData = {
   name: "", niche: "", usp: "", price_segment: "middle", geo: "",
   address: "", contact_info: "", products_raw: "", active_promotions: "",
-  audience_primary: "", audience_pains: ["", "", ""], audience_objections: ["", ""],
+  business_goals: "", new_directions: "",
+  audience_primary: "", audience_non_target: "",
+  audience_pains: ["", "", ""], audience_objections: ["", ""],
+  smm_metrics: [],
   competitors: [{ name: "", url: "" }],
   platforms: ["telegram"], platform_goals: { telegram: "loyalty", vk: "sales" },
   brand_voice: "friendly", visual_style: "", content_restrictions: [],
   brand_colors: [], logo_url: "",
-  brand_assets_links: "",
-  social_references: "",
-  business_photos_links: "",
+  brand_assets_links: "", social_references: "", business_photos_links: "",
 };
 
 export default function OnboardingPage() {
@@ -66,25 +122,32 @@ export default function OnboardingPage() {
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState("");
 
-  const set = (key: keyof FormData, val: unknown) =>
-    setForm((f) => ({ ...f, [key]: val }));
+  const [generatingStrategy, setGeneratingStrategy] = useState(false);
+  const [generatingRubrics, setGeneratingRubrics] = useState(false);
+  const [strategy, setStrategy] = useState<StrategyItem[] | null>(null);
+  const [selectedPlatform, setSelectedPlatform] = useState<string>("");
+  const [editingPlatform, setEditingPlatform] = useState<string | null>(null);
+  const [editMessage, setEditMessage] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
+  const [rubricsChat, setRubricsChat] = useState<{ role: "user" | "ai"; text: string }[]>([]);
+  const [rubricsChatInput, setRubricsChatInput] = useState("");
+  const [rubricsLoading, setRubricsLoading] = useState(false);
+  const [expandedRubric, setExpandedRubric] = useState<string | null>(null);
 
-  const setPain = (i: number, v: string) => {
-    const pains = [...form.audience_pains];
-    pains[i] = v;
-    set("audience_pains", pains);
-  };
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const setObj = (i: number, v: string) => {
-    const objs = [...form.audience_objections];
-    objs[i] = v;
-    set("audience_objections", objs);
-  };
+  const set = (key: keyof FormData, val: unknown) => setForm(f => ({ ...f, [key]: val }));
+  const setPain = (i: number, v: string) => { const a = [...form.audience_pains]; a[i] = v; set("audience_pains", a); };
+  const setObj = (i: number, v: string) => { const a = [...form.audience_objections]; a[i] = v; set("audience_objections", a); };
+  const togglePlatform = (p: string) => set("platforms", form.platforms.includes(p) ? form.platforms.filter(x => x !== p) : [...form.platforms, p]);
+  const toggleMetric = (m: string) => set("smm_metrics", form.smm_metrics.includes(m) ? form.smm_metrics.filter(x => x !== m) : [...form.smm_metrics, m]);
 
-  const togglePlatform = (p: string) => {
-    const curr = form.platforms;
-    set("platforms", curr.includes(p) ? curr.filter((x) => x !== p) : [...curr, p]);
-  };
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [rubricsChat]);
+
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   const saveAndClarify = async () => {
     setLoading(true);
@@ -92,25 +155,16 @@ export default function OnboardingPage() {
     try {
       const payload = {
         ...form,
-        products: form.products_raw
-          .split("\n")
-          .map((s) => s.trim())
-          .filter(Boolean),
+        products: form.products_raw.split("\n").map(s => s.trim()).filter(Boolean),
         audience_pains: form.audience_pains.filter(Boolean),
         audience_objections: form.audience_objections.filter(Boolean),
-        competitors: form.competitors
-          .filter((c) => c.name || c.url)
-          .map((c) => ({ name: c.name, url: c.url, pros: "", cons: "" })),
+        competitors: form.competitors.filter(c => c.name || c.url).map(c => ({ name: c.name, url: c.url, pros: "", cons: "" })),
         brand_voice_examples: [],
       };
-
-      const { data } = await api.post(`/onboarding/save-profile/new`, payload);
+      const { data } = await api.post("/onboarding/save-profile/new", payload);
       const bId = data.business_id;
       setBusinessId(bId);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("businessId", bId);
-      }
-
+      if (typeof window !== "undefined") localStorage.setItem("businessId", bId);
       const { data: qs } = await api.post(`/onboarding/clarify/${bId}`);
       setClarifyQs(qs.questions || []);
       setStep(5);
@@ -121,6 +175,30 @@ export default function OnboardingPage() {
     }
   };
 
+  const startPolling = (bId: string) => {
+    let attempts = 0;
+    pollRef.current = setInterval(async () => {
+      attempts++;
+      try {
+        const { data } = await api.get(`/businesses/${bId}/strategy`);
+        if (data.ready && data.strategy) {
+          clearInterval(pollRef.current!);
+          setStrategy(data.strategy);
+          setSelectedPlatform(data.strategy[0]?.platform || "");
+          setGeneratingStrategy(false);
+          setLaunching(false);
+          setStep(6);
+        }
+      } catch {}
+      if (attempts > 72) {
+        clearInterval(pollRef.current!);
+        setError("Генерация заняла слишком долго. Попробуйте ещё раз.");
+        setGeneratingStrategy(false);
+        setLaunching(false);
+      }
+    }, 5000);
+  };
+
   const launch = async () => {
     setLaunching(true);
     setError("");
@@ -128,18 +206,70 @@ export default function OnboardingPage() {
       for (const q of clarifyQs) {
         const answer = clarifyAs[q.field];
         if (answer) {
-          await api.post(`/onboarding/answer-clarification/${businessId}`, {
-            question: q.question, answer,
-          });
+          await api.post(`/onboarding/answer-clarification/${businessId}`, { question: q.question, answer });
         }
       }
       await api.post(`/businesses/${businessId}/generate-strategy`);
-      setStep(6);
+      setGeneratingStrategy(true);
+      startPolling(businessId!);
     } catch {
       setError("Ошибка запуска. Попробуйте ещё раз.");
-    } finally {
       setLaunching(false);
     }
+  };
+
+  const refineStrategy = async (message: string) => {
+    setEditLoading(true);
+    setError("");
+    try {
+      const { data } = await api.post(`/businesses/${businessId}/refine-strategy`, { message });
+      setStrategy(data.strategy);
+      setEditingPlatform(null);
+      setEditMessage("");
+    } catch {
+      setError("Ошибка редактирования. Попробуйте ещё раз.");
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const approveStrategy = async () => {
+    setGeneratingRubrics(true);
+    await new Promise(r => setTimeout(r, 1800));
+    setGeneratingRubrics(false);
+    setStep(7);
+  };
+
+  const chatRubrics = async () => {
+    const msg = rubricsChatInput.trim();
+    if (!msg || rubricsLoading) return;
+    setRubricsChat(prev => [...prev, { role: "user", text: msg }]);
+    setRubricsChatInput("");
+    setRubricsLoading(true);
+    try {
+      const { data } = await api.post(`/businesses/${businessId}/refine-strategy`, {
+        message: `Обнови рубрики согласно запросу: ${msg}`,
+      });
+      setStrategy(data.strategy);
+      setRubricsChat(prev => [...prev, { role: "ai", text: "Рубрики обновлены ✓" }]);
+    } catch {
+      setRubricsChat(prev => [...prev, { role: "ai", text: "Ошибка, попробуйте ещё раз." }]);
+    } finally {
+      setRubricsLoading(false);
+    }
+  };
+
+  const approveRubrics = async () => {
+    setLaunching(true);
+    try {
+      const now = new Date();
+      await api.post(`/content/${businessId}/generate-plan`, {
+        year: now.getFullYear(),
+        month: now.getMonth() + 1,
+      });
+    } catch {}
+    setStep(8);
+    setLaunching(false);
   };
 
   const skipOnboarding = async () => {
@@ -153,14 +283,14 @@ export default function OnboardingPage() {
     router.push("/home");
   };
 
+  const currentPlatformStrategy = strategy?.find(s => s.platform === selectedPlatform);
+
   const inp: React.CSSProperties = {
     width: "100%", padding: "10px 14px", border: "1px solid #E0DED8",
     borderRadius: 10, fontSize: 14, fontFamily: "inherit",
     outline: "none", boxSizing: "border-box", background: "#fff",
   };
-  const lbl: React.CSSProperties = {
-    fontSize: 13, fontWeight: 500, color: "#444", display: "block", marginBottom: 6,
-  };
+  const lbl: React.CSSProperties = { fontSize: 13, fontWeight: 500, color: "#444", display: "block", marginBottom: 6 };
   const hint: React.CSSProperties = { fontSize: 12, color: "#999", marginTop: 4 };
   const btnBack: React.CSSProperties = {
     flex: 1, padding: 13, background: "#F1EFE8", color: "#444",
@@ -172,98 +302,161 @@ export default function OnboardingPage() {
     fontSize: 15, fontWeight: 600,
   });
 
+  const ContentMixBar = ({ mix }: { mix: Record<string, number> }) => (
+    <div>
+      <div style={{ display: "flex", height: 10, borderRadius: 5, overflow: "hidden" }}>
+        {Object.entries(mix).map(([key, val]) => (
+          <div key={key} style={{ flex: val, background: MIX_COLORS[key] || "#999", minWidth: 0 }} />
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 10 }}>
+        {Object.entries(mix).map(([key, val]) => (
+          <div key={key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#555" }}>
+            <div style={{ width: 10, height: 10, borderRadius: 3, background: MIX_COLORS[key] || "#999" }} />
+            <span>{MIX_LABELS[key] || key}: {val}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ minHeight: "100vh", background: "#F8F7F4", fontFamily: "'Segoe UI', sans-serif" }}>
+      <style>{`
+        @keyframes dot-pulse { 0%, 80%, 100% { opacity: 0.15 } 40% { opacity: 1 } }
+        @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+      `}</style>
+
+      {/* Loading overlay */}
+      {(generatingStrategy || generatingRubrics) && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(248,247,244,0.97)",
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          zIndex: 100, gap: 16,
+        }}>
+          <div style={{ fontSize: 64, lineHeight: 1 }}>{generatingStrategy ? "🧠" : "🗂"}</div>
+          <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>
+            {generatingStrategy ? "Генерирую стратегию..." : "Составляю рубрики..."}
+          </h2>
+          <p style={{ color: "#888", margin: 0, fontSize: 14 }}>
+            {generatingStrategy ? "Анализирую профиль бизнеса · Займёт 30–90 секунд" : "Формирую контент-план рубрик..."}
+          </p>
+          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+            {[0, 1, 2].map(i => (
+              <div key={i} style={{
+                width: 12, height: 12, borderRadius: "50%", background: "#1a1a1a",
+                animation: `dot-pulse 1.4s ${i * 0.35}s infinite ease-in-out`,
+              }} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
       <div style={{ background: "#fff", borderBottom: "1px solid #EAE8E2", padding: "0 2rem" }}>
-        <div style={{ maxWidth: 680, margin: "0 auto", display: "flex", alignItems: "center", height: 60, gap: 12 }}>
+        <div style={{ maxWidth: 800, margin: "0 auto", display: "flex", alignItems: "center", height: 60, gap: 12 }}>
           <span style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a" }}>🍕 SMM Platform</span>
           <span style={{ fontSize: 13, color: "#aaa" }}>/ Настройка бизнеса</span>
         </div>
       </div>
 
-      <div style={{ maxWidth: 680, margin: "0 auto", padding: "2rem 1rem" }}>
-        {/* Progress */}
+      <div style={{ maxWidth: step >= 6 ? 860 : 680, margin: "0 auto", padding: "2rem 1rem", transition: "max-width 0.3s" }}>
+        {/* Progress bar */}
         <div style={{ display: "flex", gap: 4, marginBottom: 32 }}>
           {STEPS.map((s, i) => (
             <div key={s.id} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
               <div style={{ width: "100%", height: 3, borderRadius: 2,
                 background: i <= step ? "#1a1a1a" : "#E0DED8", transition: "background 0.3s" }} />
-              <span style={{ fontSize: 9, color: i <= step ? "#1a1a1a" : "#bbb", fontWeight: i === step ? 600 : 400, textAlign: "center" }}>
+              <span style={{ fontSize: 9, color: i <= step ? "#1a1a1a" : "#bbb",
+                fontWeight: i === step ? 600 : 400, textAlign: "center", lineHeight: 1.3 }}>
                 {s.icon} {s.label}
               </span>
             </div>
           ))}
         </div>
 
-        {/* Кнопка пропуска — видна на всех шагах кроме финального */}
-        {step < 6 && (
+        {step < 8 && (
           <div style={{ textAlign: "right", marginBottom: 8, marginTop: -16 }}>
-            <button onClick={skipOnboarding}
-              style={{ background: "none", border: "none", color: "#aaa",
-                cursor: "pointer", fontSize: 13, textDecoration: "underline", padding: 0 }}>
+            <button onClick={skipOnboarding} style={{
+              background: "none", border: "none", color: "#aaa",
+              cursor: "pointer", fontSize: 13, textDecoration: "underline", padding: 0,
+            }}>
               Заполнить позже →
             </button>
           </div>
         )}
 
-        {/* STEP 0: Бизнес */}
+        {/* ── STEP 0: Бизнес ── */}
         {step === 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div>
               <h2 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 6px" }}>Расскажите о вашем бизнесе</h2>
               <p style={{ color: "#888", margin: 0, fontSize: 14 }}>Эта информация поможет AI создать персональную стратегию</p>
             </div>
+
             <div>
               <label style={lbl}>Название бизнеса *</label>
-              <input value={form.name} onChange={(e) => set("name", e.target.value)}
+              <input value={form.name} onChange={e => set("name", e.target.value)}
                 placeholder="Пиццерия Маэстро" style={inp} />
             </div>
             <div>
               <label style={lbl}>Ниша / сфера деятельности *</label>
-              <input value={form.niche} onChange={(e) => set("niche", e.target.value)}
+              <input value={form.niche} onChange={e => set("niche", e.target.value)}
                 placeholder="Ресторан, доставка пиццы" style={inp} />
             </div>
             <div>
               <label style={lbl}>Уникальное торговое предложение *</label>
-              <textarea value={form.usp} onChange={(e) => set("usp", e.target.value)}
+              <textarea value={form.usp} onChange={e => set("usp", e.target.value)}
                 placeholder="Чем вы отличаетесь от конкурентов?"
                 style={{ ...inp, minHeight: 80, resize: "vertical" }} />
             </div>
             <div>
               <label style={lbl}>Город / район *</label>
-              <input value={form.geo} onChange={(e) => set("geo", e.target.value)}
+              <input value={form.geo} onChange={e => set("geo", e.target.value)}
                 placeholder="Москва, Марьино" style={inp} />
             </div>
             <div>
               <label style={lbl}>Адрес магазина / офиса</label>
-              <input value={form.address} onChange={(e) => set("address", e.target.value)}
+              <input value={form.address} onChange={e => set("address", e.target.value)}
                 placeholder="ул. Ленина, 12, ТЦ Радуга, 2 этаж" style={inp} />
               <p style={hint}>AI будет указывать этот адрес в постах — не придумывать свой</p>
             </div>
             <div>
               <label style={lbl}>Контакты (телефон, сайт, ссылки)</label>
-              <input value={form.contact_info} onChange={(e) => set("contact_info", e.target.value)}
+              <input value={form.contact_info} onChange={e => set("contact_info", e.target.value)}
                 placeholder="+7 999 123-45-67, pickme.ru, @pickme_bot" style={inp} />
               <p style={hint}>Эти данные появятся в постах вместо выдуманных ссылок</p>
             </div>
             <div>
-              <label style={lbl}>Товары / услуги *</label>
-              <textarea value={form.products_raw} onChange={(e) => set("products_raw", e.target.value)}
-                placeholder={"Японские чипсы со вкусом умами\nКорейская лапша Shin Ramyun\nТайские конфеты с манго\nАзиатские соусы и напитки"}
+              <label style={lbl}>Товары / услуги</label>
+              <textarea value={form.products_raw} onChange={e => set("products_raw", e.target.value)}
+                placeholder={"Японские чипсы со вкусом умами\nКорейская лапша Shin Ramyun\nТайские конфеты с манго"}
                 style={{ ...inp, minHeight: 100, resize: "vertical" }} />
               <p style={hint}>Каждый товар с новой строки. AI будет писать только о том, что здесь указано</p>
             </div>
             <div>
-              <label style={lbl}>Текущие акции и спецпредложения</label>
-              <textarea value={form.active_promotions} onChange={(e) => set("active_promotions", e.target.value)}
+              <label style={lbl}>Акции и спецпредложение на этот месяц</label>
+              <textarea value={form.active_promotions} onChange={e => set("active_promotions", e.target.value)}
                 placeholder="Скидка 10% на первый заказ через бота. Каждый четверг — дегустация новинок."
                 style={{ ...inp, minHeight: 70, resize: "vertical" }} />
               <p style={hint}>Если акций нет — оставьте пустым. AI не будет придумывать акции сам</p>
             </div>
             <div>
+              <label style={lbl}>Цели бизнеса в перспективе 6 месяцев</label>
+              <textarea value={form.business_goals} onChange={e => set("business_goals", e.target.value)}
+                placeholder="Увеличить охват до 50 000 в месяц, набрать 1 000 подписчиков в Telegram"
+                style={{ ...inp, minHeight: 70, resize: "vertical" }} />
+            </div>
+            <div>
+              <label style={lbl}>Новые направления / продукты (в ближайшие 3–6 месяцев)</label>
+              <textarea value={form.new_directions} onChange={e => set("new_directions", e.target.value)}
+                placeholder="Запускаем доставку на маркетплейсах, добавляем вегетарианское меню"
+                style={{ ...inp, minHeight: 70, resize: "vertical" }} />
+            </div>
+            <div>
               <label style={lbl}>Ценовой сегмент</label>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-                {PRICE_SEGMENTS.map((ps) => (
+                {PRICE_SEGMENTS.map(ps => (
                   <div key={ps.value} onClick={() => set("price_segment", ps.value)}
                     style={{ padding: 12, border: `1.5px solid ${form.price_segment === ps.value ? "#1a1a1a" : "#E0DED8"}`,
                       borderRadius: 10, cursor: "pointer", background: form.price_segment === ps.value ? "#F8F7F4" : "#fff" }}>
@@ -273,29 +466,37 @@ export default function OnboardingPage() {
                 ))}
               </div>
             </div>
-            <button onClick={() => setStep(1)} disabled={!form.name || !form.niche || !form.usp || !form.geo || !form.products_raw}
-              style={btnNext(!form.name || !form.niche || !form.usp || !form.geo || !form.products_raw)}>
+
+            <button onClick={() => setStep(1)} disabled={!form.name || !form.niche || !form.usp || !form.geo}
+              style={btnNext(!form.name || !form.niche || !form.usp || !form.geo)}>
               Далее →
             </button>
           </div>
         )}
 
-        {/* STEP 1: Аудитория */}
+        {/* ── STEP 1: Аудитория ── */}
         {step === 1 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div>
               <h2 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 6px" }}>Кто ваши клиенты?</h2>
               <p style={{ color: "#888", margin: 0, fontSize: 14 }}>AI будет писать посты именно для этих людей</p>
             </div>
+
             <div>
               <label style={lbl}>Основная аудитория *</label>
-              <input value={form.audience_primary} onChange={(e) => set("audience_primary", e.target.value)}
+              <input value={form.audience_primary} onChange={e => set("audience_primary", e.target.value)}
                 placeholder="Семьи с детьми 28-45 лет" style={inp} />
             </div>
             <div>
-              <label style={lbl}>Главные боли клиентов</label>
+              <label style={lbl}>Кто не является вашей ЦА</label>
+              <input value={form.audience_non_target} onChange={e => set("audience_non_target", e.target.value)}
+                placeholder="Дети до 18 лет, люди вне города, бизнес-клиенты" style={inp} />
+              <p style={hint}>Поможет AI не писать посты для нерелевантной аудитории</p>
+            </div>
+            <div>
+              <label style={lbl}>Главные боли клиентов / Какие задачи клиента решает твой продукт</label>
               {form.audience_pains.map((p, i) => (
-                <input key={i} value={p} onChange={(e) => setPain(i, e.target.value)}
+                <input key={i} value={p} onChange={e => setPain(i, e.target.value)}
                   placeholder={["Не знают что заказать на ужин", "Хочется быстро и вкусно", "Устали готовить"][i]}
                   style={{ ...inp, marginBottom: 8 }} />
               ))}
@@ -303,11 +504,27 @@ export default function OnboardingPage() {
             <div>
               <label style={lbl}>Типичные возражения</label>
               {form.audience_objections.map((o, i) => (
-                <input key={i} value={o} onChange={(e) => setObj(i, e.target.value)}
+                <input key={i} value={o} onChange={e => setObj(i, e.target.value)}
                   placeholder={["Дорого", "Долго доставляют"][i]}
                   style={{ ...inp, marginBottom: 8 }} />
               ))}
             </div>
+            <div>
+              <label style={lbl}>Ключевые показатели SMM-стратегии</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {SMM_METRICS_OPTIONS.map(m => (
+                  <button key={m} onClick={() => toggleMetric(m)}
+                    style={{ padding: "8px 16px", borderRadius: 20, border: "1.5px solid", cursor: "pointer", fontSize: 13,
+                      borderColor: form.smm_metrics.includes(m) ? "#1a1a1a" : "#E0DED8",
+                      background: form.smm_metrics.includes(m) ? "#1a1a1a" : "#fff",
+                      color: form.smm_metrics.includes(m) ? "#fff" : "#555" }}>
+                    {m}
+                  </button>
+                ))}
+              </div>
+              <p style={hint}>Выберите что важнее всего отслеживать</p>
+            </div>
+
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setStep(0)} style={btnBack}>← Назад</button>
               <button onClick={() => setStep(2)} disabled={!form.audience_primary}
@@ -316,7 +533,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* STEP 2: Площадки */}
+        {/* ── STEP 2: Площадки ── */}
         {step === 2 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div>
@@ -327,14 +544,14 @@ export default function OnboardingPage() {
               { id: "telegram", label: "Telegram", icon: "✈", desc: "Канал / группа" },
               { id: "vk", label: "ВКонтакте", icon: "В", desc: "Группа / публичная страница" },
               { id: "ok", label: "Одноклассники", icon: "О", desc: "Группа" },
-            ].map((pl) => (
+            ].map(pl => (
               <div key={pl.id} style={{ border: `1.5px solid ${form.platforms.includes(pl.id) ? "#1a1a1a" : "#E0DED8"}`,
                 borderRadius: 12, overflow: "hidden" }}>
                 <div onClick={() => togglePlatform(pl.id)}
                   style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px",
                     cursor: "pointer", background: form.platforms.includes(pl.id) ? "#F8F7F4" : "#fff" }}>
                   <span style={{ width: 36, height: 36, borderRadius: 8, background: "#1a1a1a", color: "#fff",
-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700 }}>
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, flexShrink: 0 }}>
                     {pl.icon}
                   </span>
                   <div style={{ flex: 1 }}>
@@ -352,7 +569,7 @@ export default function OnboardingPage() {
                   <div style={{ padding: "12px 16px", borderTop: "1px solid #EAE8E2", background: "#fff" }}>
                     <label style={{ ...lbl, marginBottom: 8 }}>Цель для {pl.label}</label>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {[{ v: "sales", l: "Продажи" }, { v: "loyalty", l: "Лояльность" }, { v: "reach", l: "Охват" }].map((g) => (
+                      {[{ v: "sales", l: "Продажи" }, { v: "loyalty", l: "Лояльность" }, { v: "reach", l: "Охват" }].map(g => (
                         <button key={g.v}
                           onClick={() => set("platform_goals", { ...form.platform_goals, [pl.id]: g.v })}
                           style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid", cursor: "pointer", fontSize: 13,
@@ -375,7 +592,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* STEP 3: Голос бренда */}
+        {/* ── STEP 3: Голос бренда ── */}
         {step === 3 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div>
@@ -385,7 +602,7 @@ export default function OnboardingPage() {
             <div>
               <label style={lbl}>Тональность общения</label>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
-                {BRAND_VOICES.map((bv) => (
+                {BRAND_VOICES.map(bv => (
                   <div key={bv.value} onClick={() => set("brand_voice", bv.value)}
                     style={{ padding: "12px 14px",
                       border: `1.5px solid ${form.brand_voice === bv.value ? "#1a1a1a" : "#E0DED8"}`,
@@ -399,7 +616,7 @@ export default function OnboardingPage() {
             </div>
             <div>
               <label style={lbl}>Визуальный стиль *</label>
-              <textarea value={form.visual_style} onChange={(e) => set("visual_style", e.target.value)}
+              <textarea value={form.visual_style} onChange={e => set("visual_style", e.target.value)}
                 placeholder="Тёплые тона, фото еды крупным планом, уютная атмосфера"
                 style={{ ...inp, minHeight: 80, resize: "vertical" }} />
               <p style={hint}>Опишите как должны выглядеть картинки к постам</p>
@@ -407,11 +624,11 @@ export default function OnboardingPage() {
             <div>
               <label style={lbl}>Что нельзя публиковать?</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {["алкоголь", "политика", "конкуренты", "скидки", "агрессивные продажи"].map((r) => (
+                {["алкоголь", "политика", "конкуренты", "скидки", "агрессивные продажи"].map(r => (
                   <button key={r}
                     onClick={() => {
                       const curr = form.content_restrictions;
-                      set("content_restrictions", curr.includes(r) ? curr.filter((x) => x !== r) : [...curr, r]);
+                      set("content_restrictions", curr.includes(r) ? curr.filter(x => x !== r) : [...curr, r]);
                     }}
                     style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid", cursor: "pointer", fontSize: 13,
                       borderColor: form.content_restrictions.includes(r) ? "#A32D2D" : "#E0DED8",
@@ -430,66 +647,46 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* STEP 4: Фирменный стиль */}
+        {/* ── STEP 4: Материалы бренда ── */}
         {step === 4 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div>
               <h2 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 6px" }}>Материалы бренда</h2>
-              <p style={{ color: "#888", margin: 0, fontSize: 14 }}>
-                AI проанализирует их при создании стратегии и контент-плана
-              </p>
+              <p style={{ color: "#888", margin: 0, fontSize: 14 }}>AI проанализирует их при создании стратегии и контент-плана</p>
             </div>
 
-            {/* Вопрос 1 */}
             <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, padding: 20 }}>
-              <label style={{ ...lbl, fontSize: 14, marginBottom: 10 }}>
-                🎨 Фирменный стиль
-              </label>
+              <label style={{ ...lbl, fontSize: 14, marginBottom: 10 }}>🎨 Фирменный стиль</label>
               <p style={{ color: "#888", fontSize: 13, margin: "0 0 12px", lineHeight: 1.6 }}>
                 Прикрепите ссылки на элементы фирменного стиля: логотип, брендбук, макеты, маскот, вывеска.
                 Можно загрузить на Google Drive, Яндекс Диск или Notion и вставить ссылку.
               </p>
-              <textarea
-                value={form.brand_assets_links}
-                onChange={(e) => set("brand_assets_links", e.target.value)}
+              <textarea value={form.brand_assets_links} onChange={e => set("brand_assets_links", e.target.value)}
                 placeholder={"https://drive.google.com/...\nhttps://www.figma.com/..."}
-                style={{ ...inp, minHeight: 90, resize: "vertical" }}
-              />
+                style={{ ...inp, minHeight: 90, resize: "vertical" }} />
               <p style={hint}>Необязательно — можно пропустить если материалов нет</p>
             </div>
 
-            {/* Вопрос 2 */}
             <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, padding: 20 }}>
-              <label style={{ ...lbl, fontSize: 14, marginBottom: 10 }}>
-                📱 Референсы соцсетей
-              </label>
+              <label style={{ ...lbl, fontSize: 14, marginBottom: 10 }}>📱 Референсы соцсетей</label>
               <p style={{ color: "#888", fontSize: 13, margin: "0 0 12px", lineHeight: 1.6 }}>
                 Укажите ссылки на аккаунты компаний в соцсетях, чей стиль вам нравится и хотелось бы перенять.
               </p>
-              <textarea
-                value={form.social_references}
-                onChange={(e) => set("social_references", e.target.value)}
-                placeholder={"https://vk.com/dodopizza\nhttps://t.me/burgerkingrussia\nhttps://instagram.com/..."}
-                style={{ ...inp, minHeight: 90, resize: "vertical" }}
-              />
-              <p style={hint}>Необязательно — можно указать 1-5 аккаунтов</p>
+              <textarea value={form.social_references} onChange={e => set("social_references", e.target.value)}
+                placeholder={"https://vk.com/dodopizza\nhttps://t.me/burgerkingrussia"}
+                style={{ ...inp, minHeight: 90, resize: "vertical" }} />
+              <p style={hint}>Необязательно — можно указать 1–5 аккаунтов</p>
             </div>
 
-            {/* Вопрос 3 */}
             <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, padding: 20 }}>
-              <label style={{ ...lbl, fontSize: 14, marginBottom: 10 }}>
-                📸 Фото вашего заведения / продукта
-              </label>
+              <label style={{ ...lbl, fontSize: 14, marginBottom: 10 }}>📸 Фото вашего заведения / продукта</label>
               <p style={{ color: "#888", fontSize: 13, margin: "0 0 12px", lineHeight: 1.6 }}>
                 Пришлите ссылки на фотографии магазина, студии, салона, кухни или продуктов.
                 Это поможет AI создавать более точные промты для генерации картинок.
               </p>
-              <textarea
-                value={form.business_photos_links}
-                onChange={(e) => set("business_photos_links", e.target.value)}
+              <textarea value={form.business_photos_links} onChange={e => set("business_photos_links", e.target.value)}
                 placeholder={"https://drive.google.com/...\nhttps://disk.yandex.ru/..."}
-                style={{ ...inp, minHeight: 90, resize: "vertical" }}
-              />
+                style={{ ...inp, minHeight: 90, resize: "vertical" }} />
               <p style={hint}>Необязательно — можно пропустить</p>
             </div>
 
@@ -497,15 +694,14 @@ export default function OnboardingPage() {
 
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setStep(3)} style={btnBack}>← Назад</button>
-              <button onClick={saveAndClarify} disabled={loading}
-                style={{ ...btnNext(loading), flex: 2 }}>
+              <button onClick={saveAndClarify} disabled={loading} style={{ ...btnNext(loading), flex: 2 }}>
                 {loading ? "Сохраняю..." : "Далее →"}
               </button>
             </div>
           </div>
         )}
 
-        {/* STEP 5: Уточнения */}
+        {/* ── STEP 5: Уточнения ── */}
         {step === 5 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div>
@@ -513,13 +709,10 @@ export default function OnboardingPage() {
                 <span style={{ fontSize: 28 }}>🤖</span>
                 <h2 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>AI изучил ваш профиль</h2>
               </div>
-              <p style={{ color: "#888", margin: 0, fontSize: 14 }}>
-                Уточните несколько деталей для точной стратегии
-              </p>
+              <p style={{ color: "#888", margin: 0, fontSize: 14 }}>Уточните несколько деталей для точной стратегии</p>
             </div>
             {clarifyQs.length === 0 ? (
-              <div style={{ padding: "2rem", textAlign: "center", color: "#888",
-                background: "#F8F7F4", borderRadius: 12 }}>
+              <div style={{ padding: "2rem", textAlign: "center", color: "#888", background: "#F8F7F4", borderRadius: 12 }}>
                 <p>Профиль заполнен отлично — пробелов нет!</p>
               </div>
             ) : (
@@ -529,7 +722,7 @@ export default function OnboardingPage() {
                     {i + 1}. {q.question}
                   </label>
                   <textarea value={clarifyAs[q.field] || ""}
-                    onChange={(e) => setClarifyAs({ ...clarifyAs, [q.field]: e.target.value })}
+                    onChange={e => setClarifyAs({ ...clarifyAs, [q.field]: e.target.value })}
                     placeholder="Ваш ответ..."
                     style={{ ...inp, minHeight: 70, resize: "vertical" }} />
                 </div>
@@ -539,32 +732,313 @@ export default function OnboardingPage() {
             <button onClick={launch} disabled={launching}
               style={{ padding: 15, background: launching ? "#888" : "#1a1a1a", color: "#fff",
                 border: "none", borderRadius: 12, cursor: "pointer", fontSize: 16, fontWeight: 700 }}>
-              {launching ? "Запускаю AI... ⏳" : "🚀 Запустить платформу"}
+              {launching ? "Отправляю..." : "🚀 Сгенерировать стратегию"}
             </button>
           </div>
         )}
 
-        {/* STEP 6: Запущено */}
-        {step === 6 && (
+        {/* ── STEP 6: Стратегия ── */}
+        {step === 6 && strategy && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            <div>
+              <h2 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 6px" }}>Стратегия компании</h2>
+              <p style={{ color: "#888", margin: 0, fontSize: 14 }}>
+                AI сгенерировал стратегию для каждой площадки. Вы можете отредактировать любой раздел.
+              </p>
+            </div>
+
+            {strategy.map(ps => (
+              <div key={ps.platform} style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16, overflow: "hidden" }}>
+                {/* Platform header */}
+                <div style={{ padding: "16px 20px", borderBottom: "1px solid #EAE8E2", background: "#F8F7F4",
+                  display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: "#1a1a1a", color: "#fff",
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700 }}>
+                    {ps.platform === "telegram" ? "✈" : ps.platform === "vk" ? "В" : "О"}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 16 }}>{PLATFORM_LABELS[ps.platform] || ps.platform}</div>
+                    <div style={{ fontSize: 12, color: "#888" }}>{ps.posts_per_week} постов/нед · {ps.best_posting_times?.join(", ")}</div>
+                  </div>
+                </div>
+
+                <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
+                  {/* Goal */}
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
+                      Цель присутствия
+                    </div>
+                    <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: "#333" }}>{ps.goal}</p>
+                  </div>
+
+                  {/* Audience */}
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
+                      Целевая аудитория
+                    </div>
+                    <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: "#333" }}>{ps.target_audience}</p>
+                  </div>
+
+                  {/* Tone */}
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
+                      Тональность
+                    </div>
+                    <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: "#333" }}>{ps.tone}</p>
+                  </div>
+
+                  {/* Content mix */}
+                  {ps.content_mix && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+                        Микс контента
+                      </div>
+                      <ContentMixBar mix={ps.content_mix} />
+                    </div>
+                  )}
+
+                  {/* Content pillars */}
+                  {ps.content_pillars && ps.content_pillars.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+                        Темы контента
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {ps.content_pillars.map((pillar, i) => (
+                          <span key={i} style={{ padding: "5px 12px", background: "#F1EFE8", borderRadius: 20, fontSize: 13, color: "#444" }}>
+                            {pillar}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Edit with AI */}
+                  {editingPlatform === ps.platform ? (
+                    <div style={{ background: "#F8F7F4", borderRadius: 12, padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#444" }}>
+                        Что изменить в стратегии для {PLATFORM_LABELS[ps.platform]}?
+                      </div>
+                      <textarea
+                        value={editMessage}
+                        onChange={e => setEditMessage(e.target.value)}
+                        placeholder="Например: сделай тон более неформальным, добавь развлекательного контента"
+                        style={{ ...inp, minHeight: 80, resize: "vertical" }}
+                        autoFocus
+                      />
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={() => { setEditingPlatform(null); setEditMessage(""); }}
+                          style={{ flex: 1, padding: "10px 16px", background: "#F1EFE8", border: "none",
+                            borderRadius: 10, cursor: "pointer", fontSize: 14, color: "#444" }}>
+                          Отмена
+                        </button>
+                        <button
+                          onClick={() => refineStrategy(`Для платформы ${PLATFORM_LABELS[ps.platform]}: ${editMessage}`)}
+                          disabled={!editMessage.trim() || editLoading}
+                          style={{ flex: 2, padding: "10px 16px", background: editLoading || !editMessage.trim() ? "#ccc" : "#1a1a1a",
+                            border: "none", borderRadius: 10, cursor: "pointer", fontSize: 14, color: "#fff", fontWeight: 600 }}>
+                          {editLoading ? "Применяю..." : "Применить изменения"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setEditingPlatform(ps.platform); setEditMessage(""); }}
+                      style={{ alignSelf: "flex-start", padding: "8px 16px", background: "transparent",
+                        border: "1.5px solid #E0DED8", borderRadius: 10, cursor: "pointer", fontSize: 13, color: "#555" }}>
+                      ✏️ Редактировать с ИИ
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {error && <p style={{ color: "#A32D2D", fontSize: 13 }}>{error}</p>}
+
+            <button onClick={approveStrategy}
+              style={{ padding: 15, background: "#1a1a1a", color: "#fff",
+                border: "none", borderRadius: 12, cursor: "pointer", fontSize: 16, fontWeight: 700 }}>
+              Согласовать стратегию →
+            </button>
+          </div>
+        )}
+
+        {/* ── STEP 7: Рубрики ── */}
+        {step === 7 && strategy && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            <div>
+              <h2 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 6px" }}>Рубрики и микс контента</h2>
+              <p style={{ color: "#888", margin: 0, fontSize: 14 }}>
+                Проверьте рубрики для каждой площадки. Вы можете скорректировать их с помощью AI-чата ниже.
+              </p>
+            </div>
+
+            {/* Platform tabs */}
+            {strategy.length > 1 && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {strategy.map(ps => (
+                  <button key={ps.platform} onClick={() => setSelectedPlatform(ps.platform)}
+                    style={{ padding: "8px 20px", borderRadius: 20,
+                      border: `1.5px solid ${selectedPlatform === ps.platform ? "#1a1a1a" : "#E0DED8"}`,
+                      background: selectedPlatform === ps.platform ? "#1a1a1a" : "#fff",
+                      color: selectedPlatform === ps.platform ? "#fff" : "#555",
+                      cursor: "pointer", fontSize: 14, fontWeight: selectedPlatform === ps.platform ? 600 : 400 }}>
+                    {PLATFORM_LABELS[ps.platform] || ps.platform}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Content mix bar */}
+            {currentPlatformStrategy?.content_mix && (
+              <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 14, padding: 20 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#333", marginBottom: 12 }}>
+                  Микс контента · {PLATFORM_LABELS[selectedPlatform] || selectedPlatform}
+                </div>
+                <ContentMixBar mix={currentPlatformStrategy.content_mix} />
+              </div>
+            )}
+
+            {/* Rubrics list */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {currentPlatformStrategy?.rubrics?.map((rubric, i) => (
+                <div key={i} style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, overflow: "hidden" }}>
+                  <div
+                    onClick={() => setExpandedRubric(expandedRubric === `${selectedPlatform}-${i}` ? null : `${selectedPlatform}-${i}`)}
+                    style={{ padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontWeight: 600, fontSize: 14, color: "#1a1a1a" }}>{rubric.name}</span>
+                        <span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 11,
+                          background: RUBRIC_TYPE_COLORS[rubric.type] || "#F1EFE8", color: "#555" }}>
+                          {RUBRIC_TYPE_LABELS[rubric.type] || rubric.type}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 12, color: "#888" }}>
+                        {rubric.format} · {rubric.frequency}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 12, color: "#aaa", transform: expandedRubric === `${selectedPlatform}-${i}` ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</span>
+                  </div>
+
+                  {expandedRubric === `${selectedPlatform}-${i}` && (
+                    <div style={{ padding: "0 16px 16px", borderTop: "1px solid #F0EEE8", display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: "#888", marginBottom: 4 }}>ЦЕЛЬ РУБРИКИ</div>
+                        <p style={{ margin: 0, fontSize: 13, color: "#444", lineHeight: 1.5 }}>{rubric.goal}</p>
+                      </div>
+                      {rubric.example_topics?.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: "#888", marginBottom: 4 }}>ПРИМЕРЫ ТЕМ</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                            {rubric.example_topics.map((t, j) => (
+                              <div key={j} style={{ fontSize: 13, color: "#444", paddingLeft: 12, borderLeft: "2px solid #E0DED8" }}>
+                                {t}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {rubric.structure?.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: "#888", marginBottom: 4 }}>СТРУКТУРА ПОСТА</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                            {rubric.structure.map((s, j) => (
+                              <span key={j} style={{ padding: "3px 10px", background: "#F1EFE8", borderRadius: 12, fontSize: 12, color: "#555" }}>
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* AI Chat */}
+            <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16, overflow: "hidden" }}>
+              <div style={{ padding: "14px 16px", borderBottom: "1px solid #EAE8E2", background: "#F8F7F4" }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: "#333" }}>🤖 Скорректируй рубрики с ИИ</span>
+                <p style={{ margin: "4px 0 0", fontSize: 12, color: "#888" }}>
+                  Напишите что хотите изменить — добавить рубрику, убрать, изменить частоту
+                </p>
+              </div>
+
+              {rubricsChat.length > 0 && (
+                <div style={{ padding: "12px 16px", maxHeight: 240, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+                  {rubricsChat.map((msg, i) => (
+                    <div key={i} style={{
+                      alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
+                      padding: "8px 14px", borderRadius: 12, fontSize: 14, maxWidth: "85%",
+                      background: msg.role === "user" ? "#1a1a1a" : "#F1EFE8",
+                      color: msg.role === "user" ? "#fff" : "#333",
+                    }}>
+                      {msg.text}
+                    </div>
+                  ))}
+                  {rubricsLoading && (
+                    <div style={{ alignSelf: "flex-start", padding: "8px 14px", borderRadius: 12, background: "#F1EFE8", display: "flex", gap: 6 }}>
+                      {[0, 1, 2].map(i => (
+                        <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: "#888",
+                          animation: `dot-pulse 1.2s ${i * 0.3}s infinite` }} />
+                      ))}
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+              )}
+
+              <div style={{ padding: 12, display: "flex", gap: 8, borderTop: rubricsChat.length > 0 ? "1px solid #EAE8E2" : "none" }}>
+                <input
+                  value={rubricsChatInput}
+                  onChange={e => setRubricsChatInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && !e.shiftKey && chatRubrics()}
+                  placeholder="Добавь рубрику про рецепты, убери UGC..."
+                  style={{ ...inp, flex: 1 }}
+                  disabled={rubricsLoading}
+                />
+                <button onClick={chatRubrics} disabled={!rubricsChatInput.trim() || rubricsLoading}
+                  style={{ padding: "10px 18px", background: !rubricsChatInput.trim() || rubricsLoading ? "#E0DED8" : "#1a1a1a",
+                    border: "none", borderRadius: 10, cursor: "pointer", color: "#fff", fontSize: 14, fontWeight: 600 }}>
+                  →
+                </button>
+              </div>
+            </div>
+
+            {error && <p style={{ color: "#A32D2D", fontSize: 13 }}>{error}</p>}
+
+            <button onClick={approveRubrics} disabled={launching}
+              style={{ padding: 15, background: launching ? "#888" : "#1a1a1a", color: "#fff",
+                border: "none", borderRadius: 12, cursor: "pointer", fontSize: 16, fontWeight: 700 }}>
+              {launching ? "Запускаю..." : "✅ Согласовать рубрики"}
+            </button>
+          </div>
+        )}
+
+        {/* ── STEP 8: Запущено ── */}
+        {step === 8 && (
           <div style={{ textAlign: "center", padding: "3rem 0" }}>
             <div style={{ fontSize: 72, marginBottom: 16 }}>🎉</div>
             <h2 style={{ fontSize: 26, fontWeight: 700, margin: "0 0 12px" }}>Платформа запущена!</h2>
             <p style={{ color: "#666", fontSize: 15, maxWidth: 400, margin: "0 auto 32px", lineHeight: 1.6 }}>
-              AI генерирует стратегию и контент-план. Обычно это занимает 1-2 минуты.
+              Стратегия согласована. AI генерирует контент-план — обычно это занимает 1–2 минуты.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 340, margin: "0 auto 32px" }}>
               {[
-                { icon: "📋", text: "Контент-стратегия для ваших площадок" },
-                { icon: "📅", text: "Контент-план на текущий месяц" },
+                { icon: "📋", text: "Стратегия согласована" },
+                { icon: "🗂", text: "Рубрики утверждены" },
+                { icon: "📅", text: "Контент-план генерируется..." },
                 { icon: "✍️", text: "Тексты постов под ваш голос бренда" },
-                { icon: "🖼", text: "AI-картинки для каждого поста" },
               ].map((item, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 12,
                   padding: "12px 16px", background: "#fff", borderRadius: 10,
                   border: "1px solid #EAE8E2", textAlign: "left" }}>
                   <span style={{ fontSize: 20 }}>{item.icon}</span>
                   <span style={{ fontSize: 14, color: "#333" }}>{item.text}</span>
-                  <span style={{ marginLeft: "auto", fontSize: 12, color: "#0F6E56" }}>Генерируется...</span>
+                  {i < 2 && <span style={{ marginLeft: "auto", fontSize: 12, color: "#0F6E56" }}>✓ Готово</span>}
+                  {i >= 2 && <span style={{ marginLeft: "auto", fontSize: 12, color: "#888" }}>Генерируется...</span>}
                 </div>
               ))}
             </div>

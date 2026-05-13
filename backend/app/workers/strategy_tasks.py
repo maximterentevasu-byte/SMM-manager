@@ -1,5 +1,4 @@
 import asyncio
-from datetime import datetime
 
 from app.workers.celery_app import celery_app
 from app.agents.strategy_agent import generate_strategy
@@ -31,11 +30,3 @@ async def _run(business_id: str):
             print(f"✗ Ошибка генерации стратегии: {e}")
             raise
 
-    # Автоматически запускаем контент-план после стратегии
-    try:
-        from app.workers.content_tasks import generate_content_plan_task
-        now = datetime.utcnow()
-        generate_content_plan_task.delay(business_id, now.year, now.month)
-        print(f"→ Запущена генерация контент-плана для {business_id}")
-    except Exception as e:
-        print(f"✗ Ошибка запуска контент-плана: {e}")
