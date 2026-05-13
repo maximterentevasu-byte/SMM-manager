@@ -9,10 +9,17 @@ from app.config import settings
 _GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 _GEMINI_MODEL = "gemini-2.5-flash-image"
 
-_DALLE_SIZE = {
+_DALLE3_SIZE = {
     "1:1":  "1024x1024",
     "16:9": "1792x1024",
     "9:16": "1024x1792",
+    "4:3":  "1024x1024",
+}
+
+_DALLE2_SIZE = {
+    "1:1":  "1024x1024",
+    "16:9": "1024x1024",
+    "9:16": "1024x1024",
     "4:3":  "1024x1024",
 }
 
@@ -41,31 +48,35 @@ def _gemini(prompt: str) -> str:
 def _dalle(prompt: str, aspect_ratio: str) -> str:
     from openai import OpenAI
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
-    size = _DALLE_SIZE.get(aspect_ratio, "1024x1024")
 
-    for model in ("dall-e-3", "dall-e-2"):
+    models = [
+        ("dall-e-3", _DALLE3_SIZE.get(aspect_ratio, "1024x1024"), {"quality": "standard"}),
+        ("dall-e-2", _DALLE2_SIZE.get(aspect_ratio, "1024x1024"), {}),
+    ]
+
+    last_error = "неизвестная ошибка"
+    for model, size, extra_kwargs in models:
         try:
-            kwargs = dict(
+            resp = client.images.generate(
                 model=model,
                 prompt=prompt[:1000],
                 size=size,
                 n=1,
                 response_format="b64_json",
+                **extra_kwargs,
             )
-            if model == "dall-e-3":
-                kwargs["quality"] = "standard"
-            resp = client.images.generate(**kwargs)
             b64 = resp.data[0].b64_json
             if b64:
                 return b64
         except Exception as e:
-            msg = str(e).lower()
-            # Модель недоступна — пробуем следующую
-            if "does not exist" in msg or "invalid_value" in msg or "model" in msg:
+            last_error = str(e)
+            # Переходим к следующей модели только если эта модель буквально не существует
+            if "does not exist" in last_error.lower():
                 continue
-            raise ValueError(f"DALL-E {model}: {e}") from e
+            # Для любой другой ошибки (квота, авторизация, контент) — сразу поднимаем
+            raise ValueError(f"DALL-E ({model}): {e}") from e
 
-    raise ValueError("DALL-E: нет доступных моделей для генерации изображений.")
+    raise ValueError(f"DALL-E: dall-e-3 и dall-e-2 недоступны. Последняя ошибка: {last_error}")
 
 
 def generate_image_sync(prompt: str, aspect_ratio: str = "1:1") -> str:
