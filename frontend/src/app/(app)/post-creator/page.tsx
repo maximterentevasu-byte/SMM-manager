@@ -164,11 +164,14 @@ export default function PostCreatorPage() {
         platforms: selectedPlatforms,
         scheduled_at,
       });
-      const results: { platform: string; status: string; error?: string }[] = data.results || [];
+      const results: { platform: string; status: string; error?: string; warning?: string }[] = data.results || [];
       const ok = results.filter((r) => r.status === "published");
       const fail = results.filter((r) => r.status === "error" || r.status === "no_connection");
-      if (ok.length > 0 && fail.length === 0) {
+      const warns = results.filter((r) => r.warning).map((r) => r.warning as string);
+      if (ok.length > 0 && fail.length === 0 && warns.length === 0) {
         setPublishMsg("✓ Опубликовано в " + ok.map((r) => r.platform).join(", ") + "!");
+      } else if (ok.length > 0 && fail.length === 0) {
+        setPublishMsg("✓ Опубликовано. ⚠ " + warns.join(" "));
       } else if (ok.length > 0) {
         const failMsg = fail.map((r) => `${r.platform}: ${r.error}`).join("; ");
         setPublishMsg(`✓ ${ok.map((r) => r.platform).join(", ")} — OK. ⚠ Ошибки: ${failMsg}`);

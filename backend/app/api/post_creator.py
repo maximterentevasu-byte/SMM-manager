@@ -360,16 +360,31 @@ async def publish_to_plan(
             full_text = body.post_text
 
             try:
+                warning = None
                 if platform_str == "telegram":
                     ext_id = await _publish_to_telegram(
                         session, token, connection.external_page_id,
                         full_text, body.image_base64,
                     )
                 elif platform_str == "vk":
-                    ext_id = await _publish_to_vk(
-                        session, token, connection.external_page_id,
-                        full_text, body.image_base64,
-                    )
+                    try:
+                        ext_id = await _publish_to_vk(
+                            session, token, connection.external_page_id,
+                            full_text, body.image_base64,
+                        )
+                    except ValueError as ve:
+                        err = str(ve)
+                        if "group auth" in err.lower() or "unavailable with group" in err.lower():
+                            # Токен сообщества не поддерживает загрузку фото → публикуем без фото
+                            ext_id = await _publish_to_vk(
+                                session, token, connection.external_page_id,
+                                full_text, None,
+                            )
+                            warning = ("Пост опубликован без фото. "
+                                       "Для публикации с картинкой нужен пользовательский токен VK "
+                                       "с правами wall+photos (не токен сообщества).")
+                        else:
+                            raise
                 else:
                     results.append({"platform": platform_str, "status": "unsupported"})
                     continue
@@ -377,7 +392,10 @@ async def publish_to_plan(
                 slot.status = PlanStatus.published
                 slot.published_at = datetime.utcnow()
                 slot.external_post_id = ext_id
-                results.append({"platform": platform_str, "status": "published", "id": ext_id})
+                entry: dict = {"platform": platform_str, "status": "published", "id": ext_id}
+                if warning:
+                    entry["warning"] = warning
+                results.append(entry)
             except Exception as e:
                 slot.status = PlanStatus.failed
                 slot.error_message = str(e)

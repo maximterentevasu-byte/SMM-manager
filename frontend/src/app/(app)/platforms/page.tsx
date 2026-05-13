@@ -70,13 +70,17 @@ const PLATFORMS = [
     description: "Сообщество (группа или публичная страница)",
     steps: [
       {
-        title: "Создай ключ доступа для сообщества",
+        title: "Получи пользовательский токен VK (нужен для публикации с фото)",
         items: [
-          <>Открой своё сообщество ВКонтакте</>,
-          <>Перейди в <strong>Управление → Настройки → Работа с API</strong></>,
-          <>Нажми «Создать ключ доступа»</>,
-          <>Поставь галочки: <strong>Управление сообществом</strong> и <strong>Управление записями на стене</strong></>,
-          <>Скопируй токен — он длинный, начинается с букв/цифр</>,
+          <>Открой ссылку в браузере, где ты залогинен в VK:</>,
+          <><a
+              href="https://oauth.vk.com/authorize?client_id=2685278&scope=wall,photos,groups,offline&response_type=token&redirect_uri=https://oauth.vk.com/blank.html"
+              target="_blank" rel="noreferrer" style={{ color: "#4680C2", wordBreak: "break-all" }}>
+              oauth.vk.com/authorize?client_id=2685278&scope=wall,photos,groups,offline&response_type=token&redirect_uri=https://oauth.vk.com/blank.html
+            </a></>,
+          <>Нажми «Разрешить» — тебя перенаправит на страницу с пустым полем</>,
+          <>В адресной строке найди <code style={code}>access_token=</code> — скопируй всё до <code style={code}>&expires_in</code></>,
+          <><strong>Это и есть твой токен</strong> — вставь его ниже</>,
         ],
       },
       {
@@ -89,7 +93,7 @@ const PLATFORMS = [
         ],
       },
     ],
-    tokenLabel: "Токен сообщества",
+    tokenLabel: "Пользовательский токен VK",
     tokenPlaceholder: "vk1.a.xxxxxxxxxxxxxxxx",
     pageIdLabel: "ID сообщества",
     pageIdPlaceholder: "123456789",
