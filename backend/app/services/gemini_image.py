@@ -9,6 +9,13 @@ from app.config import settings
 _GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 _GEMINI_MODEL = "gemini-2.5-flash-image"
 
+_GPT_IMAGE_SIZE = {
+    "1:1":  "1024x1024",
+    "16:9": "1536x1024",
+    "9:16": "1024x1536",
+    "4:3":  "1536x1024",
+}
+
 _DALLE3_SIZE = {
     "1:1":  "1024x1024",
     "16:9": "1792x1024",
@@ -49,34 +56,37 @@ def _dalle(prompt: str, aspect_ratio: str) -> str:
     from openai import OpenAI
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
+    # gpt-image-1 — новейшая модель OpenAI (не требует response_format, всегда b64)
+    # dall-e-3 / dall-e-2 — fallback для старых аккаунтов
     models = [
-        ("dall-e-3", _DALLE3_SIZE.get(aspect_ratio, "1024x1024"), {"quality": "standard"}),
-        ("dall-e-2", _DALLE2_SIZE.get(aspect_ratio, "1024x1024"), {}),
+        ("gpt-image-1", _GPT_IMAGE_SIZE.get(aspect_ratio, "1024x1024"),
+         {"quality": "medium"}),
+        ("dall-e-3",    _DALLE3_SIZE.get(aspect_ratio, "1024x1024"),
+         {"quality": "standard", "response_format": "b64_json"}),
+        ("dall-e-2",    _DALLE2_SIZE.get(aspect_ratio, "1024x1024"),
+         {"response_format": "b64_json"}),
     ]
 
     last_error = "неизвестная ошибка"
-    for model, size, extra_kwargs in models:
+    for model, size, extra in models:
         try:
             resp = client.images.generate(
                 model=model,
                 prompt=prompt[:1000],
                 size=size,
                 n=1,
-                response_format="b64_json",
-                **extra_kwargs,
+                **extra,
             )
             b64 = resp.data[0].b64_json
             if b64:
                 return b64
         except Exception as e:
             last_error = str(e)
-            # Переходим к следующей модели только если эта модель буквально не существует
             if "does not exist" in last_error.lower():
-                continue
-            # Для любой другой ошибки (квота, авторизация, контент) — сразу поднимаем
-            raise ValueError(f"DALL-E ({model}): {e}") from e
+                continue  # модели нет → пробуем следующую
+            raise ValueError(f"OpenAI ({model}): {e}") from e
 
-    raise ValueError(f"DALL-E: dall-e-3 и dall-e-2 недоступны. Последняя ошибка: {last_error}")
+    raise ValueError(f"OpenAI: ни одна модель генерации изображений недоступна. {last_error}")
 
 
 def generate_image_sync(prompt: str, aspect_ratio: str = "1:1") -> str:
