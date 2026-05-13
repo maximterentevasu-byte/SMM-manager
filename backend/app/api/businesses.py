@@ -87,7 +87,11 @@ async def refine_strategy_endpoint(
         raise HTTPException(400, "Стратегия не сгенерирована")
 
     from app.agents.strategy_agent import refine_strategy
-    new_strategy = await refine_strategy(business.strategy, body.message, business.profile or {})
+    import json
+    try:
+        new_strategy = await refine_strategy(business.strategy, body.message, business.profile or {})
+    except (json.JSONDecodeError, ValueError) as e:
+        raise HTTPException(500, f"Модель вернула некорректный ответ, попробуйте переформулировать запрос")
     business.strategy = new_strategy
     await db.commit()
     return {"strategy": new_strategy, "status": "updated"}
