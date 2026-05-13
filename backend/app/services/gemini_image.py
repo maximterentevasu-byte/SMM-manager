@@ -42,18 +42,30 @@ def _dalle(prompt: str, aspect_ratio: str) -> str:
     from openai import OpenAI
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
     size = _DALLE_SIZE.get(aspect_ratio, "1024x1024")
-    resp = client.images.generate(
-        model="dall-e-3",
-        prompt=prompt,
-        size=size,
-        quality="standard",
-        n=1,
-        response_format="b64_json",
-    )
-    b64 = resp.data[0].b64_json
-    if not b64:
-        raise ValueError("DALL-E не вернул изображение.")
-    return b64
+
+    for model in ("dall-e-3", "dall-e-2"):
+        try:
+            kwargs = dict(
+                model=model,
+                prompt=prompt[:1000],
+                size=size,
+                n=1,
+                response_format="b64_json",
+            )
+            if model == "dall-e-3":
+                kwargs["quality"] = "standard"
+            resp = client.images.generate(**kwargs)
+            b64 = resp.data[0].b64_json
+            if b64:
+                return b64
+        except Exception as e:
+            msg = str(e).lower()
+            # Модель недоступна — пробуем следующую
+            if "does not exist" in msg or "invalid_value" in msg or "model" in msg:
+                continue
+            raise ValueError(f"DALL-E {model}: {e}") from e
+
+    raise ValueError("DALL-E: нет доступных моделей для генерации изображений.")
 
 
 def generate_image_sync(prompt: str, aspect_ratio: str = "1:1") -> str:
@@ -64,16 +76,21 @@ def generate_image_sync(prompt: str, aspect_ratio: str = "1:1") -> str:
     if not gemini_ok and not dalle_ok:
         raise ValueError("Нет доступных API ключей для генерации изображений.")
 
+    gemini_error = None
     if gemini_ok:
         try:
             return _gemini(prompt)
         except ValueError as e:
-            msg = str(e).lower()
-            # 429 rate limit или paid-only — пробуем DALL-E
-            if not (dalle_ok and ("quota" in msg or "paid" in msg or "billing" in msg or "rate" in msg or "429" in msg)):
-                raise  # Другая ошибка — пробрасываем
+            gemini_error = str(e)
+            if not dalle_ok:
+                raise
 
     if dalle_ok:
-        return _dalle(prompt, aspect_ratio)
+        try:
+            return _dalle(prompt, aspect_ratio)
+        except ValueError as e:
+            raise ValueError(
+                f"Все генераторы недоступны. Gemini: {gemini_error or 'не настроен'}. DALL-E: {e}"
+            ) from e
 
     raise ValueError("Gemini недоступен. Добавьте OPENAI_API_KEY для DALL-E.")
