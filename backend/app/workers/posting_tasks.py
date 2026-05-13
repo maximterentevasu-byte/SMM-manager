@@ -69,6 +69,9 @@ async def _publish(slot_id: str):
         try:
             token = decrypt_token(connection.token_encrypted)
             platform = slot.platform.value if hasattr(slot.platform, "value") else slot.platform
+            # Для VK используем пользовательский токен из аналитики (поддерживает загрузку фото)
+            if platform == "vk" and connection.vk_user_token_encrypted:
+                token = decrypt_token(connection.vk_user_token_encrypted)
             if platform == "vk":
                 post_id = await _post_to_vk(slot, token, connection.external_page_id)
             elif platform == "telegram":

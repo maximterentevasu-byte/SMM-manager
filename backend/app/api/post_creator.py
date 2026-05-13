@@ -357,6 +357,12 @@ async def publish_to_plan(
                 continue
 
             token = decrypt_token(connection.token_encrypted)
+            # Для VK используем пользовательский токен из аналитики (он поддерживает загрузку фото)
+            vk_user_token = (
+                decrypt_token(connection.vk_user_token_encrypted)
+                if platform_str == "vk" and connection.vk_user_token_encrypted
+                else None
+            )
             full_text = body.post_text
 
             try:
@@ -367,9 +373,10 @@ async def publish_to_plan(
                         full_text, body.image_base64,
                     )
                 elif platform_str == "vk":
+                    publish_token = vk_user_token or token
                     try:
                         ext_id = await _publish_to_vk(
-                            session, token, connection.external_page_id,
+                            session, publish_token, connection.external_page_id,
                             full_text, body.image_base64,
                         )
                     except ValueError as ve:
@@ -377,7 +384,7 @@ async def publish_to_plan(
                         if "group auth" in err.lower() or "unavailable with group" in err.lower():
                             # Токен сообщества не поддерживает загрузку фото → публикуем без фото
                             ext_id = await _publish_to_vk(
-                                session, token, connection.external_page_id,
+                                session, publish_token, connection.external_page_id,
                                 full_text, None,
                             )
                             warning = ("Пост опубликован без фото. "

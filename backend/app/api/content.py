@@ -126,10 +126,14 @@ async def publish_slot_now(
     token = decrypt_token(connection.token_encrypted)
     page_id = connection.external_page_id
 
+    platform = slot.platform.value if hasattr(slot.platform, "value") else slot.platform
+
+    # Для VK используем пользовательский токен из аналитики (поддерживает загрузку фото)
+    if platform == "vk" and connection.vk_user_token_encrypted:
+        token = decrypt_token(connection.vk_user_token_encrypted)
+
     hashtags_str = " ".join(f"#{t}" for t in (slot.hashtags or []))
     full_text = f"{slot.post_text}\n\n{hashtags_str}".strip()
-
-    platform = slot.platform.value if hasattr(slot.platform, "value") else slot.platform
     has_b64 = bool(slot.image_base64)
     has_url = bool(slot.image_url)
 
