@@ -20,16 +20,26 @@ export default function LoginPage() {
       form.append("password", password);
       const { data } = await api.post("/auth/login", form);
       localStorage.setItem("token", data.access_token);
-      if (!localStorage.getItem("businessId")) {
-        localStorage.setItem("businessId", "7e0fe5ef-71fd-4113-8df4-be129e34bd69");
-      }
+
       if (!data.is_verified) {
         router.push("/register");
-      } else if (!data.has_business) {
-        router.push("/onboarding");
-      } else {
-        router.push("/dashboard");
+        return;
       }
+
+      if (!data.has_business) {
+        router.push("/onboarding");
+        return;
+      }
+
+      // Восстанавливаем businessId из API — не зависим от localStorage конкретного браузера
+      try {
+        const { data: businesses } = await api.get("/businesses/");
+        if (businesses.length > 0) {
+          localStorage.setItem("businessId", businesses[0].id);
+        }
+      } catch {}
+
+      router.push("/home");
     } catch {
       setError("Неверный email или пароль");
     } finally {

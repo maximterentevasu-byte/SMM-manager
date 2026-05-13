@@ -15,6 +15,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
+  const logout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("businessId");
+    router.push("/login");
+  };
+
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#F8F7F4", fontFamily: "'Segoe UI', sans-serif" }}>
       <nav style={{
@@ -45,6 +51,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </button>
           );
         })}
+
+        <div style={{ flex: 1 }} />
+
+        <button onClick={logout}
+          style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "10px 14px", borderRadius: 14, border: "none",
+            cursor: "pointer", width: "100%", textAlign: "left",
+            background: "transparent", color: "#999",
+            fontSize: 13, fontWeight: 400,
+            transition: "background 0.15s",
+          }}>
+          <span style={{ fontSize: 15, flexShrink: 0 }}>⏻</span>
+          <span>Выйти</span>
+        </button>
       </nav>
       <div style={{ marginLeft: 220, flex: 1, minWidth: 0 }}>
         {children}
