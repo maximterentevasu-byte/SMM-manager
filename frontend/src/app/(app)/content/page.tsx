@@ -144,6 +144,7 @@ export default function ContentPage() {
     try {
       const { data } = await api.post(`/content/slot/${slot.id}/generate-image`);
       setSlots(prev => prev.map(s => s.id === slot.id ? { ...s, image_url: data.image_url } : s));
+      setExpanded(prev => prev?.id === slot.id ? { ...prev, image_url: data.image_url } : prev);
     } catch { alert("Ошибка генерации картинки"); }
     finally { setGeneratingImg(null); }
   };
@@ -520,15 +521,17 @@ export default function ContentPage() {
                                 cursor: "grab",
                                 userSelect: "none",
                                 opacity: draggingId === slot.id ? 0.4 : 1,
+                                overflow: "hidden",
+                                minWidth: 0,
                               }}
                             >
-                              <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 1 }}>
-                                <span style={{ fontSize: 10, fontWeight: 700, color: "#666" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 1, minWidth: 0 }}>
+                                <span style={{ fontSize: 10, fontWeight: 700, color: "#666", flexShrink: 0 }}>
                                   {PLATFORM_ICON[slot.platform]}
                                 </span>
                                 <span style={{ fontSize: 10, fontWeight: 600, color: "#333",
                                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                                  flex: 1 }}>
+                                  flex: 1, minWidth: 0 }}>
                                   {slot.rubric_name}
                                 </span>
                                 <span style={{ fontSize: 9, fontWeight: 600, color: st.color,
@@ -621,17 +624,30 @@ export default function ContentPage() {
                 onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
             </div>
 
-            {/* Image preview */}
-            {(expanded.image_url || expanded.image_base64) && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "#999", marginBottom: 8,
-                  textTransform: "uppercase", letterSpacing: .5 }}>Изображение</div>
+            {/* Image */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#999", marginBottom: 8,
+                textTransform: "uppercase", letterSpacing: .5 }}>Изображение</div>
+              {expanded.image_url || expanded.image_base64 ? (
                 <img
                   src={expanded.image_url || `data:image/png;base64,${expanded.image_base64}`}
                   alt="post"
                   style={{ width: "100%", maxHeight: 260, objectFit: "cover", borderRadius: 12 }} />
-              </div>
-            )}
+              ) : (
+                <div style={{ background: "#F8F7F4", borderRadius: 12, padding: "28px 16px",
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 36 }}>🖼</span>
+                  <span style={{ fontSize: 13, color: "#999" }}>Картинка не сгенерирована</span>
+                  <button
+                    onClick={() => generateImage(expanded)}
+                    disabled={generatingImg === expanded.id}
+                    style={{ padding: "9px 20px", background: "#533AB7", color: "#fff",
+                      border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+                    {generatingImg === expanded.id ? "Генерирую..." : "✨ Сгенерировать картинку"}
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Actions */}
             <div style={{ display: "flex", gap: 8, paddingTop: 4 }}>
