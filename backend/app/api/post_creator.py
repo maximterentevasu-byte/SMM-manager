@@ -38,19 +38,62 @@ async def _get_business(business_id: str, user: User, db: AsyncSession) -> Busin
 
 # ─── URL fetching ─────────────────────────────────────────────────────────────
 
+async def _fetch_telegram_text(url: str, max_chars: int = 2500) -> str:
+    """Извлекает текст публичного Telegram-поста через OG-метатеги."""
+    import html as html_lib
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        )
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            r = await client.get(url, headers=headers)
+            html_text = r.text
+
+        parts: list[str] = []
+        for pattern in [
+            r'<meta\s+property=["\']og:title["\']\s+content=["\']([^"\']*)["\']',
+            r'<meta\s+property=["\']og:description["\']\s+content=["\']([^"\']*)["\']',
+            r'<meta\s+name=["\']twitter:description["\']\s+content=["\']([^"\']*)["\']',
+        ]:
+            m = re.search(pattern, html_text, re.IGNORECASE)
+            if m:
+                part = html_lib.unescape(m.group(1)).strip()
+                if part and part not in parts:
+                    parts.append(part)
+
+        result = "\n".join(parts)
+        if len(result) > 20:
+            return result[:max_chars]
+    except Exception:
+        pass
+    return ""
+
+
 async def _fetch_url_text(url: str, max_chars: int = 2500) -> str:
-    # Мессенджеры и соцсети с закрытым контентом не парсятся без авторизации
-    _BLOCKED_DOMAINS = ("t.me", "telegram.me", "instagram.com", "vk.com", "ok.ru", "facebook.com")
+    # Соцсети с закрытым контентом не парсятся без авторизации
+    _BLOCKED_DOMAINS = ("instagram.com", "vk.com", "ok.ru", "facebook.com")
     try:
         from urllib.parse import urlparse
         domain = urlparse(url).netloc.lower().lstrip("www.")
+
+        # Telegram: специальный парсинг OG-метатегов
+        if domain in ("t.me", "telegram.me") or domain.endswith(".t.me"):
+            return await _fetch_telegram_text(url, max_chars)
+
         if any(domain == b or domain.endswith("." + b) for b in _BLOCKED_DOMAINS):
             return ""
     except Exception:
         pass
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            r = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; SMM-bot/1.0)"})
+            r = await client.get(
+                url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            )
             html = r.text
             html = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html, flags=re.DOTALL | re.IGNORECASE)
             text = re.sub(r'<[^>]+>', ' ', html)
