@@ -4,6 +4,7 @@ API для создания постов вручную.
 """
 import uuid
 import base64
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -33,6 +34,50 @@ async def _get_business(business_id: str, user: User, db: AsyncSession) -> Busin
     if not biz:
         raise HTTPException(404, "Бизнес не найден")
     return biz
+
+
+# ─── URL fetching ─────────────────────────────────────────────────────────────
+
+async def _fetch_url_text(url: str, max_chars: int = 2500) -> str:
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            r = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; SMM-bot/1.0)"})
+            html = r.text
+            html = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html, flags=re.DOTALL | re.IGNORECASE)
+            text = re.sub(r'<[^>]+>', ' ', html)
+            text = re.sub(r'\s+', ' ', text).strip()
+            return text[:max_chars]
+    except Exception as e:
+        return f"[Не удалось загрузить ссылку: {e}]"
+
+
+# ─── Image description via Claude vision ─────────────────────────────────────
+
+async def _describe_images(images: list[dict], client: httpx.AsyncClient) -> str:
+    """images: list of {data: base64str, mime: str}. Returns text description."""
+    if not images or not settings.ANTHROPIC_API_KEY:
+        return ""
+    content: list = [{"type": "text", "text": "Опиши подробно что изображено на каждой фотографии (для контекста создания поста в соцсетях):"}]
+    for img in images[:5]:
+        content.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": img.get("mime", "image/jpeg"),
+                "data": img["data"],
+            }
+        })
+    try:
+        r = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": settings.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01"},
+            json={"model": _CLAUDE_MODEL, "max_tokens": 600, "messages": [{"role": "user", "content": content}]},
+        )
+        if r.status_code == 200:
+            return r.json()["content"][0]["text"].strip()
+    except Exception:
+        pass
+    return ""
 
 
 # ─── Async AI helpers ─────────────────────────────────────────────────────────
@@ -121,8 +166,15 @@ async def _generate_text(system: str, user_text: str, max_tokens: int = 1200) ->
 
 # ─── 1. Генерация текста поста ────────────────────────────────────────────────
 
+class ImageData(BaseModel):
+    data: str        # base64
+    mime: str = "image/jpeg"
+
+
 class TextIn(BaseModel):
     idea: str
+    url: Optional[str] = None
+    images: Optional[list[ImageData]] = None
 
 
 @router.post("/{business_id}/generate-text")
@@ -146,6 +198,21 @@ async def generate_post_text(
     niche = profile.get("niche", "")
     target = profile.get("target_audience", "")
 
+    context_parts: list[str] = []
+
+    if body.url:
+        url_text = await _fetch_url_text(body.url)
+        context_parts.append(f"Контент по ссылке ({body.url}):\n{url_text}")
+
+    if body.images:
+        async with httpx.AsyncClient(timeout=30) as cl:
+            img_dicts = [{"data": img.data, "mime": img.mime} for img in body.images]
+            img_desc = await _describe_images(img_dicts, cl)
+        if img_desc:
+            context_parts.append(f"Описание прикреплённых фото:\n{img_desc}")
+
+    extra = ("\n\n" + "\n\n".join(context_parts)) if context_parts else ""
+
     system = (
         f"Ты — топовый SMM-копирайтер. Пишешь посты для бизнеса «{name}».\n"
         f"Ниша: {niche}. Целевая аудитория: {target}. Тон: {tone}.\n\n"
@@ -158,7 +225,7 @@ async def generate_post_text(
         "• СТРОГО используй только факты из идеи. Никогда не придумывай продукты, бренды, страны, события, детали, которые явно не указаны в идее"
     )
 
-    text = await _generate_text(system, f"Идея поста: {body.idea}")
+    text = await _generate_text(system, f"Идея поста: {body.idea}{extra}")
     return {"text": text}
 
 
@@ -167,6 +234,8 @@ async def generate_post_text(
 class PromptIn(BaseModel):
     post_text: str
     idea: Optional[str] = None
+    url: Optional[str] = None
+    images: Optional[list[ImageData]] = None
 
 
 @router.post("/{business_id}/generate-prompt")
@@ -182,6 +251,20 @@ async def generate_image_prompt(
     except HTTPException:
         niche = ""
 
+    context_parts: list[str] = []
+
+    if body.url:
+        url_text = await _fetch_url_text(body.url, max_chars=1000)
+        context_parts.append(f"Reference URL content:\n{url_text}")
+
+    if body.images:
+        async with httpx.AsyncClient(timeout=30) as cl:
+            img_dicts = [{"data": img.data, "mime": img.mime} for img in body.images]
+            img_desc = await _describe_images(img_dicts, cl)
+        if img_desc:
+            context_parts.append(f"Attached photos description:\n{img_desc}")
+
+    extra = ("\n\n" + "\n\n".join(context_parts)) if context_parts else ""
     idea_block = f"\nOriginal post idea: {body.idea}" if body.idea else ""
 
     system = (
@@ -198,7 +281,7 @@ async def generate_image_prompt(
     )
     user_text = (
         f"Business niche: {niche}{idea_block}\n\n"
-        f"Post text:\n{body.post_text}\n\n"
+        f"Post text:\n{body.post_text}{extra}\n\n"
         "Write a specific image prompt that shows exactly what this post is about:"
     )
 
@@ -209,7 +292,8 @@ async def generate_image_prompt(
 # ─── 3. Генерация изображения ─────────────────────────────────────────────────
 
 class ImageIn(BaseModel):
-    prompt: str
+    prompt: Optional[str] = None
+    prompt_ru: Optional[str] = None
     aspect_ratio: str = "1:1"
 
 
@@ -221,11 +305,29 @@ async def generate_image(
 ):
     import asyncio
     from app.services.gemini_image import generate_image_sync
+
+    prompt = body.prompt
+
+    if body.prompt_ru:
+        translation_system = (
+            "You are a professional translator specializing in AI image generation prompts. "
+            "Translate the following prompt from Russian to English. "
+            "Preserve all visual details, style, mood, and compositional elements exactly. "
+            "Return ONLY the English translation, no explanations or comments."
+        )
+        try:
+            prompt = await _generate_text(translation_system, body.prompt_ru, 400)
+        except Exception:
+            prompt = body.prompt_ru
+
+    if not prompt:
+        raise HTTPException(400, "Укажите prompt или prompt_ru")
+
     try:
-        b64 = await asyncio.to_thread(generate_image_sync, body.prompt, body.aspect_ratio)
+        b64 = await asyncio.to_thread(generate_image_sync, prompt, body.aspect_ratio)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return {"image_base64": b64}
+    return {"image_base64": b64, "prompt_en": prompt}
 
 
 # ─── 4. Публикация в соцсети ─────────────────────────────────────────────────
@@ -357,7 +459,6 @@ async def publish_to_plan(
                 continue
 
             token = decrypt_token(connection.token_encrypted)
-            # Для VK используем пользовательский токен из аналитики (он поддерживает загрузку фото)
             vk_user_token = (
                 decrypt_token(connection.vk_user_token_encrypted)
                 if platform_str == "vk" and connection.vk_user_token_encrypted
@@ -382,7 +483,6 @@ async def publish_to_plan(
                     except ValueError as ve:
                         err = str(ve)
                         if "group auth" in err.lower() or "unavailable with group" in err.lower():
-                            # Токен сообщества не поддерживает загрузку фото → публикуем без фото
                             ext_id = await _publish_to_vk(
                                 session, publish_token, connection.external_page_id,
                                 full_text, None,

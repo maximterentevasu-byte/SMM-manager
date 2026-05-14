@@ -5,8 +5,22 @@ import api from "@/lib/api";
 
 type Platform = "vk" | "telegram";
 type ConnectedPlatform = { platform: Platform; page_name: string };
+type ImageMode = "ai" | "my" | null;
 
-const MAX_IMAGE_RETRIES = 2;
+const MAX_FILES = 10;
+
+const readFileAsBase64 = (file: File): Promise<{ data: string; mime: string }> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      const parts = result.split(",");
+      const mime = parts[0].replace("data:", "").replace(";base64", "") || "image/jpeg";
+      resolve({ data: parts[1] || "", mime });
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 
 export default function PostCreatorPage() {
   const [businessId] = useState(() =>
@@ -14,29 +28,37 @@ export default function PostCreatorPage() {
   );
   const [connectedPlatforms, setConnectedPlatforms] = useState<ConnectedPlatform[]>([]);
 
-  // ── Step states ──────────────────────────────────────────────────────────
+  // ── Block 1 ──────────────────────────────────────────────────────────────
   const [idea, setIdea] = useState("");
-  const [ideaFile, setIdeaFile] = useState<File | null>(null);
-  const [ideaFilePreview, setIdeaFilePreview] = useState("");
+  const [ideaUrl, setIdeaUrl] = useState("");
+  const [ideaFiles, setIdeaFiles] = useState<File[]>([]);
+  const [ideaFilePreviews, setIdeaFilePreviews] = useState<string[]>([]);
 
+  // ── Block 2 ──────────────────────────────────────────────────────────────
   const [postText, setPostText] = useState("");
-  const [imagePrompt, setImagePrompt] = useState("");
-  const [imageBase64, setImageBase64] = useState("");
-  const [imageRetries, setImageRetries] = useState(0);
 
+  // ── Block 3 ──────────────────────────────────────────────────────────────
+  const [imageMode, setImageMode] = useState<ImageMode>(null);
+  const [imagePrompt, setImagePrompt] = useState("");
+  const [myPromptRu, setMyPromptRu] = useState("");
+
+  // ── Block 4 ──────────────────────────────────────────────────────────────
+  const [imageBase64, setImageBase64] = useState("");
+
+  // ── Platforms / schedule ─────────────────────────────────────────────────
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([]);
   const [publishNow, setPublishNow] = useState(true);
   const [publishDate, setPublishDate] = useState("");
   const [publishTime, setPublishTime] = useState("12:00");
 
-  // ── Loading / message states ──────────────────────────────────────────────
+  // ── Loading states ────────────────────────────────────────────────────────
   const [loadingText, setLoadingText] = useState(false);
   const [loadingPrompt, setLoadingPrompt] = useState(false);
   const [loadingImage, setLoadingImage] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishMsg, setPublishMsg] = useState("");
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const multiFileRef = useRef<HTMLInputElement>(null);
   const ownPhotoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -57,19 +79,40 @@ export default function PostCreatorPage() {
     setPublishDate(`${yyyy}-${mm}-${dd}`);
   }, [businessId]);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
+  // ── File handlers ─────────────────────────────────────────────────────────
 
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onMultiFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).slice(0, MAX_FILES);
+    setIdeaFiles(files);
+    const previews = files
+      .filter(f => f.type.startsWith("image/"))
+      .map(f => URL.createObjectURL(f));
+    setIdeaFilePreviews(previews);
+    e.target.value = "";
+  };
+
+  const removeFile = (idx: number) => {
+    const newFiles = ideaFiles.filter((_, i) => i !== idx);
+    const newPreviews = ideaFilePreviews.filter((_, i) => i !== idx);
+    setIdeaFiles(newFiles);
+    setIdeaFilePreviews(newPreviews);
+  };
+
+  const onOwnPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    setIdeaFile(f);
-    if (f.type.startsWith("image/")) {
-      const url = URL.createObjectURL(f);
-      setIdeaFilePreview(url);
-    } else {
-      setIdeaFilePreview("");
-    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      setImageBase64(result.split(",")[1] || "");
+      setImageMode(null);
+      setImagePrompt("");
+    };
+    reader.readAsDataURL(f);
+    e.target.value = "";
   };
+
+  // ── AI actions ────────────────────────────────────────────────────────────
 
   const generateText = async () => {
     if (!idea.trim()) return;
@@ -77,9 +120,17 @@ export default function PostCreatorPage() {
     setPostText("");
     setImagePrompt("");
     setImageBase64("");
-    setImageRetries(0);
+    setImageMode(null);
+    setMyPromptRu("");
     try {
-      const { data } = await api.post(`/post-creator/${businessId}/generate-text`, { idea });
+      const imageData = await Promise.all(
+        ideaFiles.filter(f => f.type.startsWith("image/")).map(readFileAsBase64)
+      );
+      const { data } = await api.post(`/post-creator/${businessId}/generate-text`, {
+        idea,
+        url: ideaUrl.trim() || undefined,
+        images: imageData.length > 0 ? imageData : undefined,
+      });
       setPostText(data.text);
     } catch (e: any) {
       const d = e?.response?.data;
@@ -91,15 +142,21 @@ export default function PostCreatorPage() {
     }
   };
 
-  const generatePrompt = async () => {
+  const generateAiPrompt = async () => {
     if (!postText.trim()) return;
     setLoadingPrompt(true);
     setImageBase64("");
-    setImageRetries(0);
+    setImageMode("ai");
+    setImagePrompt("");
     try {
+      const imageData = await Promise.all(
+        ideaFiles.filter(f => f.type.startsWith("image/")).map(readFileAsBase64)
+      );
       const { data } = await api.post(`/post-creator/${businessId}/generate-prompt`, {
         post_text: postText,
         idea: idea || undefined,
+        url: ideaUrl.trim() || undefined,
+        images: imageData.length > 0 ? imageData : undefined,
       });
       setImagePrompt(data.prompt);
     } catch (e: any) {
@@ -110,15 +167,15 @@ export default function PostCreatorPage() {
   };
 
   const generateImage = async () => {
-    if (!imagePrompt.trim()) return;
+    const prompt = imagePrompt.trim();
+    if (!prompt) return;
     setLoadingImage(true);
     try {
       const { data } = await api.post(`/post-creator/${businessId}/generate-image`, {
-        prompt: imagePrompt,
+        prompt,
         aspect_ratio: "1:1",
       });
       setImageBase64(data.image_base64);
-      setImageRetries((r) => r + 1);
     } catch (e: any) {
       alert("Ошибка генерации: " + (e?.response?.data?.detail || "попробуй изменить промт"));
     } finally {
@@ -126,16 +183,21 @@ export default function PostCreatorPage() {
     }
   };
 
-  const onOwnPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const result = ev.target?.result as string;
-      // strip data URL prefix — keep only base64 part
-      setImageBase64(result.split(",")[1] || "");
-    };
-    reader.readAsDataURL(f);
+  const generateMyImage = async () => {
+    if (!myPromptRu.trim()) return;
+    setLoadingImage(true);
+    try {
+      const { data } = await api.post(`/post-creator/${businessId}/generate-image`, {
+        prompt_ru: myPromptRu,
+        aspect_ratio: "1:1",
+      });
+      setImageBase64(data.image_base64);
+      if (data.prompt_en) setImagePrompt(data.prompt_en);
+    } catch (e: any) {
+      alert("Ошибка генерации: " + (e?.response?.data?.detail || "попробуй изменить промт"));
+    } finally {
+      setLoadingImage(false);
+    }
   };
 
   const togglePlatform = (p: Platform) => {
@@ -189,8 +251,7 @@ export default function PostCreatorPage() {
   const hasText = !!postText.trim();
   const hasPrompt = !!imagePrompt.trim();
   const hasImage = !!imageBase64;
-  const canRetry = imageRetries < MAX_IMAGE_RETRIES + 1;
-  const retriesLeft = MAX_IMAGE_RETRIES + 1 - imageRetries;
+  const showBlock3 = (imageMode === "ai" && (hasPrompt || loadingPrompt)) || imageMode === "my";
 
   // ── Styles ────────────────────────────────────────────────────────────────
 
@@ -273,9 +334,9 @@ export default function PostCreatorPage() {
       <div style={{ background: "#fff", borderBottom: "1px solid #EAE8E2", padding: "0 2rem" }}>
         <div style={{ maxWidth: 780, margin: "0 auto", height: 64,
           display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 20 }}>✏️</span>
+          <span style={{ fontSize: 20 }}>⚡</span>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>
-            Создание поста
+            Быстрый пост
           </h1>
         </div>
       </div>
@@ -286,36 +347,77 @@ export default function PostCreatorPage() {
         <div style={card}>
           {sectionTitle(1, "Опишите идею поста", false)}
           <p style={{ color: "#888", fontSize: 13, margin: "0 0 16px", lineHeight: 1.6 }}>
-            Расскажите о мероприятии, продукте, акции — любых деталях: даты, адрес, стилистика.
-            При необходимости прикрепите фото или документ.
+            Расскажите о мероприятии, продукте, акции. Можно добавить ссылку на сайт или пост в соцсети, прикрепить фото.
           </p>
-          {textarea(idea, setIdea,
-            "Например: открываем новую точку 20 мая, адрес Ленина 15, скидка 20% на всё меню в день открытия, атмосфера уютного кафе...",
-            5
-          )}
 
-          {/* File attach */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12 }}>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              style={{ background: "none", border: "1px solid #E0DED8", borderRadius: 8,
-                padding: "7px 14px", cursor: "pointer", fontSize: 12, color: "#666",
-                display: "flex", alignItems: "center", gap: 6 }}>
-              📎 {ideaFile ? ideaFile.name : "Прикрепить файл или фото"}
-            </button>
-            {ideaFile && (
-              <button onClick={() => { setIdeaFile(null); setIdeaFilePreview(""); }}
-                style={{ background: "none", border: "none", cursor: "pointer",
-                  fontSize: 12, color: "#aaa" }}>✕ убрать</button>
-            )}
-            <input ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx,.txt"
-              style={{ display: "none" }} onChange={onFileChange} />
+          {/* URL field */}
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 12, color: "#888", display: "block", marginBottom: 6 }}>
+              🔗 Ссылка на сайт или пост (ИИ проанализирует)
+            </label>
+            <input
+              type="url"
+              value={ideaUrl}
+              onChange={(e) => setIdeaUrl(e.target.value)}
+              placeholder="https://example.com/post или https://vk.com/wall..."
+              style={{
+                width: "100%", padding: "10px 14px",
+                border: "1px solid #E0DED8", borderRadius: 10,
+                fontSize: 13, background: "#FAFAF8", outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
           </div>
 
-          {ideaFilePreview && (
-            <img src={ideaFilePreview} alt="preview"
-              style={{ marginTop: 12, maxHeight: 160, borderRadius: 10,
-                objectFit: "cover", border: "1px solid #EAE8E2" }} />
+          {textarea(idea, setIdea,
+            "Например: открываем новую точку 20 мая, адрес Ленина 15, скидка 20% на всё меню в день открытия, атмосфера уютного кафе...",
+            4
+          )}
+
+          {/* Multi-file attach */}
+          <div style={{ marginTop: 12 }}>
+            <button
+              onClick={() => multiFileRef.current?.click()}
+              style={{ background: "none", border: "1px solid #E0DED8", borderRadius: 8,
+                padding: "7px 14px", cursor: "pointer", fontSize: 12, color: "#666",
+                display: "inline-flex", alignItems: "center", gap: 6 }}>
+              📎 {ideaFiles.length > 0 ? `Прикреплено фото: ${ideaFiles.length}` : "Прикрепить фото (до 10)"}
+            </button>
+            {ideaFiles.length > 0 && (
+              <span style={{ marginLeft: 10, fontSize: 11, color: "#aaa" }}>
+                нажмите ещё раз, чтобы заменить
+              </span>
+            )}
+            <input
+              ref={multiFileRef}
+              type="file"
+              accept="image/*"
+              multiple
+              style={{ display: "none" }}
+              onChange={onMultiFileChange}
+            />
+          </div>
+
+          {/* File previews */}
+          {ideaFilePreviews.length > 0 && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+              {ideaFilePreviews.map((src, idx) => (
+                <div key={idx} style={{ position: "relative" }}>
+                  <img src={src} alt={`file-${idx}`}
+                    style={{ width: 72, height: 72, objectFit: "cover",
+                      borderRadius: 8, border: "1px solid #EAE8E2" }} />
+                  <button
+                    onClick={() => removeFile(idx)}
+                    style={{
+                      position: "absolute", top: -6, right: -6,
+                      width: 18, height: 18, borderRadius: "50%",
+                      background: "#1a1a1a", border: "none", color: "#fff",
+                      cursor: "pointer", fontSize: 10, display: "flex",
+                      alignItems: "center", justifyContent: "center", padding: 0,
+                    }}>✕</button>
+                </div>
+              ))}
+            </div>
           )}
 
           <div style={{ marginTop: 20 }}>
@@ -340,34 +442,99 @@ export default function PostCreatorPage() {
               {btn("⟳ Обновить", generateText,
                 { disabled: !idea.trim() || loadingText, loading: loadingText, small: true, color: "#555" }
               )}
-              {hasText && btn(
-                loadingPrompt ? "Создаю промт..." : "→ Создать промт для картинки",
-                generatePrompt,
-                { disabled: loadingPrompt, loading: loadingPrompt, color: "#0F6E56" }
-              )}
             </div>
+
+            {/* Image action buttons */}
+            {hasText && (
+              <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #F0EEE8" }}>
+                <div style={{ fontSize: 12, color: "#888", marginBottom: 10, fontWeight: 600 }}>
+                  Изображение к посту:
+                </div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {btn(
+                    loadingPrompt && imageMode === "ai" ? "Создаю промт..." : "🤖 ИИ промт для картинки",
+                    () => { setImageMode("ai"); generateAiPrompt(); },
+                    { disabled: loadingPrompt, loading: loadingPrompt && imageMode === "ai",
+                      color: imageMode === "ai" ? "#0F6E56" : "#4680C2" }
+                  )}
+                  <button
+                    onClick={() => {
+                      setImageMode("my");
+                      setImagePrompt("");
+                      setImageBase64("");
+                    }}
+                    style={{
+                      padding: "10px 22px",
+                      background: imageMode === "my" ? "#1a1a1a" : "#fff",
+                      color: imageMode === "my" ? "#fff" : "#1a1a1a",
+                      border: "1.5px solid #1a1a1a", borderRadius: 10,
+                      cursor: "pointer", fontSize: 13, fontWeight: 600,
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                    }}>
+                    ✏️ Мой промт для картинки
+                  </button>
+                  <button
+                    onClick={() => ownPhotoRef.current?.click()}
+                    style={{
+                      padding: "10px 22px", background: "#fff",
+                      color: "#555", border: "1.5px solid #E0DED8",
+                      borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600,
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                    }}>
+                    📁 Загрузить своё фото
+                  </button>
+                  <input ref={ownPhotoRef} type="file" accept="image/*"
+                    style={{ display: "none" }} onChange={onOwnPhoto} />
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* ── 3. Промт для картинки ── */}
-        {(hasPrompt || loadingPrompt) && (
+        {showBlock3 && (
           <div style={card}>
-            {sectionTitle(3, "Промт для генерации изображения", hasPrompt)}
-            <p style={{ color: "#888", fontSize: 13, margin: "0 0 14px" }}>
-              Claude составил промт на английском для Imagen 3. Можете скорректировать.
-            </p>
-            {textarea(imagePrompt, setImagePrompt,
-              "Здесь появится промт для изображения...", 4)}
-            <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-              {btn("⟳ Обновить промт", generatePrompt,
-                { disabled: !postText.trim() || loadingPrompt, loading: loadingPrompt, small: true, color: "#555" }
-              )}
-              {hasPrompt && btn(
-                loadingImage ? "Генерирую..." : "🖼 Сгенерировать изображение",
-                generateImage,
-                { disabled: loadingImage, loading: loadingImage, color: "#4680C2" }
-              )}
-            </div>
+            {imageMode === "ai"
+              ? sectionTitle(3, "Промт для генерации изображения", hasPrompt)
+              : sectionTitle(3, "Мой промт для изображения", !!myPromptRu.trim())}
+
+            {imageMode === "ai" && (
+              <>
+                <p style={{ color: "#888", fontSize: 13, margin: "0 0 14px" }}>
+                  ИИ составил промт на английском. Можете отредактировать перед генерацией.
+                </p>
+                {loadingPrompt && !hasPrompt ? (
+                  <div style={{ padding: "20px 0", color: "#888", fontSize: 13 }}>⏳ Анализирую контент...</div>
+                ) : (
+                  textarea(imagePrompt, setImagePrompt,
+                    "Здесь появится промт для изображения...", 4)
+                )}
+                <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+                  {hasPrompt && btn(
+                    loadingImage ? "Генерирую..." : "🖼 Сгенерировать изображение",
+                    generateImage,
+                    { disabled: loadingImage, loading: loadingImage, color: "#4680C2" }
+                  )}
+                </div>
+              </>
+            )}
+
+            {imageMode === "my" && (
+              <>
+                <p style={{ color: "#888", fontSize: 13, margin: "0 0 14px" }}>
+                  Опишите изображение на русском языке — ИИ переведёт на английский и сгенерирует картинку.
+                </p>
+                {textarea(myPromptRu, setMyPromptRu,
+                  "Например: аппетитная пицца на деревянном столе, тёплый свет, крупный план, фотореализм...", 4)}
+                <div style={{ marginTop: 14 }}>
+                  {btn(
+                    loadingImage ? "Генерирую..." : "🌐 Перевести и сгенерировать",
+                    generateMyImage,
+                    { disabled: !myPromptRu.trim() || loadingImage, loading: loadingImage, color: "#4680C2" }
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -377,41 +544,16 @@ export default function PostCreatorPage() {
             {sectionTitle(4, "Изображение", hasImage)}
             {loadingImage && !hasImage && (
               <div style={{ padding: "40px 0", textAlign: "center", color: "#888" }}>
-                ⏳ Gemini Imagen 3 рисует...
+                ⏳ Генерирую изображение...
               </div>
             )}
             {hasImage && (
-              <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
-                <img
-                  src={`data:image/png;base64,${imageBase64}`}
-                  alt="generated"
-                  style={{ width: 280, height: 280, objectFit: "cover",
-                    borderRadius: 14, border: "1px solid #EAE8E2", flexShrink: 0 }}
-                />
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div style={{ fontSize: 13, color: "#888", marginBottom: 4 }}>
-                    Использовано попыток: {imageRetries} / {MAX_IMAGE_RETRIES + 1}
-                  </div>
-                  {btn(
-                    canRetry && retriesLeft > 0
-                      ? `⟳ Обновить (осталось ${retriesLeft})`
-                      : "Лимит попыток исчерпан",
-                    generateImage,
-                    { disabled: !canRetry || retriesLeft === 0 || loadingImage,
-                      loading: loadingImage, small: true, color: "#555" }
-                  )}
-                  <button
-                    onClick={() => ownPhotoRef.current?.click()}
-                    style={{ padding: "7px 16px", background: "none",
-                      border: "1px solid #E0DED8", borderRadius: 8,
-                      cursor: "pointer", fontSize: 12, color: "#444",
-                      display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    📁 Загрузить своё фото
-                  </button>
-                  <input ref={ownPhotoRef} type="file" accept="image/*"
-                    style={{ display: "none" }} onChange={onOwnPhoto} />
-                </div>
-              </div>
+              <img
+                src={`data:image/png;base64,${imageBase64}`}
+                alt="generated"
+                style={{ width: 280, height: 280, objectFit: "cover",
+                  borderRadius: 14, border: "1px solid #EAE8E2", display: "block" }}
+              />
             )}
           </div>
         )}

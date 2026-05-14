@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 const NAV = [
   { href: "/home",         icon: "⌂",  label: "Главная" },
-  { href: "/post-creator", icon: "✏️", label: "Создание постов" },
+  { href: "/post-creator", icon: "⚡", label: "Быстрый пост" },
   { href: "/analytics",    icon: "📊", label: "Аналитика" },
   { href: "/content",      icon: "📅", label: "Контент-план" },
   { href: "/strategy",     icon: "🎯", label: "Стратегия и онбординг" },
