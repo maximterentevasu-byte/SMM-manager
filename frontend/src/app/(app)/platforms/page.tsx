@@ -160,6 +160,7 @@ export default function PlatformsPage() {
           page_name: data.page_name,
           external_page_id: f.pageId.trim(),
           is_active: true,
+          admin_chat_id: null,
         }];
       });
       setForm((p) => ({ ...p, [platformId]: { token: "", pageId: "" } }));
