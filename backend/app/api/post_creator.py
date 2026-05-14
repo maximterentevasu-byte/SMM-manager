@@ -340,7 +340,7 @@ async def generate_post_text(
         "• СТРОГО используй только факты из идеи. Никогда не придумывай продукты, бренды, страны, события, детали, которые явно не указаны в идее"
     )
 
-    text = await _generate_text_by_model(system, f"Задача: {body.idea}{extra}", body.model, max_tokens=2000)
+    text = await _generate_text_by_model(system, f"Задача: {body.idea}{extra}", body.model, max_tokens=3000)
     return {"text": text, "model_used": body.model}
 
 

@@ -587,7 +587,7 @@ export default function PostCreatorPage() {
               Отредактируйте текст по необходимости или обновите.
             </p>
             {textarea(postText, setPostText,
-              "Здесь появится сгенерированный текст...", 8)}
+              "Здесь появится сгенерированный текст...", 14)}
             <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
               {btn("⟳ Обновить", generateText,
                 { disabled: !idea.trim() || loadingText, loading: loadingText, small: true, color: "#555" }
