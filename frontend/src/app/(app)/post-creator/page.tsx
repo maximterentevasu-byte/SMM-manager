@@ -468,69 +468,6 @@ export default function PostCreatorPage() {
         </div>
       </div>
 
-      {/* Model stats panel */}
-      {(() => {
-        const nextModel = getNextModel(creatorStats);
-        const color = MODEL_COLORS[nextModel];
-        const isRanking = creatorStats.totalGens >= 50;
-        const ranking = isRanking ? calcRanking(creatorStats) : [];
-        return (
-          <div style={{ background: "#FAFAF8", borderBottom: "1px solid #EAE8E2", padding: "8px 2rem" }}>
-            <div style={{ maxWidth: 780, margin: "0 auto", display: "flex",
-              alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 11, color: "#aaa", whiteSpace: "nowrap" }}>
-                  {isRanking ? "Лучшая модель:" : "Следующая генерация:"}
-                </span>
-                <span style={{
-                  padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700,
-                  background: color + "20", color,
-                  border: `1px solid ${color}40`,
-                  whiteSpace: "nowrap",
-                }}>
-                  {MODEL_LABELS[nextModel]}
-                </span>
-              </div>
-
-              {!isRanking ? (
-                <span style={{ fontSize: 11, color: "#bbb" }}>
-                  {creatorStats.totalGens}/50 генераций до рейтинга
-                </span>
-              ) : (
-                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 11, color: "#aaa" }}>Рейтинг:</span>
-                  {ranking.map((m, i) => (
-                    <span key={m} style={{
-                      padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 600,
-                      background: i === 0 ? MODEL_COLORS[m] : "#EDECEA",
-                      color: i === 0 ? "#fff" : "#666",
-                    }}>
-                      {i + 1}. {MODEL_LABELS[m]}
-                      {i === 0 && ` · ${creatorStats[m].publishes} публ.`}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <div style={{ marginLeft: "auto", display: "flex", gap: 12, alignItems: "center" }}>
-                {Object.entries(creatorStats).filter(([k]) => ["claude","gpt","gemini"].includes(k)).map(([m, st]) => (
-                  <span key={m} style={{ fontSize: 10, color: "#ccc" }}>
-                    {MODEL_LABELS[m as ModelKey].split(" ")[0]}: {(st as ModelStats).gens}г/{(st as ModelStats).publishes}п
-                  </span>
-                ))}
-                {creatorStats.totalGens > 0 && (
-                  <button
-                    onClick={() => { const s = defaultStats(); setCreatorStats(s); saveStats(s); }}
-                    style={{ fontSize: 10, color: "#ccc", background: "none", border: "none",
-                      cursor: "pointer", textDecoration: "underline", padding: 0 }}>
-                    сброс
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       <div style={{ maxWidth: 780, margin: "0 auto", padding: "2rem" }}>
 
@@ -611,56 +548,19 @@ export default function PostCreatorPage() {
             </div>
           )}
 
-          <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ marginTop: 20 }}>
             {btn(
-              loadingText
-                ? "Генерирую текст..."
-                : `✨ Сгенерировать текст`,
+              loadingText ? "Генерирую текст..." : "✨ Сгенерировать текст",
               generateText,
               { disabled: !idea.trim() || loadingText, loading: loadingText, color: "#1a1a1a" }
             )}
-            {!loadingText && (() => {
-              const m = getNextModel(creatorStats);
-              return (
-                <span style={{
-                  padding: "4px 10px", borderRadius: 16, fontSize: 11, fontWeight: 600,
-                  background: MODEL_COLORS[m] + "18", color: MODEL_COLORS[m],
-                  border: `1px solid ${MODEL_COLORS[m]}30`,
-                }}>
-                  {MODEL_LABELS[m]}
-                </span>
-              );
-            })()}
           </div>
         </div>
 
         {/* ── 2. Текст поста ── */}
         {(hasText || loadingText) && (
           <div style={card}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: "50%", display: "flex",
-                  alignItems: "center", justifyContent: "center", flexShrink: 0,
-                  fontSize: 13, fontWeight: 700,
-                  background: hasText ? "#0F6E56" : "#1a1a1a",
-                  color: "#fff",
-                }}>
-                  {hasText ? "✓" : 2}
-                </div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a1a" }}>Текст поста</div>
-              </div>
-              {hasText && (
-                <span style={{
-                  padding: "3px 10px", borderRadius: 16, fontSize: 11, fontWeight: 600,
-                  background: MODEL_COLORS[usedModelForText] + "18",
-                  color: MODEL_COLORS[usedModelForText],
-                  border: `1px solid ${MODEL_COLORS[usedModelForText]}30`,
-                }}>
-                  {MODEL_LABELS[usedModelForText]}
-                </span>
-              )}
-            </div>
+            {sectionTitle(2, "Текст поста", hasText)}
             <p style={{ color: "#888", fontSize: 13, margin: "0 0 14px" }}>
               Отредактируйте текст по необходимости или обновите.
             </p>

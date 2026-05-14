@@ -236,7 +236,7 @@ async def _generate_text_by_model(
                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
                 json={
                     "model": _GPT_USER_MODEL,
-                    "max_tokens": max_tokens,
+                    "max_completion_tokens": max_tokens,
                     "messages": [
                         {"role": "system", "content": system},
                         {"role": "user", "content": user_text},
