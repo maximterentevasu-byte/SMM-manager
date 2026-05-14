@@ -136,24 +136,24 @@ async def _describe_images(images: list[dict], client: httpx.AsyncClient) -> str
 
 # ─── Async AI helpers ─────────────────────────────────────────────────────────
 
-async def _gemini_text(client: httpx.AsyncClient, system: str, user_text: str, max_tokens: int) -> str:
-    r = await client.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={settings.GEMINI_API_KEY}",
-        json={
-            "contents": [{"parts": [{"text": f"{system}\n\n{user_text}"}]}],
-            "generationConfig": {"maxOutputTokens": max_tokens},
-        },
+def _gemini_text_sync(model: str, system: str, user_text: str, max_tokens: int) -> str:
+    from google import genai
+    from google.genai import types
+    gc = genai.Client(api_key=settings.GEMINI_API_KEY)
+    resp = gc.models.generate_content(
+        model=model,
+        contents=f"{system}\n\n{user_text}",
+        config=types.GenerateContentConfig(max_output_tokens=max_tokens),
     )
-    if r.status_code != 200:
-        raise ValueError(f"Gemini {r.status_code}: {r.text[:200]}")
-    cands = r.json().get("candidates", [])
-    if not cands:
-        raise ValueError("Gemini: нет кандидатов")
-    parts = cands[0].get("content", {}).get("parts", [])
-    text = parts[0].get("text", "").strip() if parts else ""
-    if not text:
+    text = resp.text or ""
+    if not text.strip():
         raise ValueError("Gemini: пустой ответ")
-    return text
+    return text.strip()
+
+
+async def _gemini_text(client: httpx.AsyncClient, system: str, user_text: str, max_tokens: int) -> str:
+    import asyncio
+    return await asyncio.to_thread(_gemini_text_sync, _GEMINI_TEXT_MODEL, system, user_text, max_tokens)
 
 
 async def _gpt_text(client: httpx.AsyncClient, system: str, user_text: str, max_tokens: int) -> str:
@@ -250,24 +250,11 @@ async def _generate_text_by_model(
         if model == "gemini":
             if not settings.GEMINI_API_KEY:
                 raise HTTPException(500, "Gemini API недоступен")
-            r = await client.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{_GEMINI_TEXT_MODEL}:generateContent"
-                f"?key={settings.GEMINI_API_KEY}",
-                json={
-                    "contents": [{"parts": [{"text": f"{system}\n\n{user_text}"}]}],
-                    "generationConfig": {"maxOutputTokens": max_tokens},
-                },
-            )
-            if r.status_code != 200:
-                raise HTTPException(500, f"Gemini {r.status_code}: {r.text[:200]}")
-            cands = r.json().get("candidates", [])
-            if not cands:
-                raise HTTPException(500, "Gemini: нет кандидатов")
-            parts = cands[0].get("content", {}).get("parts", [])
-            text = parts[0].get("text", "").strip() if parts else ""
-            if not text:
-                raise HTTPException(500, "Gemini: пустой ответ")
-            return text
+            import asyncio
+            try:
+                return await asyncio.to_thread(_gemini_text_sync, _GEMINI_TEXT_MODEL, system, user_text, max_tokens)
+            except Exception as e:
+                raise HTTPException(500, str(e))
 
     raise HTTPException(500, f"Неизвестная модель: {model}")
 
