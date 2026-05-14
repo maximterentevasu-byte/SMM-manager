@@ -1,5 +1,6 @@
 import uuid
 import io
+from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -307,10 +308,11 @@ async def export_profile(
     wb.save(buf)
     buf.seek(0)
     safe_name = (business.name or "business").replace(" ", "_")[:40]
+    encoded = quote(f"profile_{safe_name}.xlsx", safe="")
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=profile_{safe_name}.xlsx"},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"},
     )
 
 
