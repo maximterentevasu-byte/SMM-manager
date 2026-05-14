@@ -22,6 +22,8 @@ from app.models.models import Business, ContentSlot, PlanStatus, Platform, Platf
 
 router = APIRouter()
 _CLAUDE_MODEL = "claude-sonnet-4-6"
+_GPT_USER_MODEL = "gpt-5.4"
+_GEMINI_TEXT_MODEL = "gemini-3.1-flash"
 
 
 # ─── DB helper ───────────────────────────────────────────────────────────────
@@ -216,6 +218,60 @@ async def _generate_text(system: str, user_text: str, max_tokens: int = 1200) ->
     raise HTTPException(500, "Ошибка генерации: " + " | ".join(errors))
 
 
+async def _generate_text_by_model(
+    system: str, user_text: str, model: str, max_tokens: int = 1200
+) -> str:
+    """Генерация конкретной премиум-моделью без каскадного фолбека."""
+    async with httpx.AsyncClient(timeout=60) as client:
+        if model == "claude":
+            if not settings.ANTHROPIC_API_KEY:
+                raise HTTPException(500, "Claude API недоступен")
+            return await _claude_text(client, system, user_text, max_tokens)
+
+        if model == "gpt":
+            if not settings.OPENAI_API_KEY:
+                raise HTTPException(500, "OpenAI API недоступен")
+            r = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+                json={
+                    "model": _GPT_USER_MODEL,
+                    "max_tokens": max_tokens,
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user_text},
+                    ],
+                },
+            )
+            if r.status_code != 200:
+                raise HTTPException(500, f"GPT {r.status_code}: {r.text[:200]}")
+            return r.json()["choices"][0]["message"]["content"].strip()
+
+        if model == "gemini":
+            if not settings.GEMINI_API_KEY:
+                raise HTTPException(500, "Gemini API недоступен")
+            r = await client.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{_GEMINI_TEXT_MODEL}:generateContent"
+                f"?key={settings.GEMINI_API_KEY}",
+                json={
+                    "contents": [{"parts": [{"text": f"{system}\n\n{user_text}"}]}],
+                    "generationConfig": {"maxOutputTokens": max_tokens},
+                },
+            )
+            if r.status_code != 200:
+                raise HTTPException(500, f"Gemini {r.status_code}: {r.text[:200]}")
+            cands = r.json().get("candidates", [])
+            if not cands:
+                raise HTTPException(500, "Gemini: нет кандидатов")
+            parts = cands[0].get("content", {}).get("parts", [])
+            text = parts[0].get("text", "").strip() if parts else ""
+            if not text:
+                raise HTTPException(500, "Gemini: пустой ответ")
+            return text
+
+    raise HTTPException(500, f"Неизвестная модель: {model}")
+
+
 # ─── 1. Генерация текста поста ────────────────────────────────────────────────
 
 class ImageData(BaseModel):
@@ -227,6 +283,7 @@ class TextIn(BaseModel):
     idea: str
     url: Optional[str] = None
     images: Optional[list[ImageData]] = None
+    model: str = "claude"  # "claude" | "gpt" | "gemini"
 
 
 @router.post("/{business_id}/generate-text")
@@ -279,8 +336,8 @@ async def generate_post_text(
         "• СТРОГО используй только факты из идеи. Никогда не придумывай продукты, бренды, страны, события, детали, которые явно не указаны в идее"
     )
 
-    text = await _generate_text(system, f"Задача: {body.idea}{extra}")
-    return {"text": text}
+    text = await _generate_text_by_model(system, f"Задача: {body.idea}{extra}", body.model)
+    return {"text": text, "model_used": body.model}
 
 
 # ─── 2. Генерация промта для изображения ─────────────────────────────────────
@@ -290,6 +347,7 @@ class PromptIn(BaseModel):
     idea: Optional[str] = None
     url: Optional[str] = None
     images: Optional[list[ImageData]] = None
+    model: str = "claude"  # "claude" | "gpt" | "gemini"
 
 
 @router.post("/{business_id}/generate-prompt")
@@ -340,8 +398,8 @@ async def generate_image_prompt(
         "Write a specific image prompt that shows exactly what this post is about:"
     )
 
-    prompt = await _generate_text(system, user_text, 400)
-    return {"prompt": prompt}
+    prompt = await _generate_text_by_model(system, user_text, body.model, 400)
+    return {"prompt": prompt, "model_used": body.model}
 
 
 # ─── 3. Генерация изображения ─────────────────────────────────────────────────

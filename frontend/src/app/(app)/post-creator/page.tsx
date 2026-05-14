@@ -5,7 +5,62 @@ import api from "@/lib/api";
 
 type Platform = "vk" | "telegram";
 type ConnectedPlatform = { platform: Platform; page_name: string };
-type ImageMode = "ai" | "my" | "edit" | null;
+type ImageMode = "ai" | "edit" | null;
+type ModelKey = "claude" | "gpt" | "gemini";
+
+interface ModelStats { gens: number; publishes: number }
+interface CreatorStats {
+  claude: ModelStats; gpt: ModelStats; gemini: ModelStats;
+  totalGens: number; currentIdx: number;
+}
+
+const MODEL_ROTATION: ModelKey[] = ["claude", "gpt", "gemini"];
+const MODEL_LABELS: Record<ModelKey, string> = {
+  claude: "Claude Sonnet 4.6",
+  gpt: "GPT-5.4",
+  gemini: "Gemini 3.1 Flash",
+};
+const MODEL_COLORS: Record<ModelKey, string> = {
+  claude: "#D97706",
+  gpt: "#059669",
+  gemini: "#4680C2",
+};
+const STATS_KEY = "creator_stats_v1";
+
+function defaultStats(): CreatorStats {
+  return {
+    claude: { gens: 0, publishes: 0 },
+    gpt: { gens: 0, publishes: 0 },
+    gemini: { gens: 0, publishes: 0 },
+    totalGens: 0,
+    currentIdx: 0,
+  };
+}
+
+function loadStats(): CreatorStats {
+  if (typeof window === "undefined") return defaultStats();
+  try {
+    const raw = localStorage.getItem(STATS_KEY);
+    if (raw) return JSON.parse(raw) as CreatorStats;
+  } catch {}
+  return defaultStats();
+}
+
+function saveStats(s: CreatorStats) {
+  localStorage.setItem(STATS_KEY, JSON.stringify(s));
+}
+
+function calcRanking(s: CreatorStats): ModelKey[] {
+  return (["claude", "gpt", "gemini"] as ModelKey[]).slice().sort((a, b) => {
+    const diff = s[b].publishes - s[a].publishes;
+    return diff !== 0 ? diff : s[b].gens - s[a].gens;
+  });
+}
+
+function getNextModel(s: CreatorStats): ModelKey {
+  if (s.totalGens >= 50) return calcRanking(s)[0];
+  return MODEL_ROTATION[s.currentIdx % 3];
+}
 
 const MAX_FILES = 10;
 
@@ -40,7 +95,6 @@ export default function PostCreatorPage() {
   // ── Block 3 ──────────────────────────────────────────────────────────────
   const [imageMode, setImageMode] = useState<ImageMode>(null);
   const [imagePrompt, setImagePrompt] = useState("");
-  const [myPromptRu, setMyPromptRu] = useState("");
 
   // ── Edit mode ────────────────────────────────────────────────────────────
   const [editBaseIdx, setEditBaseIdx] = useState<number>(0);
@@ -63,6 +117,10 @@ export default function PostCreatorPage() {
   const [loadingImage, setLoadingImage] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishMsg, setPublishMsg] = useState("");
+
+  // ── Model rotation stats ──────────────────────────────────────────────────
+  const [creatorStats, setCreatorStats] = useState<CreatorStats>(loadStats);
+  const [usedModelForText, setUsedModelForText] = useState<ModelKey>("claude");
 
   const multiFileRef = useRef<HTMLInputElement>(null);
   const ownPhotoRef = useRef<HTMLInputElement>(null);
@@ -139,12 +197,12 @@ export default function PostCreatorPage() {
 
   const generateText = async () => {
     if (!idea.trim()) return;
+    const model = getNextModel(creatorStats);
     setLoadingText(true);
     setPostText("");
     setImagePrompt("");
     setImageBase64("");
     setImageMode(null);
-    setMyPromptRu("");
     try {
       const imageData = await Promise.all(
         ideaFiles.filter(f => f.type.startsWith("image/")).map(readFileAsBase64)
@@ -153,8 +211,20 @@ export default function PostCreatorPage() {
         idea,
         url: ideaUrl.trim() || undefined,
         images: imageData.length > 0 ? imageData : undefined,
+        model,
       });
       setPostText(data.text);
+      setUsedModelForText(model);
+      const newStats: CreatorStats = {
+        ...creatorStats,
+        [model]: { ...creatorStats[model], gens: creatorStats[model].gens + 1 },
+        totalGens: creatorStats.totalGens + 1,
+        currentIdx: creatorStats.totalGens >= 49
+          ? creatorStats.currentIdx
+          : (creatorStats.currentIdx + 1) % 3,
+      };
+      setCreatorStats(newStats);
+      saveStats(newStats);
     } catch (e: any) {
       const d = e?.response?.data;
       const detail = (typeof d === "string" ? d : d?.detail) || e?.message || "нет ответа от сервера";
@@ -180,6 +250,7 @@ export default function PostCreatorPage() {
         idea: idea || undefined,
         url: ideaUrl.trim() || undefined,
         images: imageData.length > 0 ? imageData : undefined,
+        model: usedModelForText,
       });
       setImagePrompt(data.prompt);
     } catch (e: any) {
@@ -245,23 +316,6 @@ export default function PostCreatorPage() {
     }
   };
 
-  const generateMyImage = async () => {
-    if (!myPromptRu.trim()) return;
-    setLoadingImage(true);
-    try {
-      const { data } = await api.post(`/post-creator/${businessId}/generate-image`, {
-        prompt_ru: myPromptRu,
-        aspect_ratio: "1:1",
-      });
-      setImageBase64(data.image_base64);
-      if (data.prompt_en) setImagePrompt(data.prompt_en);
-    } catch (e: any) {
-      alert("Ошибка генерации: " + (e?.response?.data?.detail || "попробуй изменить промт"));
-    } finally {
-      setLoadingImage(false);
-    }
-  };
-
   const togglePlatform = (p: Platform) => {
     setSelectedPlatforms((prev) =>
       prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
@@ -292,6 +346,17 @@ export default function PostCreatorPage() {
       const ok = results.filter((r) => r.status === "published");
       const fail = results.filter((r) => r.status === "error" || r.status === "no_connection");
       const warns = results.filter((r) => r.warning).map((r) => r.warning as string);
+      if (ok.length > 0) {
+        const newStats: CreatorStats = {
+          ...creatorStats,
+          [usedModelForText]: {
+            ...creatorStats[usedModelForText],
+            publishes: creatorStats[usedModelForText].publishes + 1,
+          },
+        };
+        setCreatorStats(newStats);
+        saveStats(newStats);
+      }
       if (ok.length > 0 && fail.length === 0 && warns.length === 0) {
         setPublishMsg("✓ Опубликовано в " + ok.map((r) => r.platform).join(", ") + "!");
       } else if (ok.length > 0 && fail.length === 0) {
@@ -313,7 +378,7 @@ export default function PostCreatorPage() {
   const hasText = !!postText.trim();
   const hasPrompt = !!imagePrompt.trim();
   const hasImage = !!imageBase64;
-  const showBlock3 = (imageMode === "ai" && (hasPrompt || loadingPrompt)) || imageMode === "my" || imageMode === "edit";
+  const showBlock3 = (imageMode === "ai" && (hasPrompt || loadingPrompt)) || imageMode === "edit";
 
   // ── Styles ────────────────────────────────────────────────────────────────
 
@@ -403,6 +468,70 @@ export default function PostCreatorPage() {
         </div>
       </div>
 
+      {/* Model stats panel */}
+      {(() => {
+        const nextModel = getNextModel(creatorStats);
+        const color = MODEL_COLORS[nextModel];
+        const isRanking = creatorStats.totalGens >= 50;
+        const ranking = isRanking ? calcRanking(creatorStats) : [];
+        return (
+          <div style={{ background: "#FAFAF8", borderBottom: "1px solid #EAE8E2", padding: "8px 2rem" }}>
+            <div style={{ maxWidth: 780, margin: "0 auto", display: "flex",
+              alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 11, color: "#aaa", whiteSpace: "nowrap" }}>
+                  {isRanking ? "Лучшая модель:" : "Следующая генерация:"}
+                </span>
+                <span style={{
+                  padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 700,
+                  background: color + "20", color,
+                  border: `1px solid ${color}40`,
+                  whiteSpace: "nowrap",
+                }}>
+                  {MODEL_LABELS[nextModel]}
+                </span>
+              </div>
+
+              {!isRanking ? (
+                <span style={{ fontSize: 11, color: "#bbb" }}>
+                  {creatorStats.totalGens}/50 генераций до рейтинга
+                </span>
+              ) : (
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11, color: "#aaa" }}>Рейтинг:</span>
+                  {ranking.map((m, i) => (
+                    <span key={m} style={{
+                      padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 600,
+                      background: i === 0 ? MODEL_COLORS[m] : "#EDECEA",
+                      color: i === 0 ? "#fff" : "#666",
+                    }}>
+                      {i + 1}. {MODEL_LABELS[m]}
+                      {i === 0 && ` · ${creatorStats[m].publishes} публ.`}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ marginLeft: "auto", display: "flex", gap: 12, alignItems: "center" }}>
+                {Object.entries(creatorStats).filter(([k]) => ["claude","gpt","gemini"].includes(k)).map(([m, st]) => (
+                  <span key={m} style={{ fontSize: 10, color: "#ccc" }}>
+                    {MODEL_LABELS[m as ModelKey].split(" ")[0]}: {(st as ModelStats).gens}г/{(st as ModelStats).publishes}п
+                  </span>
+                ))}
+                {creatorStats.totalGens > 0 && (
+                  <button
+                    onClick={() => { const s = defaultStats(); setCreatorStats(s); saveStats(s); }}
+                    style={{ fontSize: 10, color: "#ccc", background: "none", border: "none",
+                      cursor: "pointer", textDecoration: "underline", padding: 0 }}>
+                    сброс
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <div style={{ maxWidth: 780, margin: "0 auto", padding: "2rem" }}>
 
         {/* ── 1. Идея ── */}
@@ -482,19 +611,56 @@ export default function PostCreatorPage() {
             </div>
           )}
 
-          <div style={{ marginTop: 20 }}>
+          <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             {btn(
-              loadingText ? "Генерирую текст..." : "✨ Сгенерировать текст",
+              loadingText
+                ? "Генерирую текст..."
+                : `✨ Сгенерировать текст`,
               generateText,
               { disabled: !idea.trim() || loadingText, loading: loadingText, color: "#1a1a1a" }
             )}
+            {!loadingText && (() => {
+              const m = getNextModel(creatorStats);
+              return (
+                <span style={{
+                  padding: "4px 10px", borderRadius: 16, fontSize: 11, fontWeight: 600,
+                  background: MODEL_COLORS[m] + "18", color: MODEL_COLORS[m],
+                  border: `1px solid ${MODEL_COLORS[m]}30`,
+                }}>
+                  {MODEL_LABELS[m]}
+                </span>
+              );
+            })()}
           </div>
         </div>
 
         {/* ── 2. Текст поста ── */}
         {(hasText || loadingText) && (
           <div style={card}>
-            {sectionTitle(2, "Текст поста", hasText)}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: "50%", display: "flex",
+                  alignItems: "center", justifyContent: "center", flexShrink: 0,
+                  fontSize: 13, fontWeight: 700,
+                  background: hasText ? "#0F6E56" : "#1a1a1a",
+                  color: "#fff",
+                }}>
+                  {hasText ? "✓" : 2}
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a1a" }}>Текст поста</div>
+              </div>
+              {hasText && (
+                <span style={{
+                  padding: "3px 10px", borderRadius: 16, fontSize: 11, fontWeight: 600,
+                  background: MODEL_COLORS[usedModelForText] + "18",
+                  color: MODEL_COLORS[usedModelForText],
+                  border: `1px solid ${MODEL_COLORS[usedModelForText]}30`,
+                }}>
+                  {MODEL_LABELS[usedModelForText]}
+                </span>
+              )}
+            </div>
             <p style={{ color: "#888", fontSize: 13, margin: "0 0 14px" }}>
               Отредактируйте текст по необходимости или обновите.
             </p>
@@ -514,27 +680,11 @@ export default function PostCreatorPage() {
                 </div>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   {btn(
-                    loadingPrompt && imageMode === "ai" ? "Создаю промт..." : "🤖 ИИ промт для картинки",
-                    () => { setImageMode("ai"); generateAiPrompt(); },
+                    loadingPrompt && imageMode === "ai" ? "Создаю промт..." : "🖼 Создать промт фото",
+                    generateAiPrompt,
                     { disabled: loadingPrompt, loading: loadingPrompt && imageMode === "ai",
                       color: imageMode === "ai" ? "#0F6E56" : "#4680C2" }
                   )}
-                  <button
-                    onClick={() => {
-                      setImageMode("my");
-                      setImagePrompt("");
-                      setImageBase64("");
-                    }}
-                    style={{
-                      padding: "10px 22px",
-                      background: imageMode === "my" ? "#1a1a1a" : "#fff",
-                      color: imageMode === "my" ? "#fff" : "#1a1a1a",
-                      border: "1.5px solid #1a1a1a", borderRadius: 10,
-                      cursor: "pointer", fontSize: 13, fontWeight: 600,
-                      display: "inline-flex", alignItems: "center", gap: 6,
-                    }}>
-                    ✏️ Мой промт для картинки
-                  </button>
                   <button
                     onClick={() => {
                       setImageMode("edit");
@@ -572,46 +722,34 @@ export default function PostCreatorPage() {
           </div>
         )}
 
-        {/* ── 3. Промт для картинки ── */}
+        {/* ── 3. Промт / Редактирование фото ── */}
         {showBlock3 && (
           <div style={card}>
-            {imageMode === "ai" && sectionTitle(3, "Промт для генерации изображения", hasPrompt)}
-            {imageMode === "my" && sectionTitle(3, "Мой промт для изображения", !!myPromptRu.trim())}
+            {imageMode === "ai" && sectionTitle(3, "Промт для изображения", hasPrompt)}
             {imageMode === "edit" && sectionTitle(3, "Редактирование фото", false)}
 
             {imageMode === "ai" && (
               <>
                 <p style={{ color: "#888", fontSize: 13, margin: "0 0 14px" }}>
-                  ИИ составил промт на английском. Можете отредактировать перед генерацией.
+                  ИИ проанализировал текст поста, идею, ссылку и фото — составил промт на английском.
+                  Отредактируйте при необходимости и нажмите «Сгенерировать».
                 </p>
                 {loadingPrompt && !hasPrompt ? (
                   <div style={{ padding: "20px 0", color: "#888", fontSize: 13 }}>⏳ Анализирую контент...</div>
                 ) : (
                   textarea(imagePrompt, setImagePrompt,
-                    "Здесь появится промт для изображения...", 4)
+                    "Промт для изображения появится здесь...", 4)
                 )}
                 <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+                  {btn(
+                    loadingPrompt ? "Создаю промт..." : "🔄 Пересоздать промт",
+                    generateAiPrompt,
+                    { disabled: loadingPrompt, loading: loadingPrompt, small: true, color: "#555" }
+                  )}
                   {hasPrompt && btn(
                     loadingImage ? "Генерирую..." : "🖼 Сгенерировать изображение",
                     generateImage,
                     { disabled: loadingImage, loading: loadingImage, color: "#4680C2" }
-                  )}
-                </div>
-              </>
-            )}
-
-            {imageMode === "my" && (
-              <>
-                <p style={{ color: "#888", fontSize: 13, margin: "0 0 14px" }}>
-                  Опишите изображение на русском языке — ИИ переведёт на английский и сгенерирует картинку.
-                </p>
-                {textarea(myPromptRu, setMyPromptRu,
-                  "Например: аппетитная пицца на деревянном столе, тёплый свет, крупный план, фотореализм...", 4)}
-                <div style={{ marginTop: 14 }}>
-                  {btn(
-                    loadingImage ? "Генерирую..." : "🌐 Перевести и сгенерировать",
-                    generateMyImage,
-                    { disabled: !myPromptRu.trim() || loadingImage, loading: loadingImage, color: "#4680C2" }
                   )}
                 </div>
               </>
