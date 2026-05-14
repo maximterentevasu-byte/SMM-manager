@@ -33,6 +33,7 @@ export default function StrategyPage() {
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
+  const [exportingXls, setExportingXls] = useState(false);
 
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -83,6 +84,23 @@ export default function StrategyPage() {
       setChat((prev) => [...prev, { role: "ai", text: "Ошибка обновления. Попробуйте ещё раз." }]);
     } finally {
       setChatLoading(false);
+    }
+  };
+
+  const exportXls = async () => {
+    setExportingXls(true);
+    try {
+      const resp = await api.get(`/onboarding/export-profile/${businessId}`, { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([resp.data]));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `profile_${profile.name || "business"}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Ошибка выгрузки");
+    } finally {
+      setExportingXls(false);
     }
   };
 
@@ -329,11 +347,18 @@ export default function StrategyPage() {
                       Измени данные и сохрани — AI будет писать посты точнее
                     </div>
                   </div>
-                  <button onClick={() => router.push("/onboarding")}
-                    style={{ padding: "8px 16px", background: "#F1EFE8", color: "#444",
-                      border: "1px solid #E0DED8", borderRadius: 10, cursor: "pointer", fontSize: 13 }}>
-                    Пройти онбординг заново
-                  </button>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={exportXls} disabled={exportingXls}
+                      style={{ padding: "8px 16px", background: "#E8F5E9", color: "#2E7D32",
+                        border: "1px solid #C8E6C9", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 500 }}>
+                      {exportingXls ? "Выгружаю..." : "📥 Выгрузить в Excel"}
+                    </button>
+                    <button onClick={() => router.push("/onboarding")}
+                      style={{ padding: "8px 16px", background: "#F1EFE8", color: "#444",
+                        border: "1px solid #E0DED8", borderRadius: 10, cursor: "pointer", fontSize: 13 }}>
+                      Пройти онбординг заново
+                    </button>
+                  </div>
                 </div>
 
                 {[

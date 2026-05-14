@@ -134,8 +134,67 @@ export default function OnboardingPage() {
   const [rubricsLoading, setRubricsLoading] = useState(false);
   const [expandedRubric, setExpandedRubric] = useState<string | null>(null);
 
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState("");
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  const downloadTemplate = async () => {
+    try {
+      const resp = await api.get("/onboarding/export-template", { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([resp.data]));
+      const a = document.createElement("a"); a.href = url; a.download = "smm_profile_template.xlsx"; a.click();
+      URL.revokeObjectURL(url);
+    } catch { alert("Ошибка скачивания шаблона"); }
+  };
+
+  const importFromExcel = async () => {
+    if (!importFile) return;
+    setImportLoading(true);
+    setImportError("");
+    try {
+      const fd = new FormData();
+      fd.append("file", importFile);
+      const { data } = await api.post("/onboarding/parse-excel", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const p = data.profile;
+      setForm(prev => ({
+        ...prev,
+        name:                 p.name                 || prev.name,
+        niche:                p.niche                || prev.niche,
+        usp:                  p.usp                  || prev.usp,
+        price_segment:        p.price_segment        || prev.price_segment,
+        geo:                  p.geo                  || prev.geo,
+        address:              p.address              || prev.address,
+        contact_info:         p.contact_info         || prev.contact_info,
+        products_raw:         Array.isArray(p.products) ? p.products.join("\n") : (p.products || prev.products_raw),
+        active_promotions:    p.active_promotions    || prev.active_promotions,
+        audience_primary:     p.audience_primary     || prev.audience_primary,
+        audience_non_target:  p.audience_non_target  || prev.audience_non_target,
+        audience_pains:       p.audience_pains?.length ? p.audience_pains : prev.audience_pains,
+        audience_objections:  p.audience_objections?.length ? p.audience_objections : prev.audience_objections,
+        competitors:          p.competitors?.length ? p.competitors : prev.competitors,
+        platforms:            p.platforms?.length ? p.platforms : prev.platforms,
+        brand_voice:          p.brand_voice          || prev.brand_voice,
+        visual_style:         p.visual_style         || prev.visual_style,
+        content_restrictions: p.content_restrictions?.length ? p.content_restrictions : prev.content_restrictions,
+        business_goals:       p.business_goals       || prev.business_goals,
+        new_directions:       p.new_directions       || prev.new_directions,
+        smm_metrics:          p.smm_metrics?.length ? p.smm_metrics : prev.smm_metrics,
+      }));
+      setShowImportModal(false);
+      setImportFile(null);
+    } catch (e: any) {
+      setImportError(e.response?.data?.detail || "Ошибка чтения файла. Убедитесь, что используете шаблон.");
+    } finally {
+      setImportLoading(false);
+    }
+  };
 
   const set = (key: keyof FormData, val: unknown) => setForm(f => ({ ...f, [key]: val }));
   const setPain = (i: number, v: string) => { const a = [...form.audience_pains]; a[i] = v; set("audience_pains", a); };
@@ -327,6 +386,98 @@ export default function OnboardingPage() {
         @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
       `}</style>
 
+      {/* Import Excel modal */}
+      {showImportModal && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          zIndex: 200, padding: "1rem",
+        }} onClick={(e) => { if (e.target === e.currentTarget) setShowImportModal(false); }}>
+          <div style={{
+            background: "#fff", borderRadius: 20, padding: "28px 28px 24px",
+            width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+              <div>
+                <h3 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 700 }}>Загрузить анкету из Excel</h3>
+                <p style={{ margin: 0, fontSize: 13, color: "#888" }}>
+                  Скачайте шаблон, заполните его и загрузите обратно
+                </p>
+              </div>
+              <button onClick={() => setShowImportModal(false)}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "#aaa", lineHeight: 1 }}>
+                ×
+              </button>
+            </div>
+
+            {/* Drop zone */}
+            <div
+              onClick={() => importInputRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setImportFile(f); }}
+              style={{
+                border: `2px dashed ${importFile ? "#0F6E56" : "#E0DED8"}`,
+                borderRadius: 14, padding: "28px 20px", textAlign: "center",
+                cursor: "pointer", background: importFile ? "#F0FBF7" : "#FAFAF8",
+                transition: "all 0.2s", marginBottom: 16,
+              }}>
+              <input
+                ref={importInputRef}
+                type="file" accept=".xlsx,.xls"
+                style={{ display: "none" }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) setImportFile(f); }}
+              />
+              {importFile ? (
+                <div>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>📊</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#0F6E56" }}>{importFile.name}</div>
+                  <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
+                    {(importFile.size / 1024).toFixed(1)} КБ · Нажмите чтобы заменить
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 36, marginBottom: 10 }}>📂</div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: "#444" }}>
+                    Перетащите файл сюда или нажмите для выбора
+                  </div>
+                  <div style={{ fontSize: 12, color: "#aaa", marginTop: 4 }}>Поддерживается формат .xlsx</div>
+                </div>
+              )}
+            </div>
+
+            {importError && (
+              <div style={{ padding: "10px 14px", background: "#FCEBEB", borderRadius: 10,
+                fontSize: 13, color: "#A32D2D", marginBottom: 12 }}>
+                {importError}
+              </div>
+            )}
+
+            <button
+              onClick={importFromExcel}
+              disabled={!importFile || importLoading}
+              style={{
+                width: "100%", padding: "13px", fontSize: 15, fontWeight: 600, color: "#fff",
+                background: !importFile || importLoading ? "#ccc" : "#1a1a1a",
+                border: "none", borderRadius: 12, cursor: !importFile || importLoading ? "not-allowed" : "pointer",
+                marginBottom: 12,
+              }}>
+              {importLoading ? "Читаю файл..." : "Загрузить и заполнить форму"}
+            </button>
+
+            <button
+              onClick={downloadTemplate}
+              style={{
+                width: "100%", padding: "11px", fontSize: 13, fontWeight: 500,
+                color: "#444", background: "#F1EFE8",
+                border: "1px solid #E0DED8", borderRadius: 12, cursor: "pointer",
+              }}>
+              📥 Скачать шаблон заполнения (.xlsx)
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Loading overlay */}
       {(generatingStrategy || generatingRubrics) && (
         <div style={{
@@ -376,7 +527,17 @@ export default function OnboardingPage() {
         </div>
 
         {step < 8 && (
-          <div style={{ textAlign: "right", marginBottom: 8, marginTop: -16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, marginTop: -16 }}>
+            {step < 6 ? (
+              <button onClick={() => { setShowImportModal(true); setImportError(""); setImportFile(null); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, padding: "6px 14px",
+                  background: "#F1EFE8", border: "1px solid #E0DED8", borderRadius: 10,
+                  cursor: "pointer", fontSize: 13, color: "#444", fontWeight: 500,
+                }}>
+                📊 Загрузить из Excel
+              </button>
+            ) : <span />}
             <button onClick={skipOnboarding} style={{
               background: "none", border: "none", color: "#aaa",
               cursor: "pointer", fontSize: 13, textDecoration: "underline", padding: 0,
