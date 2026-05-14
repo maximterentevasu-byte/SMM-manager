@@ -23,7 +23,7 @@ from app.models.models import Business, ContentSlot, PlanStatus, Platform, Platf
 router = APIRouter()
 _CLAUDE_MODEL = "claude-sonnet-4-6"
 _GPT_USER_MODEL = "gpt-5.4"
-_GEMINI_TEXT_MODEL = "gemini-3.1-flash"
+_GEMINI_TEXT_MODEL = "gemini-3.1-pro-preview"
 
 
 # ─── DB helper ───────────────────────────────────────────────────────────────
