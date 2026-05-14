@@ -1183,31 +1183,59 @@ export default function OnboardingPage() {
           <div style={{ textAlign: "center", padding: "3rem 0" }}>
             <div style={{ fontSize: 72, marginBottom: 16 }}>🎉</div>
             <h2 style={{ fontSize: 26, fontWeight: 700, margin: "0 0 12px" }}>Платформа запущена!</h2>
-            <p style={{ color: "#666", fontSize: 15, maxWidth: 400, margin: "0 auto 32px", lineHeight: 1.6 }}>
-              Стратегия согласована. AI генерирует контент-план — обычно это занимает 1–2 минуты.
+            <p style={{ color: "#666", fontSize: 15, maxWidth: 460, margin: "0 auto 20px", lineHeight: 1.6 }}>
+              Готовим контент-план и тексты постов — обычно это занимает 1–2 минуты.
             </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 340, margin: "0 auto 32px" }}>
+
+            {/* Info notice */}
+            <div style={{
+              maxWidth: 460, margin: "0 auto 28px",
+              background: "#FFF8ED", border: "1px solid #FFD699",
+              borderRadius: 14, padding: "16px 20px", textAlign: "left",
+            }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#7C4400", marginBottom: 6 }}>
+                ⚡ Потребуется твоё участие
+              </div>
+              <div style={{ fontSize: 13, color: "#6B4200", lineHeight: 1.6 }}>
+                Часть постов требует согласования или дополнительной информации от тебя:
+                фото товара, условия акции, имя сотрудника и т.д.
+                Без этого пост будет некорректным.
+                <br /><br />
+                <strong>Перейди в Контент-план</strong> — там увидишь что именно нужно.
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 380, margin: "0 auto 32px" }}>
               {[
-                { icon: "📋", text: "Стратегия согласована" },
-                { icon: "🗂", text: "Рубрики утверждены" },
-                { icon: "📅", text: "Контент-план генерируется..." },
-                { icon: "✍️", text: "Тексты постов под ваш голос бренда" },
+                { icon: "📋", text: "Стратегия согласована", done: true },
+                { icon: "🗂", text: "Рубрики утверждены", done: true },
+                { icon: "📅", text: "Контент-план генерируется...", done: false },
+                { icon: "✍️", text: "Посты под ваш голос бренда", done: false },
               ].map((item, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 12,
                   padding: "12px 16px", background: "#fff", borderRadius: 10,
                   border: "1px solid #EAE8E2", textAlign: "left" }}>
                   <span style={{ fontSize: 20 }}>{item.icon}</span>
                   <span style={{ fontSize: 14, color: "#333" }}>{item.text}</span>
-                  {i < 2 && <span style={{ marginLeft: "auto", fontSize: 12, color: "#0F6E56" }}>✓ Готово</span>}
-                  {i >= 2 && <span style={{ marginLeft: "auto", fontSize: 12, color: "#888" }}>Генерируется...</span>}
+                  <span style={{ marginLeft: "auto", fontSize: 12, color: item.done ? "#0F6E56" : "#888" }}>
+                    {item.done ? "✓ Готово" : "Генерируется..."}
+                  </span>
                 </div>
               ))}
             </div>
-            <button onClick={() => router.push("/dashboard")}
+
+            <button onClick={() => router.push("/content")}
               style={{ padding: "14px 40px", background: "#1a1a1a", color: "#fff", border: "none",
-                borderRadius: 12, cursor: "pointer", fontSize: 16, fontWeight: 700 }}>
-              Перейти в дашборд →
+                borderRadius: 12, cursor: "pointer", fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
+              Перейти в Контент-план →
             </button>
+            <div>
+              <button onClick={() => router.push("/home")}
+                style={{ background: "none", border: "none", color: "#aaa",
+                  cursor: "pointer", fontSize: 13, textDecoration: "underline" }}>
+                На главную
+              </button>
+            </div>
           </div>
         )}
       </div>

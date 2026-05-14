@@ -75,20 +75,28 @@ async def _generate_content(slot_id: str):
         if not business:
             return
 
-        try:
-            post_data = await _generate_post_text(slot, business.profile)
-            slot.post_text = post_data["text"]
-            slot.hashtags = post_data["hashtags"]
+        is_sensitive = slot.idea.get("is_sensitive", False) if slot.idea else False
 
-            slot.image_prompt = await _generate_image_prompt(slot, business.profile)
+        if is_sensitive:
+            questions = slot.idea.get("info_questions") or []
+            slot.needs_info_for = questions if questions else ["Уточните детали для этого поста"]
+            slot.status = PlanStatus.needs_info
+            print(f"✓ Пост требует информации: {slot_id[:8]}... ({slot.platform})")
+        else:
+            try:
+                post_data = await _generate_post_text(slot, business.profile)
+                slot.post_text = post_data["text"]
+                slot.hashtags = post_data["hashtags"]
 
-            slot.status = PlanStatus.pending_approval
-            print(f"✓ Контент готов (ждёт согласования): {slot_id[:8]}... ({slot.platform})")
+                slot.image_prompt = await _generate_image_prompt(slot, business.profile)
 
-        except Exception as e:
-            slot.status = PlanStatus.failed
-            slot.error_message = str(e)
-            print(f"✗ Ошибка генерации контента: {e}")
+                slot.status = PlanStatus.pending_approval
+                print(f"✓ Контент готов (ждёт согласования): {slot_id[:8]}... ({slot.platform})")
+
+            except Exception as e:
+                slot.status = PlanStatus.failed
+                slot.error_message = str(e)
+                print(f"✗ Ошибка генерации контента: {e}")
 
         await db.commit()
 
@@ -162,3 +170,44 @@ STRICT RULES — follow every one:
 Return ONLY the image prompt in English, 100-130 words. Start directly with the scene description. No preamble."""}]
     )
     return resp.content[0].text.strip()
+
+
+async def _generate_post_text_with_info(slot, profile: dict, answers: list[dict]) -> dict:
+    """Генерирует текст поста с учётом ответов владельца бизнеса на вопросы."""
+    spec = PLATFORM_SPECS.get(slot.platform, PLATFORM_SPECS["vk"])
+    rubric = slot.rubric
+    idea = slot.idea
+
+    answers_text = "\n".join(
+        f"- {a.get('question', '')}: {a.get('answer', '')}"
+        for a in answers if a.get("answer", "").strip()
+    )
+
+    prompt = f"""Ты SMM-копирайтер для бренда "{profile.get('name', '')}".
+Голос бренда: {profile.get('brand_voice', 'дружелюбный')}
+Площадка: {spec['note']}
+Аудитория: {profile.get('audience', {}).get('primary', profile.get('audience_primary', ''))}
+
+Рубрика: {rubric['name']}
+Структура: {' → '.join(rubric.get('structure', []))}
+Тема поста: {idea['idea']}
+Хук (первое предложение): начни с "{idea.get('hook', '')}"
+
+ИНФОРМАЦИЯ ОТ ВЛАДЕЛЬЦА (обязательно использовать в посте):
+{answers_text}
+
+Длина: {spec['ideal_length']} символов ±20%
+Эмодзи: {spec['emoji']}
+Хэштеги: {spec['hashtags']} штук в конце
+
+Верни ТОЛЬКО JSON без markdown:
+{{"text": "текст поста", "hashtags": ["тег1", "тег2"], "char_count": 500}}"""
+
+    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    resp = client.messages.create(
+        model=MODEL,
+        max_tokens=2000,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    raw = resp.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+    return json.loads(raw)

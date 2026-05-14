@@ -32,6 +32,10 @@ class RequestInfoRequest(BaseModel):
     items: list[str]
 
 
+class ProvideInfoRequest(BaseModel):
+    answers: list[dict]  # [{"question": "...", "answer": "..."}]
+
+
 class GenerateImageRequest(BaseModel):
     prompt: Optional[str] = None
 
@@ -324,6 +328,41 @@ async def approve_slot(
     slot.needs_info_for = None
     await db.commit()
     return {"status": "approved"}
+
+
+@router.post("/slot/{slot_id}/provide-info")
+async def provide_info_for_slot(
+    slot_id: str,
+    body: ProvideInfoRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(ContentSlot).where(ContentSlot.id == slot_id))
+    slot = result.scalar_one_or_none()
+    if not slot:
+        raise HTTPException(404, "Slot not found")
+
+    biz_result = await db.execute(select(Business).where(Business.id == slot.business_id))
+    business = biz_result.scalar_one_or_none()
+    if not business:
+        raise HTTPException(404, "Business not found")
+
+    from app.workers.content_tasks import _generate_post_text_with_info, _generate_image_prompt
+    try:
+        post_data = await _generate_post_text_with_info(slot, business.profile, body.answers)
+        slot.post_text = post_data["text"]
+        slot.hashtags = post_data.get("hashtags", [])
+        slot.image_prompt = await _generate_image_prompt(slot, business.profile)
+        slot.status = PlanStatus.pending_approval
+        slot.needs_info_for = None
+        await db.commit()
+        return {
+            "status": "generated",
+            "post_text": slot.post_text,
+            "image_prompt": slot.image_prompt,
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Ошибка генерации: {str(e)}")
 
 
 @router.post("/slot/{slot_id}/request-info")

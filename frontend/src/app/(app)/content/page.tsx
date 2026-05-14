@@ -123,6 +123,10 @@ export default function ContentPage() {
   const [selectedInfoItems, setSelectedInfoItems] = useState<string[]>([]);
   const [approvingId, setApprovingId]   = useState<string | null>(null);
 
+  // Category-2 info provision state
+  const [infoAnswers, setInfoAnswers]   = useState<string[]>([]);
+  const [providingInfo, setProvidingInfo] = useState(false);
+
   const [businessId] = useState(() =>
     typeof window !== "undefined" ? localStorage.getItem("businessId") || "" : ""
   );
@@ -236,6 +240,28 @@ export default function ContentPage() {
     finally { setApprovingId(null); }
   };
 
+  const provideInfo = async (slot: Slot) => {
+    const questions = slot.needs_info_for || [];
+    const answers = questions.map((q, i) => ({ question: q, answer: infoAnswers[i] || "" }));
+    if (answers.every(a => !a.answer.trim())) return;
+    setProvidingInfo(true);
+    try {
+      const { data } = await api.post(`/content/slot/${slot.id}/provide-info`, { answers });
+      const updates = {
+        post_text: data.post_text,
+        image_prompt: data.image_prompt,
+        status: "pending_approval",
+        needs_info_for: null,
+      };
+      setSlots(prev => prev.map(s => s.id === slot.id ? { ...s, ...updates } : s));
+      setExpanded(prev => prev?.id === slot.id ? { ...prev, ...updates } : prev);
+      setModalText(data.post_text || "");
+      setInfoAnswers([]);
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || "Ошибка генерации поста");
+    } finally { setProvidingInfo(false); }
+  };
+
   // Calendar helpers
   const openSlot = (slot: Slot) => {
     setExpanded(slot);
@@ -245,6 +271,7 @@ export default function ContentPage() {
     setShowNeedsInfo(false);
     setEditingPrompt(false);
     setSelectedInfoItems(slot.needs_info_for || []);
+    setInfoAnswers((slot.needs_info_for || []).map(() => ""));
   };
   const closeModal = () => { setExpanded(null); setShowNeedsInfo(false); setEditingPrompt(false); };
 
@@ -310,13 +337,15 @@ export default function ContentPage() {
       return statusOk && platOk;
     });
 
-  const filtered = applyFilters(slots).filter(s => s.post_text);
+  // Show slots with text OR needs_info slots waiting for user input
+  const filtered = applyFilters(slots).filter(s => s.post_text || s.status === "needs_info");
 
   const stats = {
-    total:     slots.filter(s => s.post_text).length,
-    ready:     slots.filter(s => s.status === "content_ready").length,
-    pending:   slots.filter(s => s.status === "pending_approval").length,
-    published: slots.filter(s => s.status === "published").length,
+    total:      slots.filter(s => s.post_text).length,
+    ready:      slots.filter(s => s.status === "content_ready").length,
+    pending:    slots.filter(s => s.status === "pending_approval").length,
+    needsInfo:  slots.filter(s => s.status === "needs_info").length,
+    published:  slots.filter(s => s.status === "published").length,
   };
 
   const today = new Date();
@@ -351,6 +380,9 @@ export default function ContentPage() {
               </button>
             )}
             <div style={{ display: "flex", gap: 20, fontSize: 13, color: "#666" }}>
+              {stats.needsInfo > 0 && (
+                <span>Нужна инфо: <strong style={{ color: "#8B3200" }}>{stats.needsInfo}</strong></span>
+              )}
               {stats.pending > 0 && (
                 <span>На согласовании: <strong style={{ color: "#7C4400" }}>{stats.pending}</strong></span>
               )}
@@ -454,19 +486,33 @@ export default function ContentPage() {
                             </button>
                           </div>
                         </div>
+                      ) : slot.status === "needs_info" && !slot.post_text ? (
+                        /* Category 2: нет текста — показываем вопросы */
+                        <div>
+                          <div style={{ marginBottom: 10, padding: "10px 14px", background: "#FFF8ED",
+                            borderRadius: 8, border: "1px solid #FFD699" }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: "#7C4400", marginBottom: 6 }}>
+                              📋 Требуется информация для генерации поста
+                            </div>
+                            {(slot.needs_info_for || []).map((q, i) => (
+                              <div key={i} style={{ fontSize: 12, color: "#555", marginBottom: 3 }}>
+                                {i + 1}. {q}
+                              </div>
+                            ))}
+                          </div>
+                          {slot.idea && (
+                            <p style={{ fontSize: 13, color: "#888", margin: "0 0 12px", fontStyle: "italic" }}>
+                              Тема: {slot.idea.idea}
+                            </p>
+                          )}
+                          <button onClick={() => openSlot(slot)}
+                            style={{ padding: "8px 18px", background: "#EA580C", color: "#fff",
+                              border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+                            ✏️ Ответить на вопросы
+                          </button>
+                        </div>
                       ) : (
                         <div>
-                          {slot.needs_info_for && slot.needs_info_for.length > 0 && (
-                            <div style={{ marginBottom: 12, padding: "8px 12px", background: "#FFF3CD",
-                              borderRadius: 8, border: "1px solid #FFE08A" }}>
-                              <div style={{ fontSize: 12, fontWeight: 600, color: "#7C4400", marginBottom: 4 }}>
-                                📋 Требуется от вас:
-                              </div>
-                              {slot.needs_info_for.map((item, i) => (
-                                <div key={i} style={{ fontSize: 12, color: "#555" }}>• {item}</div>
-                              ))}
-                            </div>
-                          )}
                           <p style={{ fontSize: 14, lineHeight: 1.7, color: "#2a2a2a",
                             margin: 0, whiteSpace: "pre-wrap" }}>{slot.post_text}</p>
                           <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
@@ -480,7 +526,7 @@ export default function ContentPage() {
                                 border: "1px solid #E0DED8", borderRadius: 8, cursor: "pointer", fontSize: 12 }}>
                               🖼 Картинка
                             </button>
-                            {needsApproval && (
+                            {needsApproval && slot.post_text && (
                               <button onClick={() => openSlot(slot)}
                                 style={{ padding: "7px 14px", background: st.bg, color: st.color,
                                   border: `1px solid ${st.color}44`, borderRadius: 8, cursor: "pointer",
@@ -693,38 +739,73 @@ export default function ContentPage() {
               </div>
             </div>
 
-            {/* Approval block */}
-            {(expanded.status === "pending_approval" || expanded.status === "needs_info") && (
+            {/* ── Category 2: needs_info без текста — форма ответов ── */}
+            {expanded.status === "needs_info" && !expanded.post_text && expanded.needs_info_for && (
+              <div style={{ background: "#FFF8ED", borderRadius: 12, padding: "16px 18px",
+                marginBottom: 20, border: "1px solid #FFD699" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#7C4400", marginBottom: 4 }}>
+                  📋 Нужна информация для генерации поста
+                </div>
+                <div style={{ fontSize: 13, color: "#8B5500", marginBottom: 16, lineHeight: 1.5 }}>
+                  Ответьте на вопросы ниже — AI сгенерирует точный текст поста на основе ваших ответов
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  {expanded.needs_info_for.map((question, i) => (
+                    <div key={i}>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: "#444", display: "block", marginBottom: 6 }}>
+                        {question}
+                      </label>
+                      <textarea
+                        value={infoAnswers[i] || ""}
+                        onChange={e => {
+                          const next = [...infoAnswers];
+                          next[i] = e.target.value;
+                          setInfoAnswers(next);
+                        }}
+                        placeholder="Ваш ответ..."
+                        rows={2}
+                        style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #E0DED8",
+                          borderRadius: 10, fontSize: 13, fontFamily: "inherit", outline: "none",
+                          resize: "vertical", boxSizing: "border-box", background: "#fff" }}
+                        onFocus={e => (e.target.style.borderColor = "#EA580C")}
+                        onBlur={e => (e.target.style.borderColor = "#E0DED8")}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => provideInfo(expanded)}
+                  disabled={providingInfo || infoAnswers.every(a => !a?.trim())}
+                  style={{ marginTop: 16, padding: "11px 24px", fontSize: 14, fontWeight: 700,
+                    color: "#fff", border: "none", borderRadius: 12, cursor: "pointer",
+                    background: providingInfo || infoAnswers.every(a => !a?.trim()) ? "#ccc" : "#EA580C" }}>
+                  {providingInfo ? "Генерирую пост..." : "✨ Сгенерировать текст поста"}
+                </button>
+              </div>
+            )}
+
+            {/* ── Category 1 & approved needs_info: кнопки согласования ── */}
+            {(expanded.status === "pending_approval" ||
+              (expanded.status === "needs_info" && expanded.post_text)) && (
               <div style={{ background: (STATUS_CONFIG[expanded.status] || STATUS_CONFIG.planned).bg,
                 borderRadius: 12, padding: "14px 16px", marginBottom: 20,
                 border: `1px solid ${(STATUS_CONFIG[expanded.status] || STATUS_CONFIG.planned).color}33` }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#333", marginBottom: 10 }}>
-                  {expanded.status === "pending_approval"
-                    ? "⏳ Пост ждёт вашего согласования"
-                    : "📋 Пост ждёт дополнительной информации"}
+                  ⏳ Пост ждёт вашего согласования
                 </div>
-                {expanded.needs_info_for && expanded.needs_info_for.length > 0 && (
-                  <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 4 }}>Нужно предоставить:</div>
-                    {expanded.needs_info_for.map((item, i) => (
-                      <div key={i} style={{ fontSize: 13, color: "#444" }}>• {item}</div>
-                    ))}
-                  </div>
-                )}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button onClick={() => approveSlot(expanded)} disabled={approvingId === expanded.id}
                     style={{ padding: "9px 20px", background: "#0F6E56", color: "#fff",
                       border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
-                    {approvingId === expanded.id ? "..." : "✓ Согласовать текст и картинку"}
+                    {approvingId === expanded.id ? "..." : "✓ Согласовать"}
                   </button>
                   <button onClick={() => setShowNeedsInfo(!showNeedsInfo)}
                     style={{ padding: "9px 16px", background: "transparent",
                       border: "1.5px solid #E0DED8", borderRadius: 10, cursor: "pointer", fontSize: 13, color: "#555" }}>
-                    📋 Нужна информация
+                    📋 Нужна доп. информация
                   </button>
                 </div>
 
-                {/* Needs info checklist */}
                 {showNeedsInfo && (
                   <div style={{ marginTop: 12, padding: 14, background: "#fff", borderRadius: 10,
                     border: "1px solid #E0DED8" }}>
