@@ -1,43 +1,35 @@
 """
-Генерация изображений:
-1. gemini-2.5-flash-image (бесплатно, generateContent)
-2. DALL-E 3 (OpenAI, fallback при 429 или ошибке Gemini)
+Генерация изображений (каскад):
+1. Gemini 3.1 Flash Image  (gemini-3.1-flash-image-preview, низкое разрешение ~512px)
+2. GPT Image 2             (gpt-image-2)
+3. GPT Image 1 Mini        (gpt-image-1-mini)
 """
 import httpx
+from openai import OpenAI
 from app.config import settings
 
+_GEMINI_MODEL = "gemini-3.1-flash-image-preview"
 _GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
-_GEMINI_MODEL = "gemini-2.5-flash-image"
 
-_GPT_IMAGE_SIZE = {
+# Размеры для OpenAI
+_OAI_SIZE = {
     "1:1":  "1024x1024",
     "16:9": "1536x1024",
     "9:16": "1024x1536",
     "4:3":  "1536x1024",
 }
 
-_DALLE3_SIZE = {
-    "1:1":  "1024x1024",
-    "16:9": "1792x1024",
-    "9:16": "1024x1792",
-    "4:3":  "1024x1024",
-}
-
-_DALLE2_SIZE = {
-    "1:1":  "1024x1024",
-    "16:9": "1024x1024",
-    "9:16": "1024x1024",
-    "4:3":  "1024x1024",
-}
-
 
 def _gemini(prompt: str) -> str:
+    """Gemini 3.1 Flash Image — низкое разрешение (~512px), REST API."""
     url = f"{_GEMINI_BASE}/{_GEMINI_MODEL}:generateContent?key={settings.GEMINI_API_KEY}"
     r = httpx.post(
         url,
         json={
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"responseModalities": ["IMAGE"]},
+            "generationConfig": {
+                "responseModalities": ["IMAGE"],
+            },
         },
         timeout=90,
     )
@@ -49,69 +41,43 @@ def _gemini(prompt: str) -> str:
             b64 = part.get("inlineData", {}).get("data", "")
             if b64:
                 return b64
-    raise ValueError("Gemini не вернул изображение.")
+    raise ValueError("Gemini не вернул изображение")
 
 
-def _dalle(prompt: str, aspect_ratio: str) -> str:
-    from openai import OpenAI
+def _openai_image(prompt: str, aspect_ratio: str, model: str) -> str:
+    """GPT Image 2 или GPT Image 1 Mini — OpenAI Images API."""
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
-
-    # gpt-image-1 — новейшая модель OpenAI (не требует response_format, всегда b64)
-    # dall-e-3 / dall-e-2 — fallback для старых аккаунтов
-    models = [
-        ("gpt-image-1", _GPT_IMAGE_SIZE.get(aspect_ratio, "1024x1024"),
-         {"quality": "medium"}),
-        ("dall-e-3",    _DALLE3_SIZE.get(aspect_ratio, "1024x1024"),
-         {"quality": "standard", "response_format": "b64_json"}),
-        ("dall-e-2",    _DALLE2_SIZE.get(aspect_ratio, "1024x1024"),
-         {"response_format": "b64_json"}),
-    ]
-
-    last_error = "неизвестная ошибка"
-    for model, size, extra in models:
-        try:
-            resp = client.images.generate(
-                model=model,
-                prompt=prompt[:1000],
-                size=size,
-                n=1,
-                **extra,
-            )
-            b64 = resp.data[0].b64_json
-            if b64:
-                return b64
-        except Exception as e:
-            last_error = str(e)
-            if "does not exist" in last_error.lower():
-                continue  # модели нет → пробуем следующую
-            raise ValueError(f"OpenAI ({model}): {e}") from e
-
-    raise ValueError(f"OpenAI: ни одна модель генерации изображений недоступна. {last_error}")
+    size = _OAI_SIZE.get(aspect_ratio, "1024x1024")
+    resp = client.images.generate(
+        model=model,
+        prompt=prompt[:1000],
+        size=size,
+        n=1,
+    )
+    b64 = resp.data[0].b64_json
+    if not b64:
+        raise ValueError(f"{model}: пустой ответ")
+    return b64
 
 
 def generate_image_sync(prompt: str, aspect_ratio: str = "1:1") -> str:
-    """Синхронная генерация — запускать через asyncio.to_thread."""
-    gemini_ok = bool(settings.GEMINI_API_KEY)
-    dalle_ok = bool(settings.OPENAI_API_KEY)
+    """
+    Синхронная генерация — запускать через asyncio.to_thread.
+    Каскад: Gemini 3.1 Flash Image → GPT Image 2 → GPT Image 1 Mini
+    """
+    errors: list[str] = []
 
-    if not gemini_ok and not dalle_ok:
-        raise ValueError("Нет доступных API ключей для генерации изображений.")
-
-    gemini_error = None
-    if gemini_ok:
+    if settings.GEMINI_API_KEY:
         try:
             return _gemini(prompt)
-        except ValueError as e:
-            gemini_error = str(e)
-            if not dalle_ok:
-                raise
+        except Exception as e:
+            errors.append(f"Gemini: {e}")
 
-    if dalle_ok:
-        try:
-            return _dalle(prompt, aspect_ratio)
-        except ValueError as e:
-            raise ValueError(
-                f"Все генераторы недоступны. Gemini: {gemini_error or 'не настроен'}. DALL-E: {e}"
-            ) from e
+    if settings.OPENAI_API_KEY:
+        for model_name in ("gpt-image-2", "gpt-image-1-mini"):
+            try:
+                return _openai_image(prompt, aspect_ratio, model_name)
+            except Exception as e:
+                errors.append(f"{model_name}: {e}")
 
-    raise ValueError("Gemini недоступен. Добавьте OPENAI_API_KEY для DALL-E.")
+    raise ValueError("Все генераторы недоступны: " + " | ".join(errors))

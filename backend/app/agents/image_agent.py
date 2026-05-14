@@ -39,22 +39,13 @@ async def generate_image_prompt(slot, business_profile: dict) -> str:
 
 
 async def generate_image_dalle(prompt: str) -> bytes:
-    """Генерация через DALL-E 3"""
-    import openai
-    oai_client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    """Генерация через каскад: Gemini 3.1 Flash Image → GPT Image 2 → GPT Image 1 Mini."""
+    import asyncio
+    import base64
+    from app.services.gemini_image import generate_image_sync
 
-    response = await oai_client.images.generate(
-        model="dall-e-3",
-        prompt=prompt,
-        size="1024x1024",
-        quality="standard",
-        n=1,
-    )
-    image_url = response.data[0].url
-
-    async with aiohttp.ClientSession() as session:
-        async with session.get(image_url) as resp:
-            return await resp.read()
+    b64 = await asyncio.to_thread(generate_image_sync, prompt, "1:1")
+    return base64.b64decode(b64)
 
 
 def post_process_image(image_bytes: bytes, platform: str, logo_url: str = None) -> bytes:
