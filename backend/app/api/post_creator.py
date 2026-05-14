@@ -39,6 +39,15 @@ async def _get_business(business_id: str, user: User, db: AsyncSession) -> Busin
 # ─── URL fetching ─────────────────────────────────────────────────────────────
 
 async def _fetch_url_text(url: str, max_chars: int = 2500) -> str:
+    # Мессенджеры и соцсети с закрытым контентом не парсятся без авторизации
+    _BLOCKED_DOMAINS = ("t.me", "telegram.me", "instagram.com", "vk.com", "ok.ru", "facebook.com")
+    try:
+        from urllib.parse import urlparse
+        domain = urlparse(url).netloc.lower().lstrip("www.")
+        if any(domain == b or domain.endswith("." + b) for b in _BLOCKED_DOMAINS):
+            return ""
+    except Exception:
+        pass
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
             r = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; SMM-bot/1.0)"})
@@ -47,8 +56,8 @@ async def _fetch_url_text(url: str, max_chars: int = 2500) -> str:
             text = re.sub(r'<[^>]+>', ' ', html)
             text = re.sub(r'\s+', ' ', text).strip()
             return text[:max_chars]
-    except Exception as e:
-        return f"[Не удалось загрузить ссылку: {e}]"
+    except Exception:
+        return ""
 
 
 # ─── Image description via Claude vision ─────────────────────────────────────
@@ -202,7 +211,9 @@ async def generate_post_text(
 
     if body.url:
         url_text = await _fetch_url_text(body.url)
-        context_parts.append(f"Контент по ссылке ({body.url}):\n{url_text}")
+        # Включаем только если реально что-то получили (не ошибка, не пустота)
+        if url_text and not url_text.startswith("[Не удалось") and len(url_text) > 150:
+            context_parts.append(f"Референсный материал (стиль написания из внешнего источника):\n{url_text}")
 
     if body.images:
         async with httpx.AsyncClient(timeout=30) as cl:
@@ -225,7 +236,7 @@ async def generate_post_text(
         "• СТРОГО используй только факты из идеи. Никогда не придумывай продукты, бренды, страны, события, детали, которые явно не указаны в идее"
     )
 
-    text = await _generate_text(system, f"Идея поста: {body.idea}{extra}")
+    text = await _generate_text(system, f"Задача: {body.idea}{extra}")
     return {"text": text}
 
 
@@ -255,7 +266,8 @@ async def generate_image_prompt(
 
     if body.url:
         url_text = await _fetch_url_text(body.url, max_chars=1000)
-        context_parts.append(f"Reference URL content:\n{url_text}")
+        if url_text and not url_text.startswith("[Не удалось") and len(url_text) > 150:
+            context_parts.append(f"Reference content (for style/context only):\n{url_text}")
 
     if body.images:
         async with httpx.AsyncClient(timeout=30) as cl:
