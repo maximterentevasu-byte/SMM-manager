@@ -33,7 +33,11 @@ async def _generate_plan(business_id: str, year: int, month: int):
         slots_meta = build_content_plan(business.strategy, business.profile, year, month)
         print(f"→ Создано {len(slots_meta)} слотов для {business.name}")
 
-        ideas = await generate_ideas_for_slots(slots_meta, business.profile)
+        try:
+            ideas = await generate_ideas_for_slots(slots_meta, business.profile)
+        except Exception as e:
+            print(f"✗ Ошибка генерации идей: {e} — слоты создадутся без идей")
+            ideas = []
         ideas_map = {i["slot_id"]: i for i in ideas}
 
         slot_ids = []

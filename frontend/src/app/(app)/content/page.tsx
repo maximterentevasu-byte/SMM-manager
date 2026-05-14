@@ -148,6 +148,16 @@ export default function ContentPage() {
     setStrategyUpdated(!!localStorage.getItem("strategyUpdatedAt"));
   }, [load]);
 
+  // Авто-поллинг пока есть слоты в процессе генерации
+  useEffect(() => {
+    const generating = slots.some(s =>
+      s.status === "planned" || s.status === "idea_ready"
+    );
+    if (!generating) return;
+    const interval = setInterval(load, 8000);
+    return () => clearInterval(interval);
+  }, [slots, load]);
+
   const reloadPlan = async () => {
     setReloading(true);
     try {
@@ -337,11 +347,17 @@ export default function ContentPage() {
       return statusOk && platOk;
     });
 
-  // Show slots with text OR needs_info slots waiting for user input
-  const filtered = applyFilters(slots).filter(s => s.post_text || s.status === "needs_info");
+  // Показываем все слоты, кроме голых "planned" без идеи
+  const filtered = applyFilters(slots).filter(s =>
+    s.post_text || s.status === "needs_info" || s.status === "pending_approval" ||
+    s.status === "content_ready" || s.status === "published" || s.status === "failed" ||
+    (s.status === "idea_ready" && s.idea)
+  );
+
+  const generatingCount = slots.filter(s => s.status === "planned" || s.status === "idea_ready").length;
 
   const stats = {
-    total:      slots.filter(s => s.post_text).length,
+    total:      slots.length,
     ready:      slots.filter(s => s.status === "content_ready").length,
     pending:    slots.filter(s => s.status === "pending_approval").length,
     needsInfo:  slots.filter(s => s.status === "needs_info").length,
@@ -363,6 +379,7 @@ export default function ContentPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F8F7F4", fontFamily: "'Segoe UI', sans-serif" }}>
+      <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
 
       {/* ── Header ── */}
       <div style={{ background: "#fff", borderBottom: "1px solid #E8E6E0", padding: "0 2rem" }}>
@@ -379,7 +396,15 @@ export default function ContentPage() {
                 {reloading ? "Обновляю..." : "Обновить план под новую стратегию"}
               </button>
             )}
-            <div style={{ display: "flex", gap: 20, fontSize: 13, color: "#666" }}>
+            <div style={{ display: "flex", gap: 20, fontSize: 13, color: "#666", alignItems: "center" }}>
+              {generatingCount > 0 && (
+                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ width: 12, height: 12, border: "2px solid #bbb",
+                    borderTopColor: "#533AB7", borderRadius: "50%",
+                    animation: "spin 1s linear infinite", display: "inline-block" }} />
+                  Генерируется: <strong style={{ color: "#533AB7" }}>{generatingCount}</strong>
+                </span>
+              )}
               {stats.needsInfo > 0 && (
                 <span>Нужна инфо: <strong style={{ color: "#8B3200" }}>{stats.needsInfo}</strong></span>
               )}
@@ -484,6 +509,24 @@ export default function ContentPage() {
                                 border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
                               Отмена
                             </button>
+                          </div>
+                        </div>
+                      ) : !slot.post_text && slot.status !== "needs_info" ? (
+                        /* Слот в процессе генерации текста */
+                        <div style={{ display: "flex", alignItems: "center", gap: 12,
+                          padding: "12px 0", color: "#888" }}>
+                          <div style={{ width: 20, height: 20, border: "2px solid #bbb",
+                            borderTopColor: "#533AB7", borderRadius: "50%",
+                            animation: "spin 1s linear infinite", flexShrink: 0 }} />
+                          <div>
+                            <div style={{ fontSize: 13, color: "#555", fontWeight: 500 }}>
+                              {slot.idea ? "Генерирую текст поста..." : "Ожидает генерации..."}
+                            </div>
+                            {slot.idea && (
+                              <div style={{ fontSize: 12, color: "#888", marginTop: 3 }}>
+                                {slot.idea.idea}
+                              </div>
+                            )}
                           </div>
                         </div>
                       ) : slot.status === "needs_info" && !slot.post_text ? (

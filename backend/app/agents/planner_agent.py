@@ -164,11 +164,45 @@ is_sensitive = true (Категория 2 — чувствительная ин�
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         resp = client.messages.create(
             model=MODEL,
+            max_tokens=8000,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        raw = resp.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+        try:
+            ideas = json.loads(raw)
+            all_ideas.extend(ideas)
+        except json.JSONDecodeError as e:
+            print(f"✗ JSON parse error in ideas batch {i//batch_size}: {e}")
+            # Fallback: генерируем идеи без классификации
+            fallback_ideas = await _generate_ideas_simple(batch, batch_simple, business_profile, client)
+            all_ideas.extend(fallback_ideas)
+
+    return all_ideas
+
+
+async def _generate_ideas_simple(batch, batch_simple, business_profile: dict, client) -> list:
+    """Fallback: генерирует идеи в простом формате без классификации."""
+    prompt = f"""Ты SMM-стратег. Придумай идеи постов.
+
+Бизнес: {business_profile.get('name', '')}, ниша: {business_profile.get('niche', '')}
+
+Слоты:
+{json.dumps(batch_simple, ensure_ascii=False, indent=2)}
+
+Для каждого слота верни:
+{{"slot_id":"...","idea":"тема поста","angle":"угол","hook":"первое предложение","visual_concept":"картинка","is_sensitive":false,"info_questions":[]}}
+
+Верни JSON-массив. Без markdown."""
+
+    try:
+        resp = client.messages.create(
+            model=MODEL,
             max_tokens=4000,
             messages=[{"role": "user", "content": prompt}]
         )
         raw = resp.content[0].text.strip().replace("```json", "").replace("```", "").strip()
-        ideas = json.loads(raw)
-        all_ideas.extend(ideas)
-
-    return all_ideas
+        return json.loads(raw)
+    except Exception as e:
+        print(f"✗ Fallback ideas also failed: {e}")
+        # Последний резерв: пустые идеи (посты будут в статусе planned)
+        return []
