@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from typing import Optional
-import uuid, aiohttp, boto3, base64
+import uuid, aiohttp, base64
 from datetime import datetime
 
 from app.database import get_db
@@ -260,10 +260,6 @@ async def generate_image_for_slot(
     if not slot:
         raise HTTPException(404, "Slot not found")
 
-    if not settings.OPENAI_API_KEY:
-        raise HTTPException(400, "OpenAI API key не задан в .env")
-
-    # Если нет промта — генерируем его прямо сейчас
     if not slot.image_prompt:
         biz_result = await db.execute(select(Business).where(Business.id == slot.business_id))
         business = biz_result.scalar_one_or_none()
@@ -275,51 +271,15 @@ async def generate_image_for_slot(
         else:
             raise HTTPException(400, "Нет данных для генерации промта")
 
-    import openai
-    client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-
+    import asyncio
+    from app.services.gemini_image import generate_image_sync
     try:
-        response = await client.images.generate(
-            model="dall-e-3",
-            prompt=slot.image_prompt[:1000],
-            size="1024x1024",
-            quality="hd",
-            style="natural",
-            n=1,
-        )
-        image_url = response.data[0].url
-
-        # Пытаемся загрузить в S3 если настроен
-        image_url_final = image_url
-        if settings.S3_ACCESS_KEY and settings.S3_BUCKET:
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(image_url) as r:
-                        img_bytes = await r.read()
-
-                s3 = boto3.client(
-                    "s3",
-                    endpoint_url=settings.S3_ENDPOINT,
-                    aws_access_key_id=settings.S3_ACCESS_KEY,
-                    aws_secret_access_key=settings.S3_SECRET_KEY,
-                    region_name=settings.S3_REGION,
-                )
-                key = f"posts/{uuid.uuid4()}.jpg"
-                s3.put_object(
-                    Bucket=settings.S3_BUCKET,
-                    Key=key,
-                    Body=img_bytes,
-                    ContentType="image/jpeg",
-                    ACL="public-read"
-                )
-                image_url_final = f"{settings.S3_ENDPOINT}/{settings.S3_BUCKET}/{key}"
-            except Exception:
-                pass  # Используем прямую ссылку OpenAI если S3 недоступен
-
-        slot.image_url = image_url_final
-        await db.commit()
-
-        return {"status": "generated", "image_url": image_url_final}
-
-    except Exception as e:
+        b64 = await asyncio.to_thread(generate_image_sync, slot.image_prompt, "1:1")
+    except ValueError as e:
         raise HTTPException(400, f"Ошибка генерации: {str(e)}")
+
+    slot.image_base64 = b64
+    slot.image_url = None
+    await db.commit()
+
+    return {"status": "generated", "image_base64": b64}

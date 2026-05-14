@@ -143,10 +143,16 @@ export default function ContentPage() {
     setGeneratingImg(slot.id);
     try {
       const { data } = await api.post(`/content/slot/${slot.id}/generate-image`);
-      setSlots(prev => prev.map(s => s.id === slot.id ? { ...s, image_url: data.image_url } : s));
-      setExpanded(prev => prev?.id === slot.id ? { ...prev, image_url: data.image_url } : prev);
-    } catch { alert("Ошибка генерации картинки"); }
-    finally { setGeneratingImg(null); }
+      const updates = {
+        image_url: data.image_url ?? null,
+        image_base64: data.image_base64 ?? null,
+      };
+      setSlots(prev => prev.map(s => s.id === slot.id ? { ...s, ...updates } : s));
+      setExpanded(prev => prev?.id === slot.id ? { ...prev, ...updates } : prev);
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || "Ошибка генерации картинки";
+      alert(msg);
+    } finally { setGeneratingImg(null); }
   };
 
   const publishNow = async (slot: Slot) => {
