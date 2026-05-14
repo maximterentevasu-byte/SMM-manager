@@ -5,7 +5,7 @@ import api from "@/lib/api";
 
 type Platform = "vk" | "telegram";
 type ConnectedPlatform = { platform: Platform; page_name: string };
-type ImageMode = "ai" | "my" | null;
+type ImageMode = "ai" | "my" | "edit" | null;
 
 const MAX_FILES = 10;
 
@@ -42,6 +42,12 @@ export default function PostCreatorPage() {
   const [imagePrompt, setImagePrompt] = useState("");
   const [myPromptRu, setMyPromptRu] = useState("");
 
+  // ── Edit mode ────────────────────────────────────────────────────────────
+  const [editBaseIdx, setEditBaseIdx] = useState<number>(0);
+  const [editBaseUploaded, setEditBaseUploaded] = useState<{ data: string; mime: string } | null>(null);
+  const [editBaseUploadedPreview, setEditBaseUploadedPreview] = useState<string>("");
+  const [editInstruction, setEditInstruction] = useState<string>("");
+
   // ── Block 4 ──────────────────────────────────────────────────────────────
   const [imageBase64, setImageBase64] = useState("");
 
@@ -60,6 +66,7 @@ export default function PostCreatorPage() {
 
   const multiFileRef = useRef<HTMLInputElement>(null);
   const ownPhotoRef = useRef<HTMLInputElement>(null);
+  const editBaseRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!businessId) return;
@@ -107,6 +114,22 @@ export default function PostCreatorPage() {
       setImageBase64(result.split(",")[1] || "");
       setImageMode(null);
       setImagePrompt("");
+    };
+    reader.readAsDataURL(f);
+    e.target.value = "";
+  };
+
+  const onEditBasePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      const parts = result.split(",");
+      const mime = parts[0].replace("data:", "").replace(";base64", "") || "image/jpeg";
+      setEditBaseUploaded({ data: parts[1] || "", mime });
+      setEditBaseUploadedPreview(result);
+      setEditBaseIdx(-1);
     };
     reader.readAsDataURL(f);
     e.target.value = "";
@@ -183,6 +206,45 @@ export default function PostCreatorPage() {
     }
   };
 
+  const editImage = async () => {
+    if (!editInstruction.trim()) return;
+
+    const hasUploadedBase = !!editBaseUploaded;
+    const hasAttachedBase = ideaFiles.length > 0 && editBaseIdx >= 0;
+
+    if (!hasUploadedBase && !hasAttachedBase) {
+      alert("Выберите основное фото для редактирования (из прикреплённых или загрузите отдельно)");
+      return;
+    }
+
+    setLoadingImage(true);
+    try {
+      let baseImage: { data: string; mime: string };
+      let refImages: { data: string; mime: string }[] = [];
+
+      if (hasUploadedBase) {
+        baseImage = editBaseUploaded!;
+        refImages = await Promise.all(ideaFiles.filter(f => f.type.startsWith("image/")).map(readFileAsBase64));
+      } else {
+        baseImage = await readFileAsBase64(ideaFiles[editBaseIdx]);
+        const refFiles = ideaFiles.filter((_, i) => i !== editBaseIdx && ideaFiles[i].type.startsWith("image/"));
+        refImages = await Promise.all(refFiles.map(readFileAsBase64));
+      }
+
+      const { data } = await api.post(`/post-creator/${businessId}/edit-image`, {
+        base_image: baseImage,
+        reference_images: refImages.length > 0 ? refImages : undefined,
+        instruction_ru: editInstruction,
+      });
+      setImageBase64(data.image_base64);
+      if (data.instruction_en) setImagePrompt(data.instruction_en);
+    } catch (e: any) {
+      alert("Ошибка редактирования: " + (e?.response?.data?.detail || "попробуй изменить инструкцию"));
+    } finally {
+      setLoadingImage(false);
+    }
+  };
+
   const generateMyImage = async () => {
     if (!myPromptRu.trim()) return;
     setLoadingImage(true);
@@ -251,7 +313,7 @@ export default function PostCreatorPage() {
   const hasText = !!postText.trim();
   const hasPrompt = !!imagePrompt.trim();
   const hasImage = !!imageBase64;
-  const showBlock3 = (imageMode === "ai" && (hasPrompt || loadingPrompt)) || imageMode === "my";
+  const showBlock3 = (imageMode === "ai" && (hasPrompt || loadingPrompt)) || imageMode === "my" || imageMode === "edit";
 
   // ── Styles ────────────────────────────────────────────────────────────────
 
@@ -474,6 +536,25 @@ export default function PostCreatorPage() {
                     ✏️ Мой промт для картинки
                   </button>
                   <button
+                    onClick={() => {
+                      setImageMode("edit");
+                      setImagePrompt("");
+                      setImageBase64("");
+                      setEditBaseIdx(ideaFiles.length > 0 ? 0 : -1);
+                      setEditBaseUploaded(null);
+                      setEditBaseUploadedPreview("");
+                    }}
+                    style={{
+                      padding: "10px 22px",
+                      background: imageMode === "edit" ? "#6B46C1" : "#fff",
+                      color: imageMode === "edit" ? "#fff" : "#555",
+                      border: `1.5px solid ${imageMode === "edit" ? "#6B46C1" : "#E0DED8"}`,
+                      borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600,
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                    }}>
+                    ✂️ Редактировать фото
+                  </button>
+                  <button
                     onClick={() => ownPhotoRef.current?.click()}
                     style={{
                       padding: "10px 22px", background: "#fff",
@@ -494,9 +575,9 @@ export default function PostCreatorPage() {
         {/* ── 3. Промт для картинки ── */}
         {showBlock3 && (
           <div style={card}>
-            {imageMode === "ai"
-              ? sectionTitle(3, "Промт для генерации изображения", hasPrompt)
-              : sectionTitle(3, "Мой промт для изображения", !!myPromptRu.trim())}
+            {imageMode === "ai" && sectionTitle(3, "Промт для генерации изображения", hasPrompt)}
+            {imageMode === "my" && sectionTitle(3, "Мой промт для изображения", !!myPromptRu.trim())}
+            {imageMode === "edit" && sectionTitle(3, "Редактирование фото", false)}
 
             {imageMode === "ai" && (
               <>
@@ -531,6 +612,92 @@ export default function PostCreatorPage() {
                     loadingImage ? "Генерирую..." : "🌐 Перевести и сгенерировать",
                     generateMyImage,
                     { disabled: !myPromptRu.trim() || loadingImage, loading: loadingImage, color: "#4680C2" }
+                  )}
+                </div>
+              </>
+            )}
+
+            {imageMode === "edit" && (
+              <>
+                <p style={{ color: "#888", fontSize: 13, margin: "0 0 16px" }}>
+                  Выберите основное фото (которое будет редактироваться), остальные прикреплённые — референсы.
+                  Gemini 3.1 Flash Image заменит объекты / изменит фото по вашей инструкции.
+                </p>
+
+                {/* Выбор основного фото из прикреплённых */}
+                {ideaFilePreviews.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 12, color: "#666", fontWeight: 600, marginBottom: 8 }}>
+                      Основное фото (нажмите, чтобы выбрать):
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {ideaFilePreviews.map((src, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => { setEditBaseIdx(idx); setEditBaseUploaded(null); setEditBaseUploadedPreview(""); }}
+                          style={{
+                            position: "relative", cursor: "pointer",
+                            border: editBaseIdx === idx && !editBaseUploaded ? "3px solid #6B46C1" : "2px solid #E0DED8",
+                            borderRadius: 10, overflow: "hidden",
+                          }}>
+                          <img src={src} alt={`base-${idx}`}
+                            style={{ width: 72, height: 72, objectFit: "cover", display: "block" }} />
+                          {editBaseIdx === idx && !editBaseUploaded && (
+                            <div style={{
+                              position: "absolute", bottom: 0, left: 0, right: 0,
+                              background: "#6B46C1", color: "#fff",
+                              fontSize: 9, fontWeight: 700, textAlign: "center", padding: "2px 0",
+                            }}>ОСНОВА</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {editBaseIdx >= 0 && !editBaseUploaded && ideaFilePreviews.length > 1 && (
+                      <div style={{ fontSize: 11, color: "#888", marginTop: 6 }}>
+                        Остальные {ideaFilePreviews.length - 1} фото → референсы для ИИ
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Загрузка другого основного фото */}
+                <div style={{ marginBottom: 16 }}>
+                  <button
+                    onClick={() => editBaseRef.current?.click()}
+                    style={{
+                      background: editBaseUploaded ? "#F0EBF8" : "none",
+                      border: `1px solid ${editBaseUploaded ? "#6B46C1" : "#E0DED8"}`,
+                      borderRadius: 8, padding: "7px 14px", cursor: "pointer",
+                      fontSize: 12, color: editBaseUploaded ? "#6B46C1" : "#666",
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                    }}>
+                    {editBaseUploaded ? "✓ Другое основное фото загружено" : "📂 Загрузить другое основное фото"}
+                  </button>
+                  <input ref={editBaseRef} type="file" accept="image/*"
+                    style={{ display: "none" }} onChange={onEditBasePhoto} />
+                  {editBaseUploadedPreview && (
+                    <img src={editBaseUploadedPreview} alt="edit-base"
+                      style={{ display: "block", marginTop: 8, width: 120, height: 120,
+                        objectFit: "cover", borderRadius: 10, border: "2px solid #6B46C1" }} />
+                  )}
+                </div>
+
+                {/* Инструкция */}
+                <div style={{ fontSize: 12, color: "#666", fontWeight: 600, marginBottom: 6 }}>
+                  Инструкция по редактированию (на русском):
+                </div>
+                {textarea(editInstruction, setEditInstruction,
+                  "Например: замени шоколадки в коробке на товары из референс-фото (чупа-чупс, Hershey's, Mountain Dew). Сохрани кубик, фон и общую композицию. Сделай вид как для рекламной съёмки.", 5)}
+
+                <div style={{ marginTop: 14 }}>
+                  {btn(
+                    loadingImage ? "Редактирую..." : "✂️ Редактировать",
+                    editImage,
+                    {
+                      disabled: !editInstruction.trim() || loadingImage
+                        || (ideaFiles.length === 0 && !editBaseUploaded),
+                      loading: loadingImage, color: "#6B46C1",
+                    }
                   )}
                 </div>
               </>

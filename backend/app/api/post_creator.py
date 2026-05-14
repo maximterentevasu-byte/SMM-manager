@@ -330,6 +330,49 @@ async def generate_image(
     return {"image_base64": b64, "prompt_en": prompt}
 
 
+# ─── 3б. Редактирование изображения ─────────────────────────────────────────
+
+class EditImageIn(BaseModel):
+    base_image: ImageData
+    reference_images: Optional[list[ImageData]] = None
+    instruction_ru: str
+
+
+@router.post("/{business_id}/edit-image")
+async def edit_image_endpoint(
+    business_id: str,
+    body: EditImageIn,
+    current_user: User = Depends(get_current_user),
+):
+    import asyncio
+    from app.services.gemini_image import edit_image_sync
+
+    translation_system = (
+        "You are a professional image editing instruction translator. "
+        "Translate the following image editing instruction from Russian to English. "
+        "Be precise and specific about what to change, what to keep, and how the result should look. "
+        "Return ONLY the English translation, no comments."
+    )
+    try:
+        instruction_en = await _generate_text(translation_system, body.instruction_ru, 400)
+    except Exception:
+        instruction_en = body.instruction_ru
+
+    refs = [{"data": img.data, "mime": img.mime} for img in (body.reference_images or [])]
+
+    try:
+        b64 = await asyncio.to_thread(
+            edit_image_sync,
+            {"data": body.base_image.data, "mime": body.base_image.mime},
+            refs,
+            instruction_en,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    return {"image_base64": b64, "instruction_en": instruction_en}
+
+
 # ─── 4. Публикация в соцсети ─────────────────────────────────────────────────
 
 class PublishIn(BaseModel):
