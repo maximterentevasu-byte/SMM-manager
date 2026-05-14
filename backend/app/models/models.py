@@ -12,7 +12,9 @@ import enum
 class PlanStatus(str, enum.Enum):
     planned = "planned"
     idea_ready = "idea_ready"
-    content_ready = "content_ready"
+    pending_approval = "pending_approval"  # AI сгенерил, ждёт согласования пользователем
+    needs_info = "needs_info"              # согласован, но нужна доп. инфо от пользователя
+    content_ready = "content_ready"        # полностью готов к публикации
     published = "published"
     failed = "failed"
 
@@ -91,6 +93,9 @@ class PlatformConnection(Base):
     # VK Analytics user token (wall.get требует user token, не community token)
     vk_user_token_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Telegram chat ID администратора бизнеса (для уведомлений)
+    admin_chat_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
     business: Mapped["Business"] = relationship(back_populates="platform_connections")
 
 
@@ -115,6 +120,8 @@ class ContentSlot(Base):
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     image_base64: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    images: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)          # карусель (список base64)
+    needs_info_for: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)  # список требуемых данных
 
     reach: Mapped[Optional[int]] = mapped_column(nullable=True)
     likes: Mapped[Optional[int]] = mapped_column(nullable=True)

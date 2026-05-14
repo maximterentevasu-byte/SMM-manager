@@ -11,6 +11,7 @@ celery_app = Celery(
         "app.workers.content_tasks",
         "app.workers.posting_tasks",
         "app.workers.analytics_tasks",
+        "app.workers.notification_tasks",
     ]
 )
 
@@ -34,6 +35,11 @@ celery_app.conf.update(
         "collect-analytics-weekly": {
             "task": "app.workers.analytics_tasks.collect_all_analytics_task",
             "schedule": crontab(hour=6, minute=0, day_of_week=1),
+        },
+        # Уведомления в TG за 2 дня до публикации — ежедневно в 10:00 МСК
+        "notify-pending-posts": {
+            "task": "app.workers.notification_tasks.notify_pending_posts",
+            "schedule": crontab(hour=10, minute=0),
         },
     }
 )

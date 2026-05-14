@@ -11,7 +11,13 @@ _MIGRATIONS = [
     "ALTER TABLE platform_connections ADD COLUMN IF NOT EXISTS tg_api_hash VARCHAR(255)",
     "ALTER TABLE platform_connections ADD COLUMN IF NOT EXISTS tg_session_encrypted TEXT",
     "ALTER TABLE platform_connections ADD COLUMN IF NOT EXISTS vk_user_token_encrypted TEXT",
+    "ALTER TABLE platform_connections ADD COLUMN IF NOT EXISTS admin_chat_id VARCHAR(255)",
     "ALTER TABLE content_slots ADD COLUMN IF NOT EXISTS image_base64 TEXT",
+    "ALTER TABLE content_slots ADD COLUMN IF NOT EXISTS images JSON",
+    "ALTER TABLE content_slots ADD COLUMN IF NOT EXISTS needs_info_for JSON",
+    # Новые значения enum (PostgreSQL 12+: может выполняться внутри транзакции)
+    "ALTER TYPE planstatus ADD VALUE IF NOT EXISTS 'pending_approval'",
+    "ALTER TYPE planstatus ADD VALUE IF NOT EXISTS 'needs_info'",
 ]
 
 

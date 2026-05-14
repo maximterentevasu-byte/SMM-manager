@@ -82,8 +82,8 @@ async def _generate_content(slot_id: str):
 
             slot.image_prompt = await _generate_image_prompt(slot, business.profile)
 
-            slot.status = PlanStatus.content_ready
-            print(f"✓ Контент готов: {slot_id[:8]}... ({slot.platform})")
+            slot.status = PlanStatus.pending_approval
+            print(f"✓ Контент готов (ждёт согласования): {slot_id[:8]}... ({slot.platform})")
 
         except Exception as e:
             slot.status = PlanStatus.failed

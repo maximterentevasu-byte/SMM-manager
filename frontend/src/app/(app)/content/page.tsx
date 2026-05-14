@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  content_ready: { label: "Готов",       color: "#0F6E56", bg: "#E1F5EE" },
-  published:     { label: "Опубликован", color: "#185FA5", bg: "#E6F1FB" },
-  planned:       { label: "Идея",        color: "#5F5E5A", bg: "#F1EFE8" },
-  idea_ready:    { label: "Идея готова", color: "#854F0B", bg: "#FAEEDA" },
-  failed:        { label: "Ошибка",      color: "#A32D2D", bg: "#FCEBEB" },
+  content_ready:     { label: "Готов",              color: "#0F6E56", bg: "#E1F5EE" },
+  published:         { label: "Опубликован",        color: "#185FA5", bg: "#E6F1FB" },
+  planned:           { label: "Идея",               color: "#5F5E5A", bg: "#F1EFE8" },
+  idea_ready:        { label: "Идея готова",        color: "#854F0B", bg: "#FAEEDA" },
+  pending_approval:  { label: "Ждёт согласования",  color: "#7C4400", bg: "#FFF3CD" },
+  needs_info:        { label: "Нужна информация",   color: "#8B3200", bg: "#FFE5CC" },
+  failed:            { label: "Ошибка",             color: "#A32D2D", bg: "#FCEBEB" },
 };
 
 const PLATFORM_ICON: Record<string, string> = { telegram: "✈", vk: "ВК", ok: "ОК" };
@@ -18,6 +20,18 @@ const PLATFORM_COLORS: Record<string, { bg: string; border: string }> = {
   vk:       { bg: "#EBF2FB", border: "#4680C2" },
   ok:       { bg: "#FFF3E0", border: "#FF8C00" },
 };
+
+const NEEDS_INFO_OPTIONS = [
+  "Фото товара",
+  "Фото точки / заведения",
+  "Фото сотрудника",
+  "Условия акции",
+  "Название новинки",
+  "Цена продукта",
+  "Дата события",
+  "Ссылка на продукт",
+  "Другая информация",
+];
 
 const MONTHS     = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
 const MONTHS_RU  = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
@@ -28,6 +42,8 @@ type Slot = {
   idea: { idea: string; hook: string; visual_concept: string } | null;
   post_text: string | null; image_url: string | null; image_base64: string | null;
   image_prompt: string | null; status: string;
+  images: string[] | null;
+  needs_info_for: string[] | null;
 };
 
 // ── Calendar utils ────────────────────────────────────────────────────────────
@@ -96,6 +112,17 @@ export default function ContentPage() {
   const [draggingId, setDraggingId]     = useState<string | null>(null);
   const [dragOverKey, setDragOverKey]   = useState<string | null>(null);
 
+  // Image editing state
+  const [modalPrompt, setModalPrompt]   = useState("");
+  const [editingPrompt, setEditingPrompt] = useState(false);
+  const [carouselIdx, setCarouselIdx]   = useState(0);
+  const [generatingCarousel, setGeneratingCarousel] = useState(false);
+
+  // Approval state
+  const [showNeedsInfo, setShowNeedsInfo] = useState(false);
+  const [selectedInfoItems, setSelectedInfoItems] = useState<string[]>([]);
+  const [approvingId, setApprovingId]   = useState<string | null>(null);
+
   const [businessId] = useState(() =>
     typeof window !== "undefined" ? localStorage.getItem("businessId") || "" : ""
   );
@@ -139,20 +166,37 @@ export default function ContentPage() {
     finally { setSaving(false); }
   };
 
-  const generateImage = async (slot: Slot) => {
+  const generateImage = async (slot: Slot, customPrompt?: string) => {
     setGeneratingImg(slot.id);
     try {
-      const { data } = await api.post(`/content/slot/${slot.id}/generate-image`);
+      const { data } = await api.post(`/content/slot/${slot.id}/generate-image`,
+        customPrompt ? { prompt: customPrompt } : {}
+      );
       const updates = {
         image_url: data.image_url ?? null,
         image_base64: data.image_base64 ?? null,
+        image_prompt: customPrompt || slot.image_prompt,
       };
       setSlots(prev => prev.map(s => s.id === slot.id ? { ...s, ...updates } : s));
       setExpanded(prev => prev?.id === slot.id ? { ...prev, ...updates } : prev);
+      setEditingPrompt(false);
     } catch (e: any) {
       const msg = e?.response?.data?.detail || "Ошибка генерации картинки";
       alert(msg);
     } finally { setGeneratingImg(null); }
+  };
+
+  const generateCarousel = async (slot: Slot) => {
+    setGeneratingCarousel(true);
+    try {
+      const { data } = await api.post(`/content/slot/${slot.id}/generate-carousel`);
+      const updates = { images: data.images, image_base64: data.images?.[0] ?? null };
+      setSlots(prev => prev.map(s => s.id === slot.id ? { ...s, ...updates } : s));
+      setExpanded(prev => prev?.id === slot.id ? { ...prev, ...updates } : prev);
+      setCarouselIdx(0);
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || "Ошибка генерации карусели");
+    } finally { setGeneratingCarousel(false); }
   };
 
   const publishNow = async (slot: Slot) => {
@@ -162,9 +206,47 @@ export default function ContentPage() {
     } catch { alert("Ошибка публикации"); }
   };
 
+  const approveSlot = async (slot: Slot) => {
+    setApprovingId(slot.id);
+    try {
+      await api.post(`/content/slot/${slot.id}/approve`);
+      setSlots(prev => prev.map(s => s.id === slot.id ? { ...s, status: "content_ready", needs_info_for: null } : s));
+      setExpanded(prev => prev?.id === slot.id ? { ...prev, status: "content_ready", needs_info_for: null } : prev);
+      setShowNeedsInfo(false);
+    } catch { alert("Ошибка согласования"); }
+    finally { setApprovingId(null); }
+  };
+
+  const requestInfo = async (slot: Slot) => {
+    if (selectedInfoItems.length === 0) return;
+    setApprovingId(slot.id);
+    try {
+      await api.post(`/content/slot/${slot.id}/request-info`, { items: selectedInfoItems });
+      setSlots(prev => prev.map(s => s.id === slot.id
+        ? { ...s, status: "needs_info", needs_info_for: selectedInfoItems }
+        : s
+      ));
+      setExpanded(prev => prev?.id === slot.id
+        ? { ...prev, status: "needs_info", needs_info_for: selectedInfoItems }
+        : prev
+      );
+      setShowNeedsInfo(false);
+      setSelectedInfoItems([]);
+    } catch { alert("Ошибка"); }
+    finally { setApprovingId(null); }
+  };
+
   // Calendar helpers
-  const openSlot = (slot: Slot) => { setExpanded(slot); setModalText(slot.post_text || ""); };
-  const closeModal = () => setExpanded(null);
+  const openSlot = (slot: Slot) => {
+    setExpanded(slot);
+    setModalText(slot.post_text || "");
+    setModalPrompt(slot.image_prompt || "");
+    setCarouselIdx(0);
+    setShowNeedsInfo(false);
+    setEditingPrompt(false);
+    setSelectedInfoItems(slot.needs_info_for || []);
+  };
+  const closeModal = () => { setExpanded(null); setShowNeedsInfo(false); setEditingPrompt(false); };
 
   const saveModal = async () => {
     if (!expanded) return;
@@ -233,10 +315,16 @@ export default function ContentPage() {
   const stats = {
     total:     slots.filter(s => s.post_text).length,
     ready:     slots.filter(s => s.status === "content_ready").length,
+    pending:   slots.filter(s => s.status === "pending_approval").length,
     published: slots.filter(s => s.status === "published").length,
   };
 
   const today = new Date();
+
+  // Current images for carousel
+  const currentImages = expanded?.images && expanded.images.length > 0
+    ? expanded.images
+    : (expanded?.image_base64 ? [expanded.image_base64] : (expanded?.image_url ? [] : []));
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: "#888" }}>
@@ -263,6 +351,9 @@ export default function ContentPage() {
               </button>
             )}
             <div style={{ display: "flex", gap: 20, fontSize: 13, color: "#666" }}>
+              {stats.pending > 0 && (
+                <span>На согласовании: <strong style={{ color: "#7C4400" }}>{stats.pending}</strong></span>
+              )}
               <span>Готово: <strong style={{ color: "#0F6E56" }}>{stats.ready}</strong></span>
               <span>Опубликовано: <strong style={{ color: "#185FA5" }}>{stats.published}</strong></span>
               <span>Всего: <strong>{stats.total}</strong></span>
@@ -275,7 +366,7 @@ export default function ContentPage() {
 
         {/* ── Filters + view toggle ── */}
         <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap", alignItems: "center" }}>
-          {["all", "content_ready", "published", "idea_ready", "failed"].map(s => (
+          {["all", "pending_approval", "needs_info", "content_ready", "published", "idea_ready", "failed"].map(s => (
             <button key={s} onClick={() => setFilter(s)}
               style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid",
                 cursor: "pointer", fontSize: 13, fontWeight: 500,
@@ -299,7 +390,6 @@ export default function ContentPage() {
 
           <div style={{ flex: 1 }} />
 
-          {/* View toggle */}
           <div style={{ display: "flex", background: "#F1EFE8", borderRadius: 10, padding: 3, gap: 2 }}>
             {(["list", "calendar"] as const).map(mode => (
               <button key={mode} onClick={() => setViewMode(mode)}
@@ -322,11 +412,15 @@ export default function ContentPage() {
               const st = STATUS_CONFIG[slot.status] || STATUS_CONFIG.planned;
               const date = new Date(slot.scheduled_at);
               const isEditing = editingId === slot.id;
+              const needsApproval = slot.status === "pending_approval" || slot.status === "needs_info";
               return (
                 <div key={slot.id} style={{ background: "#fff", borderRadius: 16,
-                  border: "1px solid #EAE8E2", overflow: "hidden" }}>
+                  border: `1px solid ${needsApproval ? st.bg : "#EAE8E2"}`,
+                  outline: needsApproval ? `2px solid ${st.color}22` : "none",
+                  overflow: "hidden" }}>
                   <div style={{ padding: "14px 20px", display: "flex", alignItems: "center",
-                    gap: 12, borderBottom: "1px solid #F2F0EC" }}>
+                    gap: 12, borderBottom: "1px solid #F2F0EC",
+                    background: needsApproval ? st.bg : "transparent" }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: "#888",
                       background: "#F1EFE8", padding: "3px 8px", borderRadius: 6 }}>
                       {PLATFORM_ICON[slot.platform] || slot.platform.toUpperCase()}
@@ -362,6 +456,17 @@ export default function ContentPage() {
                         </div>
                       ) : (
                         <div>
+                          {slot.needs_info_for && slot.needs_info_for.length > 0 && (
+                            <div style={{ marginBottom: 12, padding: "8px 12px", background: "#FFF3CD",
+                              borderRadius: 8, border: "1px solid #FFE08A" }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "#7C4400", marginBottom: 4 }}>
+                                📋 Требуется от вас:
+                              </div>
+                              {slot.needs_info_for.map((item, i) => (
+                                <div key={i} style={{ fontSize: 12, color: "#555" }}>• {item}</div>
+                              ))}
+                            </div>
+                          )}
                           <p style={{ fontSize: 14, lineHeight: 1.7, color: "#2a2a2a",
                             margin: 0, whiteSpace: "pre-wrap" }}>{slot.post_text}</p>
                           <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
@@ -370,6 +475,19 @@ export default function ContentPage() {
                                 border: "1px solid #E0DED8", borderRadius: 8, cursor: "pointer", fontSize: 12 }}>
                               ✏️ Редактировать
                             </button>
+                            <button onClick={() => openSlot(slot)}
+                              style={{ padding: "7px 14px", background: "#F1EFE8", color: "#444",
+                                border: "1px solid #E0DED8", borderRadius: 8, cursor: "pointer", fontSize: 12 }}>
+                              🖼 Картинка
+                            </button>
+                            {needsApproval && (
+                              <button onClick={() => openSlot(slot)}
+                                style={{ padding: "7px 14px", background: st.bg, color: st.color,
+                                  border: `1px solid ${st.color}44`, borderRadius: 8, cursor: "pointer",
+                                  fontSize: 12, fontWeight: 600 }}>
+                                ✓ Согласовать
+                              </button>
+                            )}
                             {slot.status === "content_ready" && (
                               <button onClick={() => publishNow(slot)}
                                 style={{ padding: "7px 14px", background: "#0F6E56", color: "#fff",
@@ -381,27 +499,27 @@ export default function ContentPage() {
                         </div>
                       )}
                     </div>
-                    <div style={{ width: 180, borderLeft: "1px solid #F2F0EC", padding: 14,
-                      display: "flex", flexDirection: "column", gap: 10, alignItems: "center",
+                    <div style={{ width: 160, borderLeft: "1px solid #F2F0EC", padding: 12,
+                      display: "flex", flexDirection: "column", gap: 8, alignItems: "center",
                       justifyContent: "center", background: "#FAFAF8" }}>
                       {slot.image_url || slot.image_base64 ? (
                         <img src={slot.image_url || `data:image/png;base64,${slot.image_base64}`}
-                          alt="post" style={{ width: "100%", borderRadius: 10, objectFit: "cover" }} />
+                          alt="post" style={{ width: "100%", borderRadius: 8, objectFit: "cover", cursor: "pointer" }}
+                          onClick={() => openSlot(slot)} />
                       ) : (
                         <div style={{ width: "100%", aspectRatio: "1", background: "#F1EFE8",
-                          borderRadius: 10, display: "flex", flexDirection: "column",
-                          alignItems: "center", justifyContent: "center", gap: 6 }}>
-                          <span style={{ fontSize: 24 }}>🖼</span>
+                          borderRadius: 8, display: "flex", flexDirection: "column",
+                          alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer" }}
+                          onClick={() => openSlot(slot)}>
+                          <span style={{ fontSize: 22 }}>🖼</span>
                           <span style={{ fontSize: 10, color: "#999", textAlign: "center" }}>Нет картинки</span>
                         </div>
                       )}
-                      {!slot.image_url && !slot.image_base64 && (
-                        <button onClick={() => generateImage(slot)} disabled={generatingImg === slot.id}
-                          style={{ width: "100%", padding: "7px", background: "#533AB7", color: "#fff",
-                            border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-                          {generatingImg === slot.id ? "Генерирую..." : "✨ Создать"}
-                        </button>
-                      )}
+                      <button onClick={() => openSlot(slot)} disabled={generatingImg === slot.id}
+                        style={{ width: "100%", padding: "6px", background: "#533AB7", color: "#fff",
+                          border: "none", borderRadius: 7, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
+                        {generatingImg === slot.id ? "..." : slot.image_base64 || slot.image_url ? "🔄 Перегенерировать" : "✨ Создать"}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -419,7 +537,6 @@ export default function ContentPage() {
         {/* ── Calendar view ── */}
         {viewMode === "calendar" && (
           <div>
-            {/* Calendar toolbar */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
               <button onClick={() => navCal(-1)}
                 style={{ padding: "7px 14px", background: "#fff", border: "1px solid #E0DED8",
@@ -448,21 +565,15 @@ export default function ContentPage() {
               </div>
             </div>
 
-            {/* Calendar grid */}
             <div style={{ background: "#fff", border: "1px solid #E0DED8", borderRadius: 14, overflow: "hidden" }}>
-              {/* Day headers */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)",
-                borderBottom: "1px solid #E0DED8" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: "1px solid #E0DED8" }}>
                 {DAYS_SHORT.map((d, i) => (
                   <div key={d} style={{ padding: "10px 12px", fontSize: 12, fontWeight: 600,
                     color: i >= 5 ? "#888" : "#555", textAlign: "center",
-                    borderRight: i < 6 ? "1px solid #E0DED8" : "none" }}>
-                    {d}
-                  </div>
+                    borderRight: i < 6 ? "1px solid #E0DED8" : "none" }}>{d}</div>
                 ))}
               </div>
 
-              {/* Week rows */}
               {calWeeks.map((week, wi) => (
                 <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)",
                   borderBottom: wi < calWeeks.length - 1 ? "1px solid #E0DED8" : "none" }}>
@@ -471,35 +582,22 @@ export default function ContentPage() {
                     const inCurrentMonth = calMode === "week" || day.getMonth() === calDate.getMonth();
                     const isToday = isSameDay(day, today);
                     const isDragTarget = dragOverKey === key;
-                    const daySlots = applyFilters(
-                      slots.filter(s => isSameDay(new Date(s.scheduled_at), day))
-                    );
+                    const daySlots = applyFilters(slots.filter(s => isSameDay(new Date(s.scheduled_at), day)));
 
                     return (
-                      <div key={key}
-                        style={{
-                          minHeight: calMode === "month" ? 110 : 180,
-                          padding: "8px 8px 6px",
-                          borderRight: di < 6 ? "1px solid #E0DED8" : "none",
-                          background: isDragTarget ? "#F0EDFE" : inCurrentMonth ? "#fff" : "#F9F8F6",
-                          transition: "background .1s",
-                          position: "relative",
-                          minWidth: 0,
-                          overflow: "hidden",
-                        }}
+                      <div key={key} style={{
+                        minHeight: calMode === "month" ? 110 : 180,
+                        padding: "8px 8px 6px",
+                        borderRight: di < 6 ? "1px solid #E0DED8" : "none",
+                        background: isDragTarget ? "#F0EDFE" : inCurrentMonth ? "#fff" : "#F9F8F6",
+                        transition: "background .1s", position: "relative", minWidth: 0, overflow: "hidden",
+                      }}
                         onDragOver={e => { e.preventDefault(); setDragOverKey(key); }}
                         onDragLeave={() => setDragOverKey(null)}
-                        onDrop={e => {
-                          e.preventDefault();
-                          setDragOverKey(null);
-                          if (draggingId) moveSlot(draggingId, day);
-                          setDraggingId(null);
-                        }}
+                        onDrop={e => { e.preventDefault(); setDragOverKey(null); if (draggingId) moveSlot(draggingId, day); setDraggingId(null); }}
                       >
-                        {/* Day number */}
                         <div style={{ marginBottom: 6, display: "flex", justifyContent: "center" }}>
-                          <span style={{
-                            width: 26, height: 26, borderRadius: "50%", display: "flex",
+                          <span style={{ width: 26, height: 26, borderRadius: "50%", display: "flex",
                             alignItems: "center", justifyContent: "center",
                             fontSize: 12, fontWeight: isToday ? 700 : 400,
                             background: isToday ? "#533AB7" : "transparent",
@@ -507,34 +605,25 @@ export default function ContentPage() {
                           }}>{day.getDate()}</span>
                         </div>
 
-                        {/* Slot chips */}
                         {daySlots.map(slot => {
                           const pc  = PLATFORM_COLORS[slot.platform] || { bg: "#F1EFE8", border: "#bbb" };
                           const st  = STATUS_CONFIG[slot.status] || STATUS_CONFIG.planned;
                           const topic = slot.idea?.idea || slot.post_text?.substring(0, 60) || slot.rubric_name;
 
                           return (
-                            <div key={slot.id}
-                              draggable
+                            <div key={slot.id} draggable
                               onDragStart={e => { e.stopPropagation(); setDraggingId(slot.id); }}
                               onDragEnd={() => { setDraggingId(null); setDragOverKey(null); }}
                               onClick={() => openSlot(slot)}
                               title={topic}
                               style={{
                                 background: pc.bg,
-                                borderLeft: `3px solid ${pc.border}`,
-                                borderRadius: 5,
-                                padding: "4px 7px",
-                                marginBottom: 3,
-                                cursor: "grab",
-                                userSelect: "none",
+                                borderLeft: `3px solid ${slot.status === "pending_approval" ? "#F59E0B" : slot.status === "needs_info" ? "#EA580C" : pc.border}`,
+                                borderRadius: 5, padding: "4px 7px", marginBottom: 3,
+                                cursor: "grab", userSelect: "none",
                                 opacity: draggingId === slot.id ? 0.4 : 1,
-                                overflow: "hidden",
-                                minWidth: 0,
-                                wordBreak: "break-word",
-                              }}
-                            >
-                              {/* Строка 1: иконка + рубрика (переносится) */}
+                                overflow: "hidden", minWidth: 0, wordBreak: "break-word",
+                              }}>
                               <div style={{ display: "flex", alignItems: "flex-start", gap: 4, marginBottom: 2 }}>
                                 <span style={{ fontSize: 10, fontWeight: 700, color: "#666", flexShrink: 0, lineHeight: "14px" }}>
                                   {PLATFORM_ICON[slot.platform]}
@@ -543,13 +632,10 @@ export default function ContentPage() {
                                   {slot.rubric_name}
                                 </span>
                               </div>
-                              {/* Строка 2: статус */}
                               <span style={{ fontSize: 9, fontWeight: 600, color: st.color,
-                                background: st.bg, padding: "1px 5px", borderRadius: 4,
-                                display: "inline-block" }}>
+                                background: st.bg, padding: "1px 5px", borderRadius: 4, display: "inline-block" }}>
                                 {st.label}
                               </span>
-                              {/* Тема поста в режиме недели */}
                               {calMode === "week" && topic && (
                                 <div style={{ fontSize: 10, color: "#666", marginTop: 3, lineHeight: 1.3 }}>
                                   {topic.substring(0, 80)}
@@ -572,10 +658,10 @@ export default function ContentPage() {
       {expanded && (
         <div onClick={closeModal}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)",
-            display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+            display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: "#fff", borderRadius: 20, width: "min(720px, 95vw)",
-              maxHeight: "88vh", overflow: "auto", padding: "28px 32px", boxSizing: "border-box" }}>
+            style={{ background: "#fff", borderRadius: 20, width: "min(760px, 95vw)",
+              maxHeight: "92vh", overflow: "auto", padding: "28px 32px", boxSizing: "border-box" }}>
 
             {/* Modal header */}
             <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 20 }}>
@@ -607,6 +693,70 @@ export default function ContentPage() {
               </div>
             </div>
 
+            {/* Approval block */}
+            {(expanded.status === "pending_approval" || expanded.status === "needs_info") && (
+              <div style={{ background: (STATUS_CONFIG[expanded.status] || STATUS_CONFIG.planned).bg,
+                borderRadius: 12, padding: "14px 16px", marginBottom: 20,
+                border: `1px solid ${(STATUS_CONFIG[expanded.status] || STATUS_CONFIG.planned).color}33` }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#333", marginBottom: 10 }}>
+                  {expanded.status === "pending_approval"
+                    ? "⏳ Пост ждёт вашего согласования"
+                    : "📋 Пост ждёт дополнительной информации"}
+                </div>
+                {expanded.needs_info_for && expanded.needs_info_for.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 4 }}>Нужно предоставить:</div>
+                    {expanded.needs_info_for.map((item, i) => (
+                      <div key={i} style={{ fontSize: 13, color: "#444" }}>• {item}</div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button onClick={() => approveSlot(expanded)} disabled={approvingId === expanded.id}
+                    style={{ padding: "9px 20px", background: "#0F6E56", color: "#fff",
+                      border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+                    {approvingId === expanded.id ? "..." : "✓ Согласовать текст и картинку"}
+                  </button>
+                  <button onClick={() => setShowNeedsInfo(!showNeedsInfo)}
+                    style={{ padding: "9px 16px", background: "transparent",
+                      border: "1.5px solid #E0DED8", borderRadius: 10, cursor: "pointer", fontSize: 13, color: "#555" }}>
+                    📋 Нужна информация
+                  </button>
+                </div>
+
+                {/* Needs info checklist */}
+                {showNeedsInfo && (
+                  <div style={{ marginTop: 12, padding: 14, background: "#fff", borderRadius: 10,
+                    border: "1px solid #E0DED8" }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#333", marginBottom: 10 }}>
+                      Что нужно предоставить?
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                      {NEEDS_INFO_OPTIONS.map(item => (
+                        <button key={item}
+                          onClick={() => setSelectedInfoItems(prev =>
+                            prev.includes(item) ? prev.filter(x => x !== item) : [...prev, item]
+                          )}
+                          style={{ padding: "6px 14px", borderRadius: 20, border: "1.5px solid",
+                            cursor: "pointer", fontSize: 12,
+                            borderColor: selectedInfoItems.includes(item) ? "#EA580C" : "#E0DED8",
+                            background: selectedInfoItems.includes(item) ? "#FFE5CC" : "#fff",
+                            color: selectedInfoItems.includes(item) ? "#8B3200" : "#555" }}>
+                          {item}
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={() => requestInfo(expanded)}
+                      disabled={selectedInfoItems.length === 0 || approvingId === expanded.id}
+                      style={{ padding: "8px 16px", background: selectedInfoItems.length === 0 ? "#ccc" : "#EA580C",
+                        color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+                      Поставить статус «Жду инфо»
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Idea block */}
             {expanded.idea && (
               <div style={{ background: "#F8F7F4", borderRadius: 12, padding: "12px 16px", marginBottom: 16 }}>
@@ -621,7 +771,7 @@ export default function ContentPage() {
             )}
 
             {/* Post text */}
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "#999", marginBottom: 8,
                 textTransform: "uppercase", letterSpacing: .5 }}>Текст поста</div>
               <textarea value={modalText} onChange={e => setModalText(e.target.value)}
@@ -633,38 +783,116 @@ export default function ContentPage() {
                 onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
             </div>
 
-            {/* Image */}
-            <div style={{ marginBottom: 16 }}>
+            {/* Image block */}
+            <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "#999", marginBottom: 8,
                 textTransform: "uppercase", letterSpacing: .5 }}>Изображение</div>
-              {expanded.image_url || expanded.image_base64 ? (
-                <img
-                  src={expanded.image_url || `data:image/png;base64,${expanded.image_base64}`}
-                  alt="post"
-                  style={{ width: "100%", maxHeight: 260, objectFit: "cover", borderRadius: 12 }} />
+
+              {/* Carousel or single image */}
+              {currentImages.length > 0 ? (
+                <div style={{ position: "relative" }}>
+                  <img
+                    src={currentImages[carouselIdx].startsWith("http")
+                      ? currentImages[carouselIdx]
+                      : `data:image/png;base64,${currentImages[carouselIdx]}`}
+                    alt="post"
+                    style={{ width: "100%", maxHeight: 280, objectFit: "cover", borderRadius: 12 }} />
+                  {currentImages.length > 1 && (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center",
+                      gap: 12, marginTop: 10 }}>
+                      <button onClick={() => setCarouselIdx(i => Math.max(0, i - 1))}
+                        disabled={carouselIdx === 0}
+                        style={{ padding: "6px 14px", background: "#F1EFE8", border: "none",
+                          borderRadius: 8, cursor: carouselIdx === 0 ? "default" : "pointer",
+                          opacity: carouselIdx === 0 ? 0.4 : 1, fontSize: 14 }}>←</button>
+                      <span style={{ fontSize: 13, color: "#888" }}>
+                        {carouselIdx + 1} / {currentImages.length}
+                      </span>
+                      <button onClick={() => setCarouselIdx(i => Math.min(currentImages.length - 1, i + 1))}
+                        disabled={carouselIdx === currentImages.length - 1}
+                        style={{ padding: "6px 14px", background: "#F1EFE8", border: "none",
+                          borderRadius: 8, cursor: carouselIdx === currentImages.length - 1 ? "default" : "pointer",
+                          opacity: carouselIdx === currentImages.length - 1 ? 0.4 : 1, fontSize: 14 }}>→</button>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div style={{ background: "#F8F7F4", borderRadius: 12, padding: "28px 16px",
-                  display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 36 }}>🖼</span>
                   <span style={{ fontSize: 13, color: "#999" }}>Картинка не сгенерирована</span>
-                  <button
-                    onClick={() => generateImage(expanded)}
-                    disabled={generatingImg === expanded.id}
-                    style={{ padding: "9px 20px", background: "#533AB7", color: "#fff",
-                      border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
-                    {generatingImg === expanded.id ? "Генерирую..." : "✨ Сгенерировать картинку"}
-                  </button>
                 </div>
               )}
+
+              {/* Image prompt editor */}
+              <div style={{ marginTop: 14, background: "#F8F7F4", borderRadius: 12, padding: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#555" }}>Описание для генерации</span>
+                  <button onClick={() => setEditingPrompt(!editingPrompt)}
+                    style={{ fontSize: 12, color: "#533AB7", background: "none", border: "none",
+                      cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+                    {editingPrompt ? "Отмена" : "✏️ Редактировать"}
+                  </button>
+                </div>
+                {editingPrompt ? (
+                  <textarea
+                    value={modalPrompt}
+                    onChange={e => setModalPrompt(e.target.value)}
+                    placeholder="Опишите желаемое изображение на русском или английском..."
+                    style={{ width: "100%", minHeight: 80, padding: "10px 12px", fontSize: 13,
+                      lineHeight: 1.5, border: "1.5px solid #533AB7", borderRadius: 10,
+                      resize: "vertical", fontFamily: "inherit", outline: "none",
+                      boxSizing: "border-box", background: "#fff" }}
+                  />
+                ) : (
+                  <p style={{ margin: 0, fontSize: 12, color: "#666", lineHeight: 1.5,
+                    fontStyle: expanded.image_prompt ? "normal" : "italic" }}>
+                    {expanded.image_prompt || "Промт не задан"}
+                  </p>
+                )}
+                <p style={{ margin: "6px 0 0", fontSize: 11, color: "#aaa" }}>
+                  Можно писать на русском — модель понимает оба языка
+                </p>
+
+                {/* Image action buttons */}
+                <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => generateImage(expanded, editingPrompt ? modalPrompt : undefined)}
+                    disabled={generatingImg === expanded.id}
+                    style={{ flex: 1, padding: "9px 14px", background: "#533AB7", color: "#fff",
+                      border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600,
+                      opacity: generatingImg === expanded.id ? 0.6 : 1 }}>
+                    {generatingImg === expanded.id ? "Генерирую..." :
+                      currentImages.length > 0 ? "🔄 Перегенерировать" : "✨ Сгенерировать"}
+                  </button>
+                  <button
+                    onClick={() => generateCarousel(expanded)}
+                    disabled={generatingCarousel || !expanded.image_prompt}
+                    title={!expanded.image_prompt ? "Сначала сгенерируйте изображение" : "Создать 3 варианта картинки"}
+                    style={{ padding: "9px 14px", background: generatingCarousel ? "#ccc" : "#F1EFE8",
+                      color: "#444", border: "1px solid #E0DED8", borderRadius: 10,
+                      cursor: generatingCarousel || !expanded.image_prompt ? "not-allowed" : "pointer",
+                      fontSize: 13, opacity: !expanded.image_prompt ? 0.5 : 1 }}>
+                    {generatingCarousel ? "Создаю..." : "🎠 Карусель (3 варианта)"}
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Actions */}
-            <div style={{ display: "flex", gap: 8, paddingTop: 4 }}>
+            <div style={{ display: "flex", gap: 8, paddingTop: 4, flexWrap: "wrap" }}>
               <button onClick={saveModal} disabled={modalSaving}
                 style={{ padding: "10px 20px", background: "#1a1a1a", color: "#fff",
                   border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
-                {modalSaving ? "Сохраняю..." : "💾 Сохранить"}
+                {modalSaving ? "Сохраняю..." : "💾 Сохранить текст"}
               </button>
+              {(expanded.status === "pending_approval" || expanded.status === "needs_info") && (
+                <button onClick={() => approveSlot(expanded)} disabled={approvingId === expanded.id}
+                  style={{ padding: "10px 20px", background: "#0F6E56", color: "#fff",
+                    border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+                  ✓ Согласовать
+                </button>
+              )}
               {expanded.status === "content_ready" && (
                 <button onClick={publishModal}
                   style={{ padding: "10px 20px", background: "#0F6E56", color: "#fff",

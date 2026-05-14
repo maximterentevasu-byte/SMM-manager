@@ -24,6 +24,16 @@ class UpdateSlotRequest(BaseModel):
     post_text: Optional[str] = None
     status: Optional[str] = None
     scheduled_at: Optional[str] = None
+    image_prompt: Optional[str] = None
+    needs_info_for: Optional[list] = None
+
+
+class RequestInfoRequest(BaseModel):
+    items: list[str]
+
+
+class GenerateImageRequest(BaseModel):
+    prompt: Optional[str] = None
 
 
 @router.post("/{business_id}/generate-plan")
@@ -72,6 +82,8 @@ async def get_plan(
             "image_url": s.image_url,
             "image_base64": s.image_base64,
             "image_prompt": s.image_prompt,
+            "images": s.images,
+            "needs_info_for": s.needs_info_for,
             "status": s.status.value if hasattr(s.status, "value") else s.status,
         }
         for s in slots
@@ -92,8 +104,12 @@ async def update_slot(
 
     if body.post_text is not None:
         slot.post_text = body.post_text
-        if slot.status == PlanStatus.planned:
-            slot.status = PlanStatus.content_ready
+
+    if body.image_prompt is not None:
+        slot.image_prompt = body.image_prompt
+
+    if body.needs_info_for is not None:
+        slot.needs_info_for = body.needs_info_for
 
     if body.scheduled_at is not None:
         slot.scheduled_at = datetime.fromisoformat(body.scheduled_at.replace("Z", "+00:00")).replace(tzinfo=None)
@@ -252,6 +268,85 @@ async def publish_slot_now(
 @router.post("/slot/{slot_id}/generate-image")
 async def generate_image_for_slot(
     slot_id: str,
+    body: GenerateImageRequest = GenerateImageRequest(),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(ContentSlot).where(ContentSlot.id == slot_id))
+    slot = result.scalar_one_or_none()
+    if not slot:
+        raise HTTPException(404, "Slot not found")
+
+    # Используем кастомный промт если передан, иначе берём из слота
+    prompt = body.prompt if body.prompt else slot.image_prompt
+
+    if not prompt:
+        biz_result = await db.execute(select(Business).where(Business.id == slot.business_id))
+        business = biz_result.scalar_one_or_none()
+        if business and slot.idea:
+            from app.workers.content_tasks import _generate_image_prompt
+            import asyncio
+            prompt = await _generate_image_prompt(slot, business.profile)
+        else:
+            raise HTTPException(400, "Нет данных для генерации промта")
+
+    # Сохраняем обновлённый промт
+    if prompt != slot.image_prompt:
+        slot.image_prompt = prompt
+        await db.commit()
+
+    import asyncio
+    from app.services.gemini_image import generate_image_sync
+    try:
+        b64 = await asyncio.to_thread(generate_image_sync, prompt, "1:1")
+    except ValueError as e:
+        raise HTTPException(400, f"Ошибка генерации: {str(e)}")
+
+    slot.image_base64 = b64
+    slot.image_url = None
+    await db.commit()
+
+    return {"status": "generated", "image_base64": b64}
+
+
+@router.post("/slot/{slot_id}/approve")
+async def approve_slot(
+    slot_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(ContentSlot).where(ContentSlot.id == slot_id))
+    slot = result.scalar_one_or_none()
+    if not slot:
+        raise HTTPException(404, "Slot not found")
+
+    slot.status = PlanStatus.content_ready
+    slot.needs_info_for = None
+    await db.commit()
+    return {"status": "approved"}
+
+
+@router.post("/slot/{slot_id}/request-info")
+async def request_info_for_slot(
+    slot_id: str,
+    body: RequestInfoRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(ContentSlot).where(ContentSlot.id == slot_id))
+    slot = result.scalar_one_or_none()
+    if not slot:
+        raise HTTPException(404, "Slot not found")
+
+    slot.status = PlanStatus.needs_info
+    slot.needs_info_for = body.items
+    await db.commit()
+    return {"status": "updated", "needs_info_for": body.items}
+
+
+@router.post("/slot/{slot_id}/generate-carousel")
+async def generate_carousel(
+    slot_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -261,25 +356,31 @@ async def generate_image_for_slot(
         raise HTTPException(404, "Slot not found")
 
     if not slot.image_prompt:
-        biz_result = await db.execute(select(Business).where(Business.id == slot.business_id))
-        business = biz_result.scalar_one_or_none()
-        if business and slot.idea:
-            from app.workers.content_tasks import _generate_image_prompt
-            import asyncio
-            slot.image_prompt = await _generate_image_prompt(slot, business.profile)
-            await db.commit()
-        else:
-            raise HTTPException(400, "Нет данных для генерации промта")
+        raise HTTPException(400, "Нет промта для генерации изображений")
 
     import asyncio
     from app.services.gemini_image import generate_image_sync
-    try:
-        b64 = await asyncio.to_thread(generate_image_sync, slot.image_prompt, "1:1")
-    except ValueError as e:
-        raise HTTPException(400, f"Ошибка генерации: {str(e)}")
 
-    slot.image_base64 = b64
+    variations = [
+        slot.image_prompt,
+        slot.image_prompt + " Close-up macro shot, different perspective.",
+        slot.image_prompt + " Wide angle, showing more context and environment.",
+    ]
+
+    images = []
+    for prompt in variations:
+        try:
+            b64 = await asyncio.to_thread(generate_image_sync, prompt[:1000], "1:1")
+            images.append(b64)
+        except ValueError:
+            pass
+
+    if not images:
+        raise HTTPException(400, "Не удалось сгенерировать изображения для карусели")
+
+    slot.images = images
+    slot.image_base64 = images[0]
     slot.image_url = None
     await db.commit()
 
-    return {"status": "generated", "image_base64": b64}
+    return {"status": "generated", "images": images, "count": len(images)}

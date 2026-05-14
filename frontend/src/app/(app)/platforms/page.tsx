@@ -8,6 +8,7 @@ type Connection = {
   page_name: string;
   external_page_id: string;
   is_active: boolean;
+  admin_chat_id: string | null;
 };
 
 type PlatformSetup = {
@@ -115,6 +116,8 @@ export default function PlatformsPage() {
   const [error, setError] = useState<Record<string, string>>({});
   const [success, setSuccess] = useState<Record<string, string>>({});
   const [openStep, setOpenStep] = useState<Record<string, number | null>>({});
+  const [adminChatId, setAdminChatId] = useState("");
+  const [savingAdminChat, setSavingAdminChat] = useState(false);
 
   const [businessId] = useState(() =>
     typeof window !== "undefined" ? localStorage.getItem("businessId") || "" : ""
@@ -196,6 +199,28 @@ export default function PlatformsPage() {
       setErr(platformId, e.response?.data?.detail || "Ошибка отправки теста");
     } finally {
       setTesting(null);
+    }
+  };
+
+  const saveAdminChat = async () => {
+    if (!adminChatId.trim()) return;
+    setSavingAdminChat(true);
+    setError((p) => ({ ...p, telegram: "" }));
+    try {
+      const { data } = await api.patch(`/platforms/admin-chat/${businessId}`, {
+        admin_chat_id: adminChatId.trim(),
+      });
+      setConnections((prev) =>
+        prev.map((c) =>
+          c.platform === "telegram" ? { ...c, admin_chat_id: adminChatId.trim() } : c
+        )
+      );
+      setAdminChatId("");
+      setOk("telegram", `Уведомления настроены → ${data.chat_name}`);
+    } catch (e: any) {
+      setErr("telegram", e.response?.data?.detail || "Ошибка сохранения");
+    } finally {
+      setSavingAdminChat(false);
     }
   };
 
@@ -397,17 +422,76 @@ export default function PlatformsPage() {
 
                 {/* Already connected — small info bar */}
                 {conn && (
-                  <div style={{ borderTop: "1px solid #F2F0EC", padding: "12px 24px",
-                    display: "flex", alignItems: "center", gap: 16,
-                    background: "#FAFAF8", fontSize: 13, color: "#888" }}>
-                    <span>ID: <code style={{ ...code, fontSize: 11 }}>{conn.external_page_id}</code></span>
-                    <span style={{ color: "#ddd" }}>|</span>
-                    <span>Автопостинг активен</span>
-                    <button onClick={() => setExpanded(isExpanded ? null : pl.id)}
-                      style={{ marginLeft: "auto", background: "none", border: "none",
-                        cursor: "pointer", color: "#aaa", fontSize: 12 }}>
-                      Обновить данные
-                    </button>
+                  <div style={{ borderTop: "1px solid #F2F0EC", background: "#FAFAF8" }}>
+                    <div style={{ padding: "12px 24px", display: "flex", alignItems: "center", gap: 16, fontSize: 13, color: "#888" }}>
+                      <span>ID: <code style={{ ...code, fontSize: 11 }}>{conn.external_page_id}</code></span>
+                      <span style={{ color: "#ddd" }}>|</span>
+                      <span>Автопостинг активен</span>
+                      <button onClick={() => setExpanded(isExpanded ? null : pl.id)}
+                        style={{ marginLeft: "auto", background: "none", border: "none",
+                          cursor: "pointer", color: "#aaa", fontSize: 12 }}>
+                        Обновить данные
+                      </button>
+                    </div>
+
+                    {/* Telegram-only: admin notification chat */}
+                    {pl.id === "telegram" && (
+                      <div style={{ borderTop: "1px solid #F2F0EC", padding: "16px 24px" }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#555", marginBottom: 10 }}>
+                          🔔 Уведомления администратора
+                        </div>
+                        {conn.admin_chat_id ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span style={{ fontSize: 12, padding: "4px 12px", borderRadius: 20,
+                              background: "#E1F5EE", color: "#0F6E56", fontWeight: 600 }}>
+                              ✓ Настроено
+                            </span>
+                            <span style={{ fontSize: 13, color: "#888" }}>
+                              Chat ID: <code style={{ ...code, fontSize: 11 }}>{conn.admin_chat_id}</code>
+                            </span>
+                            <button onClick={() => setAdminChatId(conn.admin_chat_id!)}
+                              style={{ marginLeft: "auto", background: "none", border: "none",
+                                cursor: "pointer", color: "#aaa", fontSize: 12 }}>
+                              Изменить
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 13, color: "#e07800", background: "#FFF8ED",
+                            border: "1px solid #FFD699", borderRadius: 10, padding: "10px 14px", marginBottom: 12 }}>
+                            ⚠️ Не настроено — бот не сможет присылать вам уведомления о постах
+                          </div>
+                        )}
+
+                        {(!conn.admin_chat_id || adminChatId) && (
+                          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                            <div style={{ fontSize: 12, color: "#888", lineHeight: 1.6 }}>
+                              Чтобы бот присылал вам уведомления о постах, ожидающих согласования:<br />
+                              1. Напишите боту <strong>{conn.page_name ? `@${conn.page_name}` : "любое сообщение"}</strong> в личку<br />
+                              2. Узнайте свой ID: напишите <code style={code}>/start</code> боту{" "}
+                              <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" style={{ color: "#2AABEE" }}>@userinfobot</a>{" "}
+                              — он вернёт ваш ID (положительное число)<br />
+                              3. Вставьте ID ниже
+                            </div>
+                            <div style={{ display: "flex", gap: 10 }}>
+                              <input
+                                value={adminChatId}
+                                onChange={(e) => setAdminChatId(e.target.value)}
+                                placeholder="123456789"
+                                style={{ ...inp, fontFamily: "monospace", maxWidth: 220 }}
+                              />
+                              <button
+                                onClick={saveAdminChat}
+                                disabled={savingAdminChat || !adminChatId.trim()}
+                                style={{ padding: "10px 20px", fontSize: 13, fontWeight: 600,
+                                  color: "#fff", background: savingAdminChat || !adminChatId.trim() ? "#bbb" : "#2AABEE",
+                                  border: "none", borderRadius: 10, cursor: "pointer", whiteSpace: "nowrap" }}>
+                                {savingAdminChat ? "Проверяю..." : "Сохранить"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

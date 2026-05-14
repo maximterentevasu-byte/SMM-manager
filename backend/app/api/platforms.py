@@ -127,9 +127,51 @@ async def list_connections(
             "page_name": c.page_name,
             "external_page_id": c.external_page_id,
             "is_active": c.is_active,
+            "admin_chat_id": c.admin_chat_id,
         }
         for c in result.scalars().all()
     ]
+
+
+class AdminChatRequest(BaseModel):
+    admin_chat_id: str
+
+
+@router.patch("/admin-chat/{business_id}")
+async def set_admin_chat(
+    business_id: str,
+    body: AdminChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(PlatformConnection).where(
+            PlatformConnection.business_id == business_id,
+            PlatformConnection.platform == "telegram",
+            PlatformConnection.is_active == True,
+        )
+    )
+    connection = result.scalar_one_or_none()
+    if not connection:
+        raise HTTPException(404, "Telegram не подключён")
+
+    # Verify chat_id is reachable with the bot token
+    token = decrypt_token(connection.token_encrypted)
+    async with aiohttp.ClientSession() as session:
+        resp = await session.get(
+            f"https://api.telegram.org/bot{token}/getChat",
+            params={"chat_id": body.admin_chat_id}
+        )
+        tg = await resp.json()
+    if not tg.get("ok"):
+        raise HTTPException(400, f"Не удалось найти чат: {tg.get('description', 'Проверьте ID')}")
+
+    connection.admin_chat_id = body.admin_chat_id
+    await db.commit()
+
+    chat = tg["result"]
+    chat_name = chat.get("first_name") or chat.get("username") or body.admin_chat_id
+    return {"status": "saved", "chat_name": chat_name}
 
 
 @router.delete("/disconnect/{business_id}/{platform}")
