@@ -62,3 +62,29 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/api/debug/gemini-models")
+async def debug_gemini_models():
+    """Список моделей Gemini доступных по текущему API-ключу."""
+    from app.config import settings
+    import asyncio
+
+    def _list():
+        try:
+            from google import genai
+            gc = genai.Client(api_key=settings.GEMINI_API_KEY)
+            models = []
+            for m in gc.models.list():
+                name = getattr(m, "name", "")
+                display = getattr(m, "display_name", "")
+                methods = getattr(m, "supported_generation_methods", [])
+                models.append({"name": name, "display_name": display, "methods": list(methods)})
+            return {"sdk": "google-genai", "count": len(models), "models": models}
+        except ImportError:
+            return {"error": "google-genai не установлен — пересоберите Docker-образ"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    result = await asyncio.to_thread(_list)
+    return result
