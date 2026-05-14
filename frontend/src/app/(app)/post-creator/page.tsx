@@ -560,7 +560,29 @@ export default function PostCreatorPage() {
         {/* ── 2. Текст поста ── */}
         {(hasText || loadingText) && (
           <div style={card}>
-            {sectionTitle(2, "Текст поста", hasText)}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: "50%", display: "flex",
+                  alignItems: "center", justifyContent: "center", flexShrink: 0,
+                  fontSize: 13, fontWeight: 700,
+                  background: hasText ? "#0F6E56" : "#1a1a1a", color: "#fff",
+                }}>
+                  {hasText ? "✓" : 2}
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a1a" }}>Текст поста</div>
+              </div>
+              {hasText && (
+                <span style={{
+                  fontSize: 11, color: MODEL_COLORS[usedModelForText],
+                  background: MODEL_COLORS[usedModelForText] + "15",
+                  border: `1px solid ${MODEL_COLORS[usedModelForText]}30`,
+                  borderRadius: 12, padding: "2px 9px", fontWeight: 600,
+                }}>
+                  {MODEL_LABELS[usedModelForText]}
+                </span>
+              )}
+            </div>
             <p style={{ color: "#888", fontSize: 13, margin: "0 0 14px" }}>
               Отредактируйте текст по необходимости или обновите.
             </p>
