@@ -20,8 +20,8 @@ _OAI_SIZE = {
     "4:3":  "1536x1024",
 }
 
-_GEMINI_TIMEOUT = 20.0   # секунд на запрос к Gemini
-_OAI_TIMEOUT    = 20.0   # секунд на запрос к OpenAI
+_GEMINI_TIMEOUT = 25.0   # секунд на запрос к Gemini
+_OAI_TIMEOUT    = 25.0   # секунд на запрос к OpenAI (без ретраев)
 
 
 # ─── Вспомогательные синхронные функции (PIL, быстрые) ───────────────────────
@@ -70,6 +70,7 @@ async def _gemini_generate(prompt: str) -> str:
 async def _openai_generate(prompt: str, aspect_ratio: str, model: str) -> str:
     client = AsyncOpenAI(
         api_key=settings.OPENAI_API_KEY,
+        max_retries=0,
         timeout=httpx.Timeout(connect=5.0, read=_OAI_TIMEOUT, write=5.0, pool=5.0),
     )
     size = _OAI_SIZE.get(aspect_ratio, "1024x1024")
@@ -156,6 +157,7 @@ async def _openai_edit(base_image: dict, reference_images: list[dict], instructi
 
     client = AsyncOpenAI(
         api_key=settings.OPENAI_API_KEY,
+        max_retries=0,
         timeout=httpx.Timeout(connect=5.0, read=_OAI_TIMEOUT, write=15.0, pool=5.0),
     )
     result = await client.images.edit(
