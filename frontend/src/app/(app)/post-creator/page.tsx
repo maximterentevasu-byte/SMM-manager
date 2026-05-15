@@ -600,7 +600,8 @@ export default function PostCreatorPage() {
       const newHistory = [...imageHistory, data.image_base64 as string];
       setImageHistory(newHistory); setCurrentImageIdx(newHistory.length - 1);
     } catch (e: any) {
-      alert("Ошибка редактирования: " + (e?.response?.data?.detail || "попробуй изменить инструкцию"));
+      const detail = e?.response?.data?.detail || e?.message || "попробуй изменить инструкцию";
+      alert("Ошибка редактирования: " + (typeof detail === "string" ? detail : JSON.stringify(detail)));
     } finally { setLoadingImage(false); }
   };
 
@@ -616,7 +617,8 @@ export default function PostCreatorPage() {
       setImageHistory(newHistory); setCurrentImageIdx(newHistory.length - 1);
       setInlineEditCount(inlineEditCount + 1); setInlineEditInstruction(""); setShowInlineEdit(false);
     } catch (e: any) {
-      alert("Ошибка редактирования: " + (e?.response?.data?.detail || "попробуй изменить инструкцию"));
+      const detail = e?.response?.data?.detail || e?.message || "попробуй изменить инструкцию";
+      alert("Ошибка редактирования: " + (typeof detail === "string" ? detail : JSON.stringify(detail)));
     } finally { setLoadingImage(false); }
   };
 
@@ -778,7 +780,7 @@ export default function PostCreatorPage() {
         {imageMode === "prompt" && (
           <div style={card}>
             <SectionTitle n={3} label="Промт для изображения" done={!!imagePrompt.trim()} />
-            <p style={{ color: "#888", fontSize: 13, margin: "0 0 14px" }}>Напишите промт на английском — опишите что должно быть на изображении.</p>
+            <p style={{ color: "#888", fontSize: 13, margin: "0 0 14px" }}>Напишите промт — опишите что должно быть на изображении.</p>
             <BrandContextPanel brand={brandContext} onInsert={appendToPrompt} />
             <div style={{ marginBottom: 12, padding: "10px 14px", background: "#F8F7F4", borderRadius: 10, fontSize: 12, color: "#666" }}>
               <div style={{ fontWeight: 600, marginBottom: 6, color: "#555" }}>Примеры фраз:</div>

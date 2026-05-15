@@ -88,7 +88,8 @@ def generate_image_sync(prompt: str, aspect_ratio: str = "1:1") -> str:
 
 def _gemini_edit(base_image: dict, reference_images: list[dict], instruction: str) -> str:
     """Gemini Image-to-Image редактирование через REST API."""
-    parts: list = [{"text": instruction}]
+    # Images must come before the instruction text
+    parts: list = []
     for img in [base_image] + reference_images[:13]:
         parts.append({
             "inlineData": {
@@ -96,12 +97,13 @@ def _gemini_edit(base_image: dict, reference_images: list[dict], instruction: st
                 "data": img["data"],
             }
         })
+    parts.append({"text": instruction})
     url = f"{_GEMINI_BASE}/{_GEMINI_MODEL}:generateContent?key={settings.GEMINI_API_KEY}"
     r = httpx.post(
         url,
         json={
             "contents": [{"parts": parts}],
-            "generationConfig": {"responseModalities": ["IMAGE"]},
+            "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
         },
         timeout=120,
     )
@@ -113,7 +115,15 @@ def _gemini_edit(base_image: dict, reference_images: list[dict], instruction: st
             b64 = part.get("inlineData", {}).get("data", "")
             if b64:
                 return b64
-    raise ValueError("Gemini edit: нет изображения в ответе")
+    # Surface any text Gemini returned for debugging
+    texts = [
+        part.get("text", "")
+        for cand in d.get("candidates", [])
+        for part in cand.get("content", {}).get("parts", [])
+        if part.get("text")
+    ]
+    hint = f" Ответ: {' '.join(texts)[:300]}" if texts else ""
+    raise ValueError(f"Gemini edit: нет изображения в ответе.{hint}")
 
 
 def _to_png_buf(img_dict: dict) -> io.BytesIO:
