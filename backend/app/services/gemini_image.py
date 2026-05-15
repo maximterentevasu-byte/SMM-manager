@@ -81,7 +81,7 @@ def generate_image_sync(prompt: str, aspect_ratio: str = "1:1") -> str:
             errors.append(f"Gemini: {e}")
 
     if settings.OPENAI_API_KEY:
-        for model_name in ("gpt-image-1", "dall-e-3"):
+        for model_name in ("gpt-image-1-mini", "gpt-image-2"):
             try:
                 return _openai_image(prompt, aspect_ratio, model_name)
             except Exception as e:
@@ -167,7 +167,7 @@ def _openai_edit(base_image: dict, reference_images: list[dict], instruction: st
     for ref in reference_images[:6]:
         images.append(_to_png_buf(ref))
     result = client.images.edit(
-        model="gpt-image-1",
+        model="gpt-image-2",
         image=images,
         prompt=instruction[:1000],
         size="1024x1024",
