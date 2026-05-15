@@ -836,10 +836,22 @@ export default function PostCreatorPage() {
     if (!publishNow) { if (!publishDate) { alert("Укажи дату"); return; } scheduled_at = new Date(`${publishDate}T${publishTime}:00`).toISOString(); }
     setPublishing(true); setPublishMsg("");
     try {
+      let videos_base64: string[] | null = null;
+      let video_cover_base64: string | null = null;
+      if (imageMode === "video") {
+        const filled = videoFiles.filter((f): f is File => f !== null);
+        if (filled.length > 0) {
+          videos_base64 = await Promise.all(filled.map(f => readFileAsBase64(f).then(r => r.data)));
+        }
+        if (videoCoverDataUrl) {
+          video_cover_base64 = videoCoverDataUrl.split(",")[1] || null;
+        }
+      }
       const { data } = await api.post(`/post-creator/${businessId}/publish`, {
         post_text: postText, image_prompt: imagePrompt || null,
         image_base64: imageBase64ForPublish || null,
         images_base64: imagesBase64ForPublish || null,
+        videos_base64, video_cover_base64,
         platforms: selectedPlatforms, scheduled_at,
       });
       const results: { platform: string; status: string; error?: string; warning?: string }[] = data.results || [];

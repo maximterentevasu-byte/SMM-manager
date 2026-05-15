@@ -546,30 +546,70 @@ class PublishIn(BaseModel):
     image_prompt: Optional[str] = None
     image_base64: Optional[str] = None
     images_base64: Optional[list[str]] = None
+    videos_base64: Optional[list[str]] = None
+    video_cover_base64: Optional[str] = None
     platforms: list[str]
     scheduled_at: Optional[str] = None
 
 
 async def _publish_to_telegram(session: aiohttp.ClientSession, token: str, chat_id: str,
                                 full_text: str, image_base64: Optional[str],
-                                images_base64: Optional[list[str]] = None) -> str:
+                                images_base64: Optional[list[str]] = None,
+                                videos_base64: Optional[list[str]] = None,
+                                video_cover_base64: Optional[str] = None) -> str:
     import json as _json
     base_url = f"https://api.telegram.org/bot{token}"
+
+    # ── Видео ──────────────────────────────────────────────────────────────────
+    if videos_base64:
+        videos = videos_base64[:3]
+        if len(videos) == 1:
+            form = aiohttp.FormData()
+            form.add_field("chat_id", chat_id)
+            form.add_field("caption", full_text[:1024])
+            form.add_field("video", base64.b64decode(videos[0]), filename="video.mp4", content_type="video/mp4")
+            if video_cover_base64:
+                form.add_field("thumbnail", base64.b64decode(video_cover_base64), filename="thumb.jpg", content_type="image/jpeg")
+            resp = await session.post(f"{base_url}/sendVideo", data=form)
+            result = await resp.json()
+            if not result.get("ok"):
+                raise ValueError(f"Telegram sendVideo: {result.get('description', str(result))}")
+            return str(result["result"]["message_id"])
+        else:
+            form = aiohttp.FormData()
+            form.add_field("chat_id", chat_id)
+            media_arr = []
+            for i, b64v in enumerate(videos):
+                fname = f"vid{i}"
+                form.add_field(fname, base64.b64decode(b64v), filename=f"{fname}.mp4", content_type="video/mp4")
+                item: dict = {"type": "video", "media": f"attach://{fname}"}
+                if i == 0:
+                    item["caption"] = full_text[:1024]
+                    if video_cover_base64:
+                        form.add_field("thumb0", base64.b64decode(video_cover_base64), filename="thumb.jpg", content_type="image/jpeg")
+                        item["thumbnail"] = "attach://thumb0"
+                media_arr.append(item)
+            form.add_field("media", _json.dumps(media_arr))
+            resp = await session.post(f"{base_url}/sendMediaGroup", data=form)
+            result = await resp.json()
+            if not result.get("ok"):
+                raise ValueError(f"Telegram sendMediaGroup(video): {result.get('description', str(result))}")
+            return str(result["result"][0]["message_id"])
+
+    # ── Изображения ────────────────────────────────────────────────────────────
     all_images = images_base64 or ([image_base64] if image_base64 else [])
 
     if len(all_images) > 1:
-        # Album via sendMediaGroup
         form = aiohttp.FormData()
         form.add_field("chat_id", chat_id)
         media_arr = []
         for i, b64 in enumerate(all_images[:10]):
-            img_bytes = base64.b64decode(b64)
             fname = f"file{i}"
-            form.add_field(fname, img_bytes, filename=f"{fname}.png", content_type="image/png")
-            item: dict = {"type": "photo", "media": f"attach://{fname}"}
+            form.add_field(fname, base64.b64decode(b64), filename=f"{fname}.png", content_type="image/png")
+            item2: dict = {"type": "photo", "media": f"attach://{fname}"}
             if i == 0:
-                item["caption"] = full_text[:1024]
-            media_arr.append(item)
+                item2["caption"] = full_text[:1024]
+            media_arr.append(item2)
         form.add_field("media", _json.dumps(media_arr))
         resp = await session.post(f"{base_url}/sendMediaGroup", data=form)
         result = await resp.json()
@@ -578,11 +618,10 @@ async def _publish_to_telegram(session: aiohttp.ClientSession, token: str, chat_
         return str(result["result"][0]["message_id"])
 
     if len(all_images) == 1:
-        img_bytes = base64.b64decode(all_images[0])
         form = aiohttp.FormData()
         form.add_field("chat_id", chat_id)
         form.add_field("caption", full_text[:1024])
-        form.add_field("photo", img_bytes, filename="image.png", content_type="image/png")
+        form.add_field("photo", base64.b64decode(all_images[0]), filename="image.png", content_type="image/png")
         resp = await session.post(f"{base_url}/sendPhoto", data=form)
     else:
         resp = await session.post(
@@ -706,6 +745,7 @@ async def publish_to_plan(
                     ext_id = await _publish_to_telegram(
                         session, token, connection.external_page_id,
                         full_text, body.image_base64, body.images_base64,
+                        body.videos_base64, body.video_cover_base64,
                     )
                 elif platform_str == "vk":
                     publish_token = vk_user_token or token
