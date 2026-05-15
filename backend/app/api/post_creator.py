@@ -452,7 +452,7 @@ async def generate_image(
     current_user: User = Depends(get_current_user),
 ):
     import asyncio
-    from app.services.gemini_image import generate_image_sync
+    from app.services.gemini_image import generate_image as _gen_image
 
     prompt = body.prompt
 
@@ -464,7 +464,10 @@ async def generate_image(
             "Return ONLY the English translation, no explanations or comments."
         )
         try:
-            prompt, _ = await _generate_text(translation_system, body.prompt_ru, 400)
+            prompt, _ = await asyncio.wait_for(
+                _generate_text(translation_system, body.prompt_ru, 400),
+                timeout=10.0,
+            )
         except Exception:
             prompt = body.prompt_ru
 
@@ -473,8 +476,8 @@ async def generate_image(
 
     try:
         b64 = await asyncio.wait_for(
-            asyncio.to_thread(generate_image_sync, prompt, body.aspect_ratio),
-            timeout=120.0,
+            _gen_image(prompt, body.aspect_ratio),
+            timeout=65.0,
         )
     except asyncio.TimeoutError:
         raise HTTPException(504, "Тайм-аут генерации — попробуйте ещё раз")
@@ -498,7 +501,6 @@ async def edit_image_endpoint(
     current_user: User = Depends(get_current_user),
 ):
     import asyncio
-    from app.services.gemini_image import edit_image_sync
 
     translation_system = (
         "You are a professional image editing instruction translator. "
@@ -514,14 +516,14 @@ async def edit_image_endpoint(
     refs = [{"data": img.data, "mime": img.mime} for img in (body.reference_images or [])]
 
     try:
+        from app.services.gemini_image import edit_image as _edit_image
         b64 = await asyncio.wait_for(
-            asyncio.to_thread(
-                edit_image_sync,
+            _edit_image(
                 {"data": body.base_image.data, "mime": body.base_image.mime},
                 refs,
                 instruction_en,
             ),
-            timeout=110.0,
+            timeout=65.0,
         )
     except asyncio.TimeoutError:
         raise HTTPException(504, "Тайм-аут редактирования — попробуйте ещё раз")
