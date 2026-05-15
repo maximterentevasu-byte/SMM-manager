@@ -682,12 +682,6 @@ export default function PostCreatorPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const MODE_META: Record<NonNullable<ImageMode>, { label: string; color: string }> = {
-    prompt: { label: "🖼 Создать промт изображения", color: "#0F6E56" },
-    upload: { label: "📁 Загрузить изображение", color: "#0F6E56" },
-    edit:   { label: "✂️ Загрузить и отредактировать", color: "#6B46C1" },
-  };
-
   return (
     <div style={{ minHeight: "100vh", background: "#F8F7F4", fontFamily: "'Segoe UI', sans-serif" }}>
       {/* Header */}
@@ -757,22 +751,24 @@ export default function PostCreatorPage() {
               <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #F0EEE8" }}>
                 <div style={{ fontSize: 12, color: "#888", marginBottom: 12, fontWeight: 600 }}>Изображение к посту:</div>
 
-                {imageMode === null && (
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <button onClick={() => switchMode("prompt")} style={{ padding: "10px 20px", background: "#4680C2", color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>🖼 Создать промт изображения</button>
-                    <button onClick={() => switchMode("upload")} style={{ padding: "10px 20px", background: "#fff", color: "#555", border: "1.5px solid #E0DED8", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>📁 Загрузить изображение</button>
-                    <button onClick={() => switchMode("edit")} style={{ padding: "10px 20px", background: "#fff", color: "#555", border: "1.5px solid #E0DED8", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>✂️ Загрузить и отредактировать</button>
-                  </div>
-                )}
-
-                {imageMode !== null && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <button style={{ padding: "10px 20px", background: MODE_META[imageMode].color, color: "#fff", border: "none", borderRadius: 10, cursor: "default", fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      {MODE_META[imageMode].label}
-                    </button>
-                    <button onClick={goChangeMode} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "#888", textDecoration: "underline", padding: 0 }}>Изменить</button>
-                  </div>
-                )}
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {([
+                    { mode: "prompt" as ImageMode, label: "🖼 Создать промт изображения" },
+                    { mode: "upload" as ImageMode, label: "📁 Загрузить изображение" },
+                    { mode: "edit"   as ImageMode, label: "✂️ Загрузить и отредактировать" },
+                  ]).map(({ mode, label }) => {
+                    const active = imageMode === mode;
+                    return (
+                      <button
+                        key={mode}
+                        onClick={() => active ? goChangeMode() : switchMode(mode!)}
+                        style={{ padding: "10px 20px", background: active ? "#4680C2" : "#fff", color: active ? "#fff" : "#555", border: active ? "none" : "1.5px solid #E0DED8", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
