@@ -509,12 +509,17 @@ async def edit_image_endpoint(
     refs = [{"data": img.data, "mime": img.mime} for img in (body.reference_images or [])]
 
     try:
-        b64 = await asyncio.to_thread(
-            edit_image_sync,
-            {"data": body.base_image.data, "mime": body.base_image.mime},
-            refs,
-            instruction_en,
+        b64 = await asyncio.wait_for(
+            asyncio.to_thread(
+                edit_image_sync,
+                {"data": body.base_image.data, "mime": body.base_image.mime},
+                refs,
+                instruction_en,
+            ),
+            timeout=110.0,
         )
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "Тайм-аут редактирования — попробуйте ещё раз")
     except ValueError as e:
         raise HTTPException(400, str(e))
 

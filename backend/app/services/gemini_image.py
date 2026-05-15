@@ -6,6 +6,7 @@
 import io
 import base64
 import httpx
+from PIL import Image
 from openai import OpenAI
 from app.config import settings
 
@@ -88,12 +89,16 @@ def generate_image_sync(prompt: str, aspect_ratio: str = "1:1") -> str:
 
 def _gemini_edit(base_image: dict, reference_images: list[dict], instruction: str) -> str:
     """Gemini Image-to-Image редактирование через REST API."""
+    # Нормализуем изображения в JPEG чтобы mime-тип всегда совпадал с данными
+    norm_base = _normalize_to_jpeg(base_image)
+    norm_refs = [_normalize_to_jpeg(r) for r in reference_images[:13]]
+
     # Images must come before the instruction text
     parts: list = []
-    for img in [base_image] + reference_images[:13]:
+    for img in [norm_base] + norm_refs:
         parts.append({
             "inlineData": {
-                "mimeType": img.get("mime", "image/jpeg"),
+                "mimeType": img["mime"],
                 "data": img["data"],
             }
         })
@@ -105,7 +110,7 @@ def _gemini_edit(base_image: dict, reference_images: list[dict], instruction: st
             "contents": [{"parts": parts}],
             "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
         },
-        timeout=120,
+        timeout=50,
     )
     d = r.json()
     if "error" in d:
@@ -126,9 +131,17 @@ def _gemini_edit(base_image: dict, reference_images: list[dict], instruction: st
     raise ValueError(f"Gemini edit: нет изображения в ответе.{hint}")
 
 
+def _normalize_to_jpeg(img_dict: dict) -> dict:
+    """Нормализует изображение в JPEG — снимает проблему несовпадения mime-типа."""
+    raw = base64.b64decode(img_dict["data"])
+    pil = Image.open(io.BytesIO(raw)).convert("RGB")
+    buf = io.BytesIO()
+    pil.save(buf, format="JPEG", quality=90)
+    return {"data": base64.b64encode(buf.getvalue()).decode(), "mime": "image/jpeg"}
+
+
 def _to_png_buf(img_dict: dict) -> io.BytesIO:
     """Конвертирует base64-изображение в PNG BytesIO (для OpenAI edit API)."""
-    from PIL import Image
     raw = base64.b64decode(img_dict["data"])
     pil = Image.open(io.BytesIO(raw)).convert("RGBA")
     buf = io.BytesIO()
@@ -149,6 +162,7 @@ def _openai_edit(base_image: dict, reference_images: list[dict], instruction: st
         image=images,
         prompt=instruction[:1000],
         size="1024x1024",
+        timeout=50,
     )
     b64 = result.data[0].b64_json
     if not b64:
