@@ -11,7 +11,8 @@
       "Bash(C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe -c \"import httpx; key='AIzaSyBd7V3nhbmMBVL7g1yJF4EUrLb4ufNfrfI'; r=httpx.get\\('https://generativelanguage.googleapis.com/v1beta/models?key='+key,timeout=30\\); data=r.json\\(\\); [print\\(m['name'],'|',m.get\\('supportedGenerationMethods'\\)\\) for m in data.get\\('models',[]\\) if any\\(x in m['name'].lower\\(\\) for x in ['image','imagen','flash']\\)]\")",
       "Bash(docker compose *)",
       "Bash(python -c ' *)",
-      "Bash(python -c \"import os; os.environ['GEMINI_API_KEY']='test'; from google import genai; print\\('google-genai OK'\\)\")"
+      "Bash(python -c \"import os; os.environ['GEMINI_API_KEY']='test'; from google import genai; print\\('google-genai OK'\\)\")",
+      "PowerShell(cd \"c:\\\\Users\\\\admin\\\\Desktop\\\\smm-platform\"; git add frontend/src/app/\\(app\\)/post-creator/page.tsx backend/app/api/post_creator.py; git status)"
     ]
   }
 }
