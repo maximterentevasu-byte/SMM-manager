@@ -17,9 +17,10 @@ const STEPS = [
 ];
 
 const PRICE_SEGMENTS = [
-  { value: "economy", label: "Эконом",  desc: "до 1000 ₽ средний чек" },
-  { value: "middle",  label: "Средний", desc: "1000–5000 ₽ средний чек" },
-  { value: "premium", label: "Премиум", desc: "от 5000 ₽ средний чек" },
+  { value: "budget",  label: "Бюджетный", desc: "до 500 ₽ средний чек" },
+  { value: "economy", label: "Эконом",    desc: "от 500 до 1000 ₽ средний чек" },
+  { value: "middle",  label: "Средний",   desc: "1000–5000 ₽ средний чек" },
+  { value: "premium", label: "Премиум",   desc: "от 5000 ₽ средний чек" },
 ];
 
 const BRAND_VOICES = [
@@ -40,9 +41,11 @@ const SMM_METRICS_OPTIONS = [
 ];
 
 const PLATFORM_LABELS: Record<string, string> = {
-  telegram: "Telegram",
-  vk: "ВКонтакте",
-  ok: "Одноклассники",
+  telegram:  "Telegram",
+  vk:        "ВКонтакте",
+  tiktok:    "TikTok",
+  instagram: "Instagram",
+  max:       "Max",
 };
 
 const MIX_COLORS: Record<string, string> = {
@@ -69,10 +72,13 @@ const RUBRIC_TYPE_LABELS: Record<string, string> = {
   entertainment: "Развлечения",
 };
 
+type BrandAsset = { file: File; preview: string; label: string };
+
 type FormData = {
   name: string; niche: string; usp: string; price_segment: string; geo: string;
-  address: string; contact_info: string; products_raw: string; active_promotions: string;
+  address: string; contact_info: string;
   business_goals: string; new_directions: string;
+  survey_clients: boolean; tools_description: string; monthly_message: string;
   audience_primary: string; audience_non_target: string;
   audience_pains: string[]; audience_objections: string[];
   smm_metrics: string[];
@@ -80,7 +86,8 @@ type FormData = {
   platforms: string[]; platform_goals: Record<string, string>;
   brand_voice: string; visual_style: string; content_restrictions: string[];
   brand_colors: string[]; logo_url: string;
-  brand_assets_links: string; social_references: string; business_photos_links: string;
+  brand_colors_fonts: string;
+  social_references: string;
 };
 
 type Rubric = {
@@ -99,8 +106,9 @@ type StrategyItem = {
 
 const INITIAL: FormData = {
   name: "", niche: "", usp: "", price_segment: "middle", geo: "",
-  address: "", contact_info: "", products_raw: "", active_promotions: "",
+  address: "", contact_info: "",
   business_goals: "", new_directions: "",
+  survey_clients: false, tools_description: "", monthly_message: "",
   audience_primary: "", audience_non_target: "",
   audience_pains: ["", "", ""], audience_objections: ["", ""],
   smm_metrics: [],
@@ -108,7 +116,8 @@ const INITIAL: FormData = {
   platforms: ["telegram"], platform_goals: { telegram: "loyalty", vk: "sales" },
   brand_voice: "friendly", visual_style: "", content_restrictions: [],
   brand_colors: [], logo_url: "",
-  brand_assets_links: "", social_references: "", business_photos_links: "",
+  brand_colors_fonts: "",
+  social_references: "",
 };
 
 export default function OnboardingPage() {
@@ -139,9 +148,12 @@ export default function OnboardingPage() {
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState("");
 
+  const [brandAssets, setBrandAssets] = useState<BrandAsset[]>([]);
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const brandAssetInputRef = useRef<HTMLInputElement>(null);
 
   const downloadTemplate = async () => {
     try {
@@ -172,8 +184,6 @@ export default function OnboardingPage() {
         geo:                  p.geo                  || prev.geo,
         address:              p.address              || prev.address,
         contact_info:         p.contact_info         || prev.contact_info,
-        products_raw:         Array.isArray(p.products) ? p.products.join("\n") : (p.products || prev.products_raw),
-        active_promotions:    p.active_promotions    || prev.active_promotions,
         audience_primary:     p.audience_primary     || prev.audience_primary,
         audience_non_target:  p.audience_non_target  || prev.audience_non_target,
         audience_pains:       p.audience_pains?.length ? p.audience_pains : prev.audience_pains,
@@ -185,6 +195,8 @@ export default function OnboardingPage() {
         content_restrictions: p.content_restrictions?.length ? p.content_restrictions : prev.content_restrictions,
         business_goals:       p.business_goals       || prev.business_goals,
         new_directions:       p.new_directions       || prev.new_directions,
+        tools_description:    p.tools_description    || prev.tools_description,
+        monthly_message:      p.monthly_message      || prev.monthly_message,
         smm_metrics:          p.smm_metrics?.length ? p.smm_metrics : prev.smm_metrics,
       }));
       setShowImportModal(false);
@@ -214,7 +226,9 @@ export default function OnboardingPage() {
     try {
       const payload = {
         ...form,
-        products: form.products_raw.split("\n").map(s => s.trim()).filter(Boolean),
+        products: [],
+        active_promotions: "",
+        brand_assets_labels: brandAssets.map(a => ({ name: a.file.name, label: a.label })),
         audience_pains: form.audience_pains.filter(Boolean),
         audience_objections: form.audience_objections.filter(Boolean),
         competitors: form.competitors.filter(c => c.name || c.url).map(c => ({ name: c.name, url: c.url, pros: "", cons: "" })),
@@ -588,35 +602,53 @@ export default function OnboardingPage() {
                 placeholder="+7 999 123-45-67, pickme.ru, @pickme_bot" style={inp} />
               <p style={hint}>Эти данные появятся в постах вместо выдуманных ссылок</p>
             </div>
+
             <div>
-              <label style={lbl}>Товары / услуги</label>
-              <textarea value={form.products_raw} onChange={e => set("products_raw", e.target.value)}
-                placeholder={"Японские чипсы со вкусом умами\nКорейская лапша Shin Ramyun\nТайские конфеты с манго"}
-                style={{ ...inp, minHeight: 100, resize: "vertical" }} />
-              <p style={hint}>Каждый товар с новой строки. AI будет писать только о том, что здесь указано</p>
-            </div>
-            <div>
-              <label style={lbl}>Акции и спецпредложение на этот месяц</label>
-              <textarea value={form.active_promotions} onChange={e => set("active_promotions", e.target.value)}
-                placeholder="Скидка 10% на первый заказ через бота. Каждый четверг — дегустация новинок."
-                style={{ ...inp, minHeight: 70, resize: "vertical" }} />
-              <p style={hint}>Если акций нет — оставьте пустым. AI не будет придумывать акции сам</p>
-            </div>
-            <div>
-              <label style={lbl}>Цели бизнеса в перспективе 6 месяцев</label>
+              <label style={lbl}>Тактические цели бизнеса</label>
               <textarea value={form.business_goals} onChange={e => set("business_goals", e.target.value)}
-                placeholder="Увеличить охват до 50 000 в месяц, набрать 1 000 подписчиков в Telegram"
-                style={{ ...inp, minHeight: 70, resize: "vertical" }} />
+                placeholder={"Например, вы планируете в течение 6 месяцев:\n– Открытие нового направления\n– Смену или расширение ассортимента\n– Создать и внедрить бонусную программу"}
+                style={{ ...inp, minHeight: 100, resize: "vertical" }} />
             </div>
+
             <div>
-              <label style={lbl}>Новые направления / продукты (в ближайшие 3–6 месяцев)</label>
-              <textarea value={form.new_directions} onChange={e => set("new_directions", e.target.value)}
-                placeholder="Запускаем доставку на маркетплейсах, добавляем вегетарианское меню"
-                style={{ ...inp, minHeight: 70, resize: "vertical" }} />
+              <label style={lbl}>Хотели бы вы провести опрос клиентов, насколько ваши тактические цели им интересны?</label>
+              <div style={{ display: "flex", gap: 10 }}>
+                {[{ v: true, l: "Да, хочу провести опрос" }, { v: false, l: "Нет, не нужно" }].map(opt => (
+                  <div key={String(opt.v)} onClick={() => set("survey_clients", opt.v)}
+                    style={{ flex: 1, padding: "12px 16px", border: `1.5px solid ${form.survey_clients === opt.v ? "#1a1a1a" : "#E0DED8"}`,
+                      borderRadius: 10, cursor: "pointer", textAlign: "center",
+                      background: form.survey_clients === opt.v ? "#F8F7F4" : "#fff",
+                      fontWeight: form.survey_clients === opt.v ? 600 : 400, fontSize: 14 }}>
+                    {opt.l}
+                  </div>
+                ))}
+              </div>
             </div>
+
+            <div>
+              <label style={lbl}>Операционные задачи бизнеса</label>
+              <textarea value={form.new_directions} onChange={e => set("new_directions", e.target.value)}
+                placeholder={"Возможно вы планируете в ближайшие 1–3 месяца:\n– Увеличить средний чек или количество клиентов\n– Запустить бонусную программу и рассказать о ней\n– Увеличить кол-во клиентов бонусной программы\n– Запустить продажи нового ассортимента"}
+                style={{ ...inp, minHeight: 110, resize: "vertical" }} />
+            </div>
+
+            <div>
+              <label style={lbl}>Опишите инструменты, с помощью которых планируете выполнять задачи</label>
+              <textarea value={form.tools_description} onChange={e => set("tools_description", e.target.value)}
+                placeholder={"Например:\n– Добавим акцию…\n– Проведём лотерею с условием покупки от…\n– Ожидаем поступление эксклюзивного товара…\n– При выпуске бонусной карты кэшбэк…"}
+                style={{ ...inp, minHeight: 100, resize: "vertical" }} />
+            </div>
+
+            <div>
+              <label style={lbl}>О чём вы считаете важно рассказать вашим клиентам в этом месяце?</label>
+              <textarea value={form.monthly_message} onChange={e => set("monthly_message", e.target.value)}
+                placeholder={"Например:\n– Рассказать про акцию…\n– Подсветить что у нас есть бонусная программа и её условия\n– Рассказать о новинках\n– Рассказать о мероприятиях"}
+                style={{ ...inp, minHeight: 100, resize: "vertical" }} />
+            </div>
+
             <div>
               <label style={lbl}>Ценовой сегмент</label>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
                 {PRICE_SEGMENTS.map(ps => (
                   <div key={ps.value} onClick={() => set("price_segment", ps.value)}
                     style={{ padding: 12, border: `1.5px solid ${form.price_segment === ps.value ? "#1a1a1a" : "#E0DED8"}`,
@@ -671,7 +703,7 @@ export default function OnboardingPage() {
               ))}
             </div>
             <div>
-              <label style={lbl}>Ключевые показатели SMM-стратегии</label>
+              <label style={lbl}>Ключевые показатели SMM-стратегии, по которым вы будете оценивать эффективность</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {SMM_METRICS_OPTIONS.map(m => (
                   <button key={m} onClick={() => toggleMetric(m)}
@@ -702,9 +734,11 @@ export default function OnboardingPage() {
               <p style={{ color: "#888", margin: 0, fontSize: 14 }}>Выберите площадки и цель для каждой</p>
             </div>
             {[
-              { id: "telegram", label: "Telegram", icon: "✈", desc: "Канал / группа" },
-              { id: "vk", label: "ВКонтакте", icon: "В", desc: "Группа / публичная страница" },
-              { id: "ok", label: "Одноклассники", icon: "О", desc: "Группа" },
+              { id: "telegram",  label: "Telegram",    icon: "✈",  desc: "Канал / группа" },
+              { id: "vk",        label: "ВКонтакте",   icon: "В",  desc: "Группа / публичная страница" },
+              { id: "tiktok",    label: "TikTok",       icon: "♪",  desc: "Аккаунт / профиль" },
+              { id: "instagram", label: "Instagram",    icon: "📷", desc: "Аккаунт / бизнес-профиль" },
+              { id: "max",       label: "Max",          icon: "М",  desc: "Аккаунт / сообщество" },
             ].map(pl => (
               <div key={pl.id} style={{ border: `1.5px solid ${form.platforms.includes(pl.id) ? "#1a1a1a" : "#E0DED8"}`,
                 borderRadius: 12, overflow: "hidden" }}>
@@ -776,13 +810,6 @@ export default function OnboardingPage() {
               </div>
             </div>
             <div>
-              <label style={lbl}>Визуальный стиль *</label>
-              <textarea value={form.visual_style} onChange={e => set("visual_style", e.target.value)}
-                placeholder="Тёплые тона, фото еды крупным планом, уютная атмосфера"
-                style={{ ...inp, minHeight: 80, resize: "vertical" }} />
-              <p style={hint}>Опишите как должны выглядеть картинки к постам</p>
-            </div>
-            <div>
               <label style={lbl}>Что нельзя публиковать?</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {["алкоголь", "политика", "конкуренты", "скидки", "агрессивные продажи"].map(r => (
@@ -802,53 +829,168 @@ export default function OnboardingPage() {
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setStep(2)} style={btnBack}>← Назад</button>
-              <button onClick={() => setStep(4)} disabled={!form.visual_style}
-                style={btnNext(!form.visual_style)}>Далее →</button>
+              <button onClick={() => setStep(4)} style={btnNext(false)}>Далее →</button>
             </div>
           </div>
         )}
 
-        {/* ── STEP 4: Материалы бренда ── */}
+        {/* ── STEP 4: Стиль ── */}
         {step === 4 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div>
-              <h2 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 6px" }}>Материалы бренда</h2>
-              <p style={{ color: "#888", margin: 0, fontSize: 14 }}>AI проанализирует их при создании стратегии и контент-плана</p>
+              <h2 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 6px" }}>Стиль бренда</h2>
+              <p style={{ color: "#888", margin: 0, fontSize: 14 }}>AI проанализирует материалы при создании стратегии и контент-плана</p>
             </div>
 
+            {/* Визуальный стиль */}
+            <div>
+              <label style={lbl}>Визуальный стиль</label>
+              <textarea value={form.visual_style} onChange={e => set("visual_style", e.target.value)}
+                placeholder="Тёплые тона, фото еды крупным планом, уютная атмосфера"
+                style={{ ...inp, minHeight: 80, resize: "vertical" }} />
+              <p style={hint}>Опишите как должны выглядеть картинки к постам. Какой визуальный стиль? Какие цвета? Что показываем?</p>
+            </div>
+
+            {/* Фирменный стиль — загрузка файлов */}
             <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, padding: 20 }}>
-              <label style={{ ...lbl, fontSize: 14, marginBottom: 10 }}>🎨 Фирменный стиль</label>
-              <p style={{ color: "#888", fontSize: 13, margin: "0 0 12px", lineHeight: 1.6 }}>
-                Прикрепите ссылки на элементы фирменного стиля: логотип, брендбук, макеты, маскот, вывеска.
-                Можно загрузить на Google Drive, Яндекс Диск или Notion и вставить ссылку.
+              <label style={{ ...lbl, fontSize: 14, marginBottom: 6 }}>🎨 Фирменный стиль</label>
+              <p style={{ color: "#888", fontSize: 13, margin: "0 0 14px", lineHeight: 1.6 }}>
+                Прикрепите файлы: логотип, брендбук, макеты, фото вывески, маскот.
+                До 20 файлов — фото или PDF. Для каждого файла укажите краткое описание (1–3 слова).
               </p>
-              <textarea value={form.brand_assets_links} onChange={e => set("brand_assets_links", e.target.value)}
-                placeholder={"https://drive.google.com/...\nhttps://www.figma.com/..."}
-                style={{ ...inp, minHeight: 90, resize: "vertical" }} />
-              <p style={hint}>Необязательно — можно пропустить если материалов нет</p>
+
+              <input
+                ref={brandAssetInputRef}
+                type="file"
+                accept="image/*,.pdf"
+                multiple
+                style={{ display: "none" }}
+                onChange={e => {
+                  const files = e.target.files;
+                  if (!files) return;
+                  const remaining = 20 - brandAssets.length;
+                  const arr = Array.from(files).slice(0, remaining);
+                  arr.forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = ev => {
+                      setBrandAssets(prev => [
+                        ...prev,
+                        { file, preview: ev.target?.result as string || "", label: "" },
+                      ].slice(0, 20));
+                    };
+                    reader.readAsDataURL(file);
+                  });
+                  e.target.value = "";
+                }}
+              />
+
+              {/* Drop zone */}
+              <div
+                onClick={() => brandAssets.length < 20 && brandAssetInputRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault();
+                  const files = e.dataTransfer.files;
+                  const remaining = 20 - brandAssets.length;
+                  const arr = Array.from(files).slice(0, remaining);
+                  arr.forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = ev => {
+                      setBrandAssets(prev => [
+                        ...prev,
+                        { file, preview: ev.target?.result as string || "", label: "" },
+                      ].slice(0, 20));
+                    };
+                    reader.readAsDataURL(file);
+                  });
+                }}
+                style={{
+                  border: "2px dashed #E0DED8", borderRadius: 12, padding: "20px",
+                  textAlign: "center", cursor: brandAssets.length < 20 ? "pointer" : "default",
+                  background: "#FAFAF8", marginBottom: brandAssets.length > 0 ? 14 : 0,
+                }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>🖼</div>
+                <div style={{ fontSize: 14, color: "#555" }}>
+                  {brandAssets.length < 20
+                    ? "Нажмите или перетащите файлы сюда"
+                    : "Достигнут максимум (20 файлов)"}
+                </div>
+                <div style={{ fontSize: 12, color: "#aaa", marginTop: 4 }}>
+                  Фото или PDF · до 20 файлов · загружено {brandAssets.length}/20
+                </div>
+              </div>
+
+              {/* File list with labels */}
+              {brandAssets.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {brandAssets.map((asset, i) => (
+                    <div key={i} style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      padding: "10px 12px", background: "#F8F7F4", borderRadius: 10,
+                    }}>
+                      {asset.file.type === "application/pdf" ? (
+                        <div style={{ width: 40, height: 40, borderRadius: 8, background: "#E8EAF0",
+                          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
+                          📄
+                        </div>
+                      ) : (
+                        <img src={asset.preview} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} />
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, color: "#888", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {asset.file.name}
+                        </div>
+                        <input
+                          value={asset.label}
+                          onChange={e => {
+                            const updated = [...brandAssets];
+                            updated[i] = { ...updated[i], label: e.target.value };
+                            setBrandAssets(updated);
+                          }}
+                          placeholder='Описание: "Логотип", "Магазин снаружи"…'
+                          required
+                          style={{ ...inp, padding: "6px 10px", fontSize: 13 }}
+                        />
+                      </div>
+                      <button
+                        onClick={() => setBrandAssets(prev => prev.filter((_, j) => j !== i))}
+                        style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#ccc", flexShrink: 0 }}>
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p style={{ ...hint, marginTop: brandAssets.length > 0 ? 10 : 6 }}>
+                Необязательно — можно пропустить если материалов нет
+              </p>
             </div>
 
+            {/* Цвета и шрифты */}
             <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, padding: 20 }}>
-              <label style={{ ...lbl, fontSize: 14, marginBottom: 10 }}>📱 Референсы соцсетей</label>
+              <label style={{ ...lbl, fontSize: 14, marginBottom: 6 }}>🎨 Фирменные цвета и шрифты</label>
               <p style={{ color: "#888", fontSize: 13, margin: "0 0 12px", lineHeight: 1.6 }}>
-                Укажите ссылки на аккаунты компаний в соцсетях, чей стиль вам нравится и хотелось бы перенять.
+                Укажите фирменные цвета и шрифты, если есть.<br />
+                <span style={{ color: "#bbb" }}>
+                  Фирменные цвета указываются в кодировке CMYK или RGB, например: RGB (255, 87, 51) или CMYK (0, 66, 80, 0).
+                </span>
+              </p>
+              <textarea value={form.brand_colors_fonts} onChange={e => set("brand_colors_fonts", e.target.value)}
+                placeholder={"Основной цвет: RGB (255, 87, 51)\nДополнительный: RGB (30, 30, 30)\nШрифт заголовков: Montserrat Bold\nШрифт текста: Inter Regular"}
+                style={{ ...inp, minHeight: 100, resize: "vertical" }} />
+              <p style={hint}>Необязательно — можно пропустить</p>
+            </div>
+
+            {/* Референсы соцсетей */}
+            <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, padding: 20 }}>
+              <label style={{ ...lbl, fontSize: 14, marginBottom: 6 }}>📱 Референсы соцсетей</label>
+              <p style={{ color: "#888", fontSize: 13, margin: "0 0 12px", lineHeight: 1.6 }}>
+                Укажите ссылки на аккаунты компаний в соцсетях, чей стиль будем использовать как референс.
               </p>
               <textarea value={form.social_references} onChange={e => set("social_references", e.target.value)}
                 placeholder={"https://vk.com/dodopizza\nhttps://t.me/burgerkingrussia"}
-                style={{ ...inp, minHeight: 90, resize: "vertical" }} />
+                style={{ ...inp, minHeight: 80, resize: "vertical" }} />
               <p style={hint}>Необязательно — можно указать 1–5 аккаунтов</p>
-            </div>
-
-            <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, padding: 20 }}>
-              <label style={{ ...lbl, fontSize: 14, marginBottom: 10 }}>📸 Фото вашего заведения / продукта</label>
-              <p style={{ color: "#888", fontSize: 13, margin: "0 0 12px", lineHeight: 1.6 }}>
-                Пришлите ссылки на фотографии магазина, студии, салона, кухни или продуктов.
-                Это поможет AI создавать более точные промты для генерации картинок.
-              </p>
-              <textarea value={form.business_photos_links} onChange={e => set("business_photos_links", e.target.value)}
-                placeholder={"https://drive.google.com/...\nhttps://disk.yandex.ru/..."}
-                style={{ ...inp, minHeight: 90, resize: "vertical" }} />
-              <p style={hint}>Необязательно — можно пропустить</p>
             </div>
 
             {error && <p style={{ color: "#A32D2D", fontSize: 13 }}>{error}</p>}
