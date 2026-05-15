@@ -5,10 +5,13 @@
 """
 import io
 import base64
+import logging
 import httpx
 from PIL import Image
 from openai import AsyncOpenAI
 from app.config import settings
+
+log = logging.getLogger(__name__)
 
 _GEMINI_MODEL = "gemini-3.1-flash-image-preview"
 _GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -53,17 +56,21 @@ async def _gemini_generate(prompt: str) -> str:
             url,
             json={
                 "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"responseModalities": ["IMAGE"]},
+                "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
             },
         )
     d = r.json()
     if "error" in d:
-        raise ValueError(d["error"].get("message", str(d["error"])))
+        msg = d["error"].get("message", str(d["error"]))
+        log.error("[Gemini generate] API error (HTTP %s): %s", r.status_code, msg)
+        raise ValueError(msg)
     for cand in d.get("candidates", []):
         for part in cand.get("content", {}).get("parts", []):
             b64 = part.get("inlineData", {}).get("data", "")
             if b64:
+                log.info("[Gemini generate] success, b64 length=%d", len(b64))
                 return b64
+    log.error("[Gemini generate] no image in response: %s", str(d)[:600])
     raise ValueError("Gemini не вернул изображение")
 
 
