@@ -343,10 +343,9 @@ export default function PostCreatorPage() {
   const slotInputRef = useRef<HTMLInputElement>(null);
 
   // ── Block 3c: Edit ────────────────────────────────────────────────────────
-  const [editBaseIdx, setEditBaseIdx] = useState<number>(-1);
-  const [editBaseUploaded, setEditBaseUploaded] = useState<{ data: string; mime: string } | null>(null);
-  const [editBaseUploadedPreview, setEditBaseUploadedPreview] = useState("");
+  const [editSlots, setEditSlots] = useState<Array<UploadSlot | null>>(Array(MAX_UPLOAD_SLOTS).fill(null));
   const [editInstruction, setEditInstruction] = useState("");
+  const editActiveSlotRef = useRef<number>(-1);
 
   // ── AI image history + inline edit (shared for prompt & edit modes) ───────
   const [imageHistory, setImageHistory] = useState<string[]>([]);
@@ -368,11 +367,12 @@ export default function PostCreatorPage() {
   const [publishMsg, setPublishMsg] = useState("");
 
   const multiFileRef = useRef<HTMLInputElement>(null);
-  const editBaseRef = useRef<HTMLInputElement>(null);
+  const editSlotInputRef = useRef<HTMLInputElement>(null);
 
   // Derived
   const aiImageB64 = currentImageIdx >= 0 ? imageHistory[currentImageIdx] : "";
   const uploadFilled = uploadSlots.filter((s): s is UploadSlot => s !== null);
+  const editFilled = editSlots.filter((s): s is UploadSlot => s !== null);
   const uploadImageB64 = uploadFilled[Math.min(uploadCarouselIdx, uploadFilled.length - 1)]?.data ?? "";
   const imageBase64ForPublish = imageMode === "upload" ? (uploadFilled.length === 1 ? uploadFilled[0].data : null) : aiImageB64 || null;
   const imagesBase64ForPublish = imageMode === "upload" && uploadFilled.length > 1 ? uploadFilled.map(s => s.data) : undefined;
@@ -448,19 +448,54 @@ export default function PostCreatorPage() {
   const removeIdeaFile = (idx: number) => {
     setIdeaFiles(ideaFiles.filter((_, i) => i !== idx));
     setIdeaFilePreviews(ideaFilePreviews.filter((_, i) => i !== idx));
-    if (editBaseIdx === idx) setEditBaseIdx(-1);
   };
 
-  const onEditBasePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]; if (!f) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const result = ev.target?.result as string;
-      const parts = result.split(",");
-      setEditBaseUploaded({ data: parts[1] || "", mime: parts[0].replace("data:", "").replace(";base64", "") || "image/jpeg" });
-      setEditBaseUploadedPreview(result); setEditBaseIdx(-1);
-    };
-    reader.readAsDataURL(f); e.target.value = "";
+  const onEditSlotFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).filter(f => f.type.startsWith("image/"));
+    if (!files.length) return;
+    const newSlots = [...editSlots];
+    let startIdx = editActiveSlotRef.current >= 0 ? editActiveSlotRef.current : 0;
+    for (const file of files) {
+      while (startIdx < MAX_UPLOAD_SLOTS && newSlots[startIdx] !== null) startIdx++;
+      if (startIdx >= MAX_UPLOAD_SLOTS) break;
+      const { data, mime } = await readFileAsBase64(file);
+      newSlots[startIdx] = { data, mime };
+      startIdx++;
+    }
+    setEditSlots(newSlots);
+    editActiveSlotRef.current = -1;
+    e.target.value = "";
+  };
+
+  const onEditSlotClick = (idx: number) => {
+    editActiveSlotRef.current = idx;
+    editSlotInputRef.current?.click();
+  };
+
+  const removeEditSlot = (idx: number) => {
+    setEditSlots(prev => { const n = [...prev]; n[idx] = null; return n; });
+  };
+
+  const reorderEditSlots = (from: number, to: number) => {
+    setEditSlots(prev => {
+      const n = [...prev];
+      [n[from], n[to]] = [n[to], n[from]];
+      return n;
+    });
+  };
+
+  const onEditFileDrop = async (files: File[]) => {
+    if (!files.length) return;
+    const newSlots = [...editSlots];
+    let idx = 0;
+    for (const file of files) {
+      while (idx < MAX_UPLOAD_SLOTS && newSlots[idx] !== null) idx++;
+      if (idx >= MAX_UPLOAD_SLOTS) break;
+      const { data, mime } = await readFileAsBase64(file);
+      newSlots[idx] = { data, mime };
+      idx++;
+    }
+    setEditSlots(newSlots);
   };
 
   // Upload slot: multiple files, fill slots sequentially from clicked position
@@ -520,13 +555,12 @@ export default function PostCreatorPage() {
     setInlineEditCount(0); setShowInlineEdit(false); setInlineEditInstruction("");
     setUploadSlots(Array(MAX_UPLOAD_SLOTS).fill(null)); setUploadCarouselIdx(0);
     setImagePrompt("");
-    setEditBaseIdx(-1); setEditBaseUploaded(null); setEditBaseUploadedPreview(""); setEditInstruction("");
+    setEditSlots(Array(MAX_UPLOAD_SLOTS).fill(null)); setEditInstruction("");
   };
 
   const switchMode = (mode: ImageMode) => {
     clearImageState();
     setImageMode(mode);
-    if (mode === "edit") setEditBaseIdx(ideaFiles.length > 0 ? 0 : -1);
   };
 
   const goChangeMode = () => { clearImageState(); setImageMode(null); };
@@ -593,20 +627,11 @@ export default function PostCreatorPage() {
   };
 
   const editImageFromBlock3c = async () => {
-    const hasUploadedBase = !!editBaseUploaded;
-    const hasAttachedBase = ideaFiles.length > 0 && editBaseIdx >= 0;
-    if (!editInstruction.trim() || (!hasUploadedBase && !hasAttachedBase)) return;
+    if (!editInstruction.trim() || editFilled.length === 0) return;
     setLoadingImage(true);
     try {
-      let baseImage: { data: string; mime: string };
-      let refImages: { data: string; mime: string }[] = [];
-      if (hasUploadedBase) {
-        baseImage = editBaseUploaded!;
-        refImages = await Promise.all(ideaFiles.filter(f => f.type.startsWith("image/")).map(readFileAsBase64));
-      } else {
-        baseImage = await readFileAsBase64(ideaFiles[editBaseIdx]);
-        refImages = await Promise.all(ideaFiles.filter((_, i) => i !== editBaseIdx && ideaFiles[i].type.startsWith("image/")).map(readFileAsBase64));
-      }
+      const baseImage = editFilled[0];
+      const refImages = editFilled.slice(1);
       const { data: taskData } = await api.post(`/post-creator/${businessId}/edit-image`, {
         base_image: baseImage,
         reference_images: refImages.length > 0 ? refImages : undefined,
@@ -772,7 +797,7 @@ export default function PostCreatorPage() {
 
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   {([
-                    { mode: "prompt" as ImageMode, label: "🖼 Создать промт изображения" },
+                    { mode: "prompt" as ImageMode, label: "🖼 Создать изображение по промту" },
                     { mode: "upload" as ImageMode, label: "📁 Загрузить изображение" },
                     { mode: "edit"   as ImageMode, label: "✂️ Загрузить и отредактировать" },
                   ]).map(({ mode, label }) => {
@@ -873,40 +898,40 @@ export default function PostCreatorPage() {
 
         {/* ── 3c. Загрузить и отредактировать + предпросмотр ── */}
         {imageMode === "edit" && (
-          <div style={card}>
+          <div
+            style={card}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => {
+              e.preventDefault();
+              const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
+              if (files.length) onEditFileDrop(files);
+            }}
+          >
             <SectionTitle n={3} label="Загрузить и отредактировать фото" done={false} />
-            <p style={{ color: "#888", fontSize: 13, margin: "0 0 16px" }}>Выберите основное фото (которое будет редактироваться), остальные прикреплённые — референсы. ИИ изменит фото по вашей инструкции.</p>
-
-            {ideaFilePreviews.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 12, color: "#666", fontWeight: 600, marginBottom: 8 }}>Основное фото из блока 1:</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {ideaFilePreviews.map((src, idx) => (
-                    <div key={idx} onClick={() => { setEditBaseIdx(idx); setEditBaseUploaded(null); setEditBaseUploadedPreview(""); }}
-                      style={{ position: "relative", cursor: "pointer", border: editBaseIdx === idx && !editBaseUploaded ? "3px solid #6B46C1" : "2px solid #E0DED8", borderRadius: 10, overflow: "hidden" }}>
-                      <img src={src} alt={`base-${idx}`} style={{ width: 72, height: 72, objectFit: "cover", display: "block" }} />
-                      {editBaseIdx === idx && !editBaseUploaded && <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "#6B46C1", color: "#fff", fontSize: 9, fontWeight: 700, textAlign: "center", padding: "2px 0" }}>ОСНОВА</div>}
-                    </div>
-                  ))}
-                </div>
-                {editBaseIdx >= 0 && !editBaseUploaded && ideaFilePreviews.length > 1 && <div style={{ fontSize: 11, color: "#888", marginTop: 6 }}>Остальные {ideaFilePreviews.length - 1} фото → референсы для ИИ</div>}
+            <p style={{ color: "#888", fontSize: 13, margin: "0 0 16px" }}>
+              Загрузите до {MAX_UPLOAD_SLOTS} фото — нажмите на ячейку или перетащите из папки. Первое фото будет основным для редактирования, остальные — референсы для ИИ.
+            </p>
+            <UploadGrid
+              slots={editSlots}
+              onSlotClick={onEditSlotClick}
+              onRemove={removeEditSlot}
+              onReorder={reorderEditSlots}
+              onFileDrop={(_, files) => onEditFileDrop(files)}
+            />
+            <input ref={editSlotInputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onEditSlotFileChange} />
+            {editFilled.length > 1 && (
+              <div style={{ marginTop: 8, fontSize: 12, color: "#6B46C1", fontWeight: 600 }}>
+                Первое фото — основное, {editFilled.length - 1} {editFilled.length - 1 === 1 ? "остальное" : "остальных"} — референс{editFilled.length - 1 === 1 ? "" : "ы"} для ИИ
               </div>
             )}
+            <div style={{ marginTop: 10, fontSize: 12, color: "#aaa" }}>Можно добавить до {MAX_UPLOAD_SLOTS} изображений</div>
 
-            <div style={{ marginBottom: 16 }}>
-              <button onClick={() => editBaseRef.current?.click()} style={{ background: editBaseUploaded ? "#F0EBF8" : "none", border: `1px solid ${editBaseUploaded ? "#6B46C1" : "#E0DED8"}`, borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, color: editBaseUploaded ? "#6B46C1" : "#666", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                {editBaseUploaded ? "✓ Загружено своё фото (нажмите, чтобы заменить)" : "📂 Загрузить своё фото для редактирования"}
-              </button>
-              <input ref={editBaseRef} type="file" accept="image/*" style={{ display: "none" }} onChange={onEditBasePhoto} />
-              {editBaseUploadedPreview && <img src={editBaseUploadedPreview} alt="edit-base" style={{ display: "block", marginTop: 8, width: 120, height: 120, objectFit: "cover", borderRadius: 10, border: "2px solid #6B46C1" }} />}
-            </div>
-
-            <div style={{ fontSize: 12, color: "#666", fontWeight: 600, marginBottom: 6 }}>Инструкция по редактированию (на русском):</div>
+            <div style={{ fontSize: 12, color: "#666", fontWeight: 600, marginBottom: 6, marginTop: 16 }}>Инструкция по редактированию (на русском):</div>
             {brandShortcutsNode(setEditInstruction, editInstruction)}
             <Textarea value={editInstruction} onChange={setEditInstruction} placeholder="Например: замени фон на белый, добавь тёплые фирменные цвета, сохрани общую композицию..." rows={4} />
             <div style={{ marginTop: 14 }}>
               <Btn label={loadingImage ? "Редактирую..." : "✂️ Редактировать фото"} onClick={editImageFromBlock3c}
-                disabled={!editInstruction.trim() || loadingImage || (!editBaseUploaded && (ideaFiles.length === 0 || editBaseIdx < 0))}
+                disabled={!editInstruction.trim() || loadingImage || editFilled.length === 0}
                 loading={loadingImage} color="#6B46C1" />
             </div>
 
