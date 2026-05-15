@@ -47,14 +47,19 @@ def _gemini(prompt: str) -> str:
 
 
 def _openai_image(prompt: str, aspect_ratio: str, model: str) -> str:
-    """GPT Image 2 или GPT Image 1 Mini — OpenAI Images API."""
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    """GPT Image — OpenAI Images API."""
+    import httpx as _httpx
+    client = OpenAI(
+        api_key=settings.OPENAI_API_KEY,
+        timeout=_httpx.Timeout(connect=10.0, read=40.0, write=10.0, pool=5.0),
+    )
     size = _OAI_SIZE.get(aspect_ratio, "1024x1024")
     resp = client.images.generate(
         model=model,
         prompt=prompt[:1000],
         size=size,
         n=1,
+        response_format="b64_json",
     )
     b64 = resp.data[0].b64_json
     if not b64:
@@ -65,7 +70,7 @@ def _openai_image(prompt: str, aspect_ratio: str, model: str) -> str:
 def generate_image_sync(prompt: str, aspect_ratio: str = "1:1") -> str:
     """
     Синхронная генерация — запускать через asyncio.to_thread.
-    Каскад: Gemini 3.1 Flash Image → GPT Image 2 → GPT Image 1 Mini
+    Каскад: Gemini Flash Image (35s) → GPT Image 1 (40s) → DALL-E 3 (40s)
     """
     errors: list[str] = []
 
@@ -76,7 +81,7 @@ def generate_image_sync(prompt: str, aspect_ratio: str = "1:1") -> str:
             errors.append(f"Gemini: {e}")
 
     if settings.OPENAI_API_KEY:
-        for model_name in ("gpt-image-2", "gpt-image-1-mini"):
+        for model_name in ("gpt-image-1", "dall-e-3"):
             try:
                 return _openai_image(prompt, aspect_ratio, model_name)
             except Exception as e:
@@ -152,17 +157,20 @@ def _to_png_buf(img_dict: dict) -> io.BytesIO:
 
 
 def _openai_edit(base_image: dict, reference_images: list[dict], instruction: str) -> str:
-    """GPT Image 2 редактирование через images.edit API."""
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    """GPT Image 1 редактирование через images.edit API."""
+    import httpx as _httpx
+    client = OpenAI(
+        api_key=settings.OPENAI_API_KEY,
+        timeout=_httpx.Timeout(connect=10.0, read=40.0, write=10.0, pool=5.0),
+    )
     images = [_to_png_buf(base_image)]
     for ref in reference_images[:6]:
         images.append(_to_png_buf(ref))
     result = client.images.edit(
-        model="gpt-image-2",
+        model="gpt-image-1",
         image=images,
         prompt=instruction[:1000],
         size="1024x1024",
-        timeout=50,
     )
     b64 = result.data[0].b64_json
     if not b64:
