@@ -6,7 +6,7 @@ import api from "@/lib/api";
 type Platform = "vk" | "telegram";
 type ConnectedPlatform = { platform: Platform; page_name: string };
 type ModelKey = "claude" | "gpt";
-type ImageMode = "prompt" | "edit" | null;
+type ImageMode = "prompt" | "upload" | "edit" | null;
 
 const MODEL_LABELS: Record<ModelKey, string> = {
   claude: "Claude Sonnet 4.6",
@@ -405,7 +405,7 @@ export default function PostCreatorPage() {
       const newHistory = [...imageHistory, b64];
       setImageHistory(newHistory);
       setCurrentImageIdx(newHistory.length - 1);
-      setImageMode(null);
+      setImageMode("upload");
     };
     reader.readAsDataURL(f);
     e.target.value = "";
@@ -761,50 +761,75 @@ export default function PostCreatorPage() {
                 onPrev={() => navigateText(-1)} onNext={() => navigateText(1)} />
             )}
 
-            {/* ── 3 кнопки для изображения ── */}
+            {/* ── Изображение к посту ── */}
             {hasText && (
               <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #F0EEE8" }}>
                 <div style={{ fontSize: 12, color: "#888", marginBottom: 12, fontWeight: 600 }}>
                   Изображение к посту:
                 </div>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
 
-                  {/* Кнопка 1: Создать промт */}
-                  <button
-                    onClick={() => switchMode(imageMode === "prompt" ? null : "prompt")}
-                    style={{ padding: "10px 20px",
-                      background: imageMode === "prompt" ? "#0F6E56" : "#4680C2",
-                      color: "#fff", border: "none", borderRadius: 10,
-                      cursor: "pointer", fontSize: 13, fontWeight: 600,
-                      display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    🖼 Создать промт изображения
-                  </button>
+                {/* Режим не выбран — показываем все 3 варианта */}
+                {imageMode === null && (
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button onClick={() => switchMode("prompt")}
+                      style={{ padding: "10px 20px", background: "#4680C2", color: "#fff",
+                        border: "none", borderRadius: 10, cursor: "pointer",
+                        fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      🖼 Создать промт изображения
+                    </button>
+                    <button onClick={() => simpleUploadRef.current?.click()}
+                      style={{ padding: "10px 20px", background: "#fff", color: "#555",
+                        border: "1.5px solid #E0DED8", borderRadius: 10, cursor: "pointer",
+                        fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      📁 Загрузить изображение
+                    </button>
+                    <button onClick={() => switchMode("edit")}
+                      style={{ padding: "10px 20px", background: "#fff", color: "#555",
+                        border: "1.5px solid #E0DED8", borderRadius: 10, cursor: "pointer",
+                        fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      ✂️ Загрузить и отредактировать
+                    </button>
+                    <input ref={simpleUploadRef} type="file" accept="image/*"
+                      style={{ display: "none" }} onChange={onSimpleUpload} />
+                  </div>
+                )}
 
-                  {/* Кнопка 2: Загрузить без редактирования */}
-                  <button
-                    onClick={() => simpleUploadRef.current?.click()}
-                    style={{ padding: "10px 20px", background: "#fff",
-                      color: "#555", border: "1.5px solid #E0DED8",
-                      borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600,
-                      display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    📁 Загрузить изображение
-                  </button>
-                  <input ref={simpleUploadRef} type="file" accept="image/*"
-                    style={{ display: "none" }} onChange={onSimpleUpload} />
-
-                  {/* Кнопка 3: Загрузить и отредактировать */}
-                  <button
-                    onClick={() => switchMode(imageMode === "edit" ? null : "edit")}
-                    style={{ padding: "10px 20px",
-                      background: imageMode === "edit" ? "#6B46C1" : "#fff",
-                      color: imageMode === "edit" ? "#fff" : "#555",
-                      border: `1.5px solid ${imageMode === "edit" ? "#6B46C1" : "#E0DED8"}`,
-                      borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600,
-                      display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    ✂️ Загрузить и отредактировать
-                  </button>
-
-                </div>
+                {/* Режим выбран — только активная кнопка + ссылка "Изменить" */}
+                {imageMode !== null && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    {imageMode === "prompt" && (
+                      <button style={{ padding: "10px 20px", background: "#0F6E56", color: "#fff",
+                        border: "none", borderRadius: 10, cursor: "default",
+                        fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        🖼 Создать промт изображения
+                      </button>
+                    )}
+                    {imageMode === "upload" && (
+                      <>
+                        <button onClick={() => simpleUploadRef.current?.click()}
+                          style={{ padding: "10px 20px", background: "#0F6E56", color: "#fff",
+                            border: "none", borderRadius: 10, cursor: "pointer",
+                            fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          📁 Загрузить изображение
+                        </button>
+                        <input ref={simpleUploadRef} type="file" accept="image/*"
+                          style={{ display: "none" }} onChange={onSimpleUpload} />
+                      </>
+                    )}
+                    {imageMode === "edit" && (
+                      <button style={{ padding: "10px 20px", background: "#6B46C1", color: "#fff",
+                        border: "none", borderRadius: 10, cursor: "default",
+                        fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        ✂️ Загрузить и отредактировать
+                      </button>
+                    )}
+                    <button onClick={() => { setImageMode(null); }}
+                      style={{ background: "none", border: "none", cursor: "pointer",
+                        fontSize: 12, color: "#888", textDecoration: "underline", padding: 0 }}>
+                      Изменить
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
