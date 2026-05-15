@@ -209,27 +209,35 @@ async def _claude_text(client: httpx.AsyncClient, system: str, user_text: str, m
     return r.json()["content"][0]["text"].strip()
 
 
-async def _generate_text(system: str, user_text: str, max_tokens: int = 1200) -> str:
-    """Claude → GPT → Gemini, все вызовы нативно async."""
+async def _generate_text(system: str, user_text: str, max_tokens: int = 1200) -> tuple[str, str]:
+    """Claude → GPT (Gemini только для картинок). Возвращает (text, model_used)."""
     errors: list[str] = []
     async with httpx.AsyncClient(timeout=60) as client:
         if settings.ANTHROPIC_API_KEY:
             try:
-                return await _claude_text(client, system, user_text, max_tokens)
+                return await _claude_text(client, system, user_text, max_tokens), "claude"
             except Exception as e:
                 errors.append(f"Claude: {e}")
 
         if settings.OPENAI_API_KEY:
             try:
-                return await _gpt_text(client, system, user_text, max_tokens)
+                r = await client.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+                    json={
+                        "model": _GPT_USER_MODEL,
+                        "max_completion_tokens": max_tokens,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user_text},
+                        ],
+                    },
+                )
+                if r.status_code != 200:
+                    raise ValueError(f"GPT {r.status_code}: {r.text[:200]}")
+                return r.json()["choices"][0]["message"]["content"].strip(), "gpt"
             except Exception as e:
                 errors.append(f"GPT: {e}")
-
-        if settings.GEMINI_API_KEY:
-            try:
-                return await _gemini_text(client, system, user_text, max_tokens)
-            except Exception as e:
-                errors.append(f"Gemini: {e}")
 
     raise HTTPException(500, "Ошибка генерации: " + " | ".join(errors))
 
@@ -286,7 +294,6 @@ class TextIn(BaseModel):
     idea: str
     url: Optional[str] = None
     images: Optional[list[ImageData]] = None
-    model: str = "claude"  # "claude" | "gpt" | "gemini"
 
 
 @router.post("/{business_id}/generate-text")
@@ -340,8 +347,8 @@ async def generate_post_text(
         "• СТРОГО используй только факты из идеи. Никогда не придумывай продукты, бренды, страны, события, детали, которые явно не указаны в идее"
     )
 
-    text = await _generate_text_by_model(system, f"Задача: {body.idea}{extra}", body.model, max_tokens=3000)
-    return {"text": text, "model_used": body.model}
+    text, model_used = await _generate_text(system, f"Задача: {body.idea}{extra}", max_tokens=3000)
+    return {"text": text, "model_used": model_used}
 
 
 # ─── 2. Генерация промта для изображения ─────────────────────────────────────
@@ -351,7 +358,6 @@ class PromptIn(BaseModel):
     idea: Optional[str] = None
     url: Optional[str] = None
     images: Optional[list[ImageData]] = None
-    model: str = "claude"  # "claude" | "gpt" | "gemini"
 
 
 @router.post("/{business_id}/generate-prompt")
@@ -402,8 +408,8 @@ async def generate_image_prompt(
         "Write a specific image prompt that shows exactly what this post is about:"
     )
 
-    prompt = await _generate_text_by_model(system, user_text, body.model, 400)
-    return {"prompt": prompt, "model_used": body.model}
+    prompt, model_used = await _generate_text(system, user_text, 400)
+    return {"prompt": prompt, "model_used": model_used}
 
 
 # ─── 3. Генерация изображения ─────────────────────────────────────────────────
@@ -433,7 +439,7 @@ async def generate_image(
             "Return ONLY the English translation, no explanations or comments."
         )
         try:
-            prompt = await _generate_text(translation_system, body.prompt_ru, 400)
+            prompt, _ = await _generate_text(translation_system, body.prompt_ru, 400)
         except Exception:
             prompt = body.prompt_ru
 
@@ -471,7 +477,7 @@ async def edit_image_endpoint(
         "Return ONLY the English translation, no comments."
     )
     try:
-        instruction_en = await _generate_text(translation_system, body.instruction_ru, 400)
+        instruction_en, _ = await _generate_text(translation_system, body.instruction_ru, 400)
     except Exception:
         instruction_en = body.instruction_ru
 
