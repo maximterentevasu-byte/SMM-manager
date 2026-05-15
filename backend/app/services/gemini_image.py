@@ -101,6 +101,7 @@ async def generate_image(prompt: str, aspect_ratio: str = "1:1") -> str:
         try:
             return await _gemini_generate(prompt)
         except Exception as e:
+            log.error("[Gemini generate] failed, falling through to OpenAI: %s", e)
             errors.append(f"Gemini: {e}")
 
     if settings.OPENAI_API_KEY:
@@ -108,6 +109,7 @@ async def generate_image(prompt: str, aspect_ratio: str = "1:1") -> str:
             try:
                 return await _openai_generate(prompt, aspect_ratio, model_name)
             except Exception as e:
+                log.error("[OpenAI %s] failed: %s", model_name, e)
                 errors.append(f"{model_name}: {e}")
 
     raise ValueError("Все генераторы недоступны: " + " | ".join(errors))
@@ -191,12 +193,14 @@ async def edit_image(
         try:
             return await _gemini_edit(base_image, reference_images, instruction)
         except Exception as e:
+            log.error("[Gemini edit] failed, falling through to OpenAI: %s", e)
             errors.append(f"Gemini edit: {e}")
 
     if settings.OPENAI_API_KEY:
         try:
             return await _openai_edit(base_image, reference_images, instruction)
         except Exception as e:
+            log.error("[OpenAI edit] failed: %s", e)
             errors.append(f"GPT Image 2 edit: {e}")
 
     raise ValueError("Все редакторы недоступны: " + " | ".join(errors))
