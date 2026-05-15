@@ -78,7 +78,6 @@ async def _openai_generate(prompt: str, aspect_ratio: str, model: str) -> str:
         prompt=prompt[:1000],
         size=size,
         n=1,
-        response_format="b64_json",
     )
     b64 = resp.data[0].b64_json
     if not b64:
