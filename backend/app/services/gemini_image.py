@@ -68,18 +68,18 @@ async def _gemini_generate(prompt: str) -> str:
 
 
 async def _openai_generate(prompt: str, aspect_ratio: str, model: str) -> str:
-    client = AsyncOpenAI(
+    size = _OAI_SIZE.get(aspect_ratio, "1024x1024")
+    async with AsyncOpenAI(
         api_key=settings.OPENAI_API_KEY,
         max_retries=0,
         timeout=httpx.Timeout(connect=5.0, read=_OAI_TIMEOUT, write=5.0, pool=5.0),
-    )
-    size = _OAI_SIZE.get(aspect_ratio, "1024x1024")
-    resp = await client.images.generate(
-        model=model,
-        prompt=prompt[:1000],
-        size=size,
-        n=1,
-    )
+    ) as client:
+        resp = await client.images.generate(
+            model=model,
+            prompt=prompt[:1000],
+            size=size,
+            n=1,
+        )
     b64 = resp.data[0].b64_json
     if not b64:
         raise ValueError(f"{model}: пустой ответ")
@@ -155,17 +155,17 @@ async def _openai_edit(base_image: dict, reference_images: list[dict], instructi
     # PIL-операции блокируют event loop — запускаем в потоке
     png_buf = await asyncio.to_thread(_to_png_buf, base_image)
 
-    client = AsyncOpenAI(
+    async with AsyncOpenAI(
         api_key=settings.OPENAI_API_KEY,
         max_retries=0,
         timeout=httpx.Timeout(connect=5.0, read=_OAI_TIMEOUT, write=15.0, pool=5.0),
-    )
-    result = await client.images.edit(
-        model="gpt-image-2",
-        image=png_buf,
-        prompt=instruction[:1000],
-        size="1024x1024",
-    )
+    ) as client:
+        result = await client.images.edit(
+            model="gpt-image-2",
+            image=png_buf,
+            prompt=instruction[:1000],
+            size="1024x1024",
+        )
     b64 = result.data[0].b64_json
     if not b64:
         raise ValueError("GPT Image 2 edit: пустой ответ")

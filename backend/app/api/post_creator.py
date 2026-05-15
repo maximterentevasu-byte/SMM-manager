@@ -512,7 +512,9 @@ async def edit_image_endpoint(
     body: EditImageIn,
     current_user: User = Depends(get_current_user),
 ):
+    """Переводит инструкцию и немедленно возвращает task_id (редактирование идёт в Celery-воркере)."""
     import asyncio
+    from app.workers.image_tasks import edit_image_task
 
     translation_system = (
         "You are a professional image editing instruction translator. "
@@ -529,23 +531,12 @@ async def edit_image_endpoint(
         instruction_en = body.instruction_ru
 
     refs = [{"data": img.data, "mime": img.mime} for img in (body.reference_images or [])]
-
-    try:
-        from app.services.gemini_image import edit_image as _edit_image
-        b64 = await asyncio.wait_for(
-            _edit_image(
-                {"data": body.base_image.data, "mime": body.base_image.mime},
-                refs,
-                instruction_en,
-            ),
-            timeout=65.0,
-        )
-    except asyncio.TimeoutError:
-        raise HTTPException(504, "Тайм-аут редактирования — попробуйте ещё раз")
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-    return {"image_base64": b64, "instruction_en": instruction_en}
+    task = edit_image_task.apply_async(args=[
+        {"data": body.base_image.data, "mime": body.base_image.mime},
+        refs,
+        instruction_en,
+    ])
+    return {"task_id": task.id, "instruction_en": instruction_en}
 
 
 # ─── 4. Публикация в соцсети ─────────────────────────────────────────────────

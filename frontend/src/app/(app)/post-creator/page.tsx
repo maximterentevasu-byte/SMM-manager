@@ -596,6 +596,16 @@ export default function PostCreatorPage() {
     } finally { setLoadingImage(false); }
   };
 
+  const pollImageTask = async (taskId: string): Promise<string> => {
+    for (let i = 0; i < 36; i++) {
+      await new Promise<void>(r => setTimeout(r, 5000));
+      const { data } = await api.get(`/post-creator/${businessId}/image-task/${taskId}`);
+      if (data.status === "done") return data.image_base64 as string;
+      if (data.status === "error") throw new Error(data.error || "Ошибка");
+    }
+    throw new Error("Тайм-аут — попробуйте ещё раз");
+  };
+
   const editImageFromBlock3c = async () => {
     const hasUploadedBase = !!editBaseUploaded;
     const hasAttachedBase = ideaFiles.length > 0 && editBaseIdx >= 0;
@@ -611,12 +621,13 @@ export default function PostCreatorPage() {
         baseImage = await readFileAsBase64(ideaFiles[editBaseIdx]);
         refImages = await Promise.all(ideaFiles.filter((_, i) => i !== editBaseIdx && ideaFiles[i].type.startsWith("image/")).map(readFileAsBase64));
       }
-      const { data } = await api.post(`/post-creator/${businessId}/edit-image`, {
+      const { data: taskData } = await api.post(`/post-creator/${businessId}/edit-image`, {
         base_image: baseImage,
         reference_images: refImages.length > 0 ? refImages : undefined,
         instruction_ru: editInstruction,
       });
-      const newHistory = [...imageHistory, data.image_base64 as string];
+      const b64 = await pollImageTask(taskData.task_id);
+      const newHistory = [...imageHistory, b64];
       setImageHistory(newHistory); setCurrentImageIdx(newHistory.length - 1);
     } catch (e: any) {
       const detail = e?.response?.data?.detail || e?.message || "попробуй изменить инструкцию";
@@ -628,11 +639,12 @@ export default function PostCreatorPage() {
     if (!inlineEditInstruction.trim() || !aiImageB64 || inlineEditCount >= MAX_INLINE_EDITS) return;
     setLoadingImage(true);
     try {
-      const { data } = await api.post(`/post-creator/${businessId}/edit-image`, {
+      const { data: taskData } = await api.post(`/post-creator/${businessId}/edit-image`, {
         base_image: { data: aiImageB64, mime: "image/png" },
         instruction_ru: inlineEditInstruction,
       });
-      const newHistory = [...imageHistory, data.image_base64 as string];
+      const b64 = await pollImageTask(taskData.task_id);
+      const newHistory = [...imageHistory, b64];
       setImageHistory(newHistory); setCurrentImageIdx(newHistory.length - 1);
       setInlineEditCount(inlineEditCount + 1); setInlineEditInstruction(""); setShowInlineEdit(false);
     } catch (e: any) {
