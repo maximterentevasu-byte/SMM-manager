@@ -159,7 +159,7 @@ async def _gemini_edit(base_image: dict, reference_images: list[dict], instructi
     raise ValueError(f"Gemini edit: нет изображения в ответе.{hint}")
 
 
-async def _openai_edit(base_image: dict, reference_images: list[dict], instruction: str) -> str:
+async def _openai_edit(base_image: dict, reference_images: list[dict], instruction: str, model: str = "gpt-image-2") -> str:
     import asyncio
     # PIL-операции блокируют event loop — запускаем в потоке
     png_buf = await asyncio.to_thread(_to_png_buf, base_image)
@@ -170,14 +170,14 @@ async def _openai_edit(base_image: dict, reference_images: list[dict], instructi
         timeout=httpx.Timeout(connect=5.0, read=_OAI_TIMEOUT, write=15.0, pool=5.0),
     ) as client:
         result = await client.images.edit(
-            model="gpt-image-2",
+            model=model,
             image=png_buf,
             prompt=instruction[:1000],
             size="1024x1024",
         )
     b64 = result.data[0].b64_json
     if not b64:
-        raise ValueError("GPT Image 2 edit: пустой ответ")
+        raise ValueError(f"{model} edit: пустой ответ")
     return b64
 
 
@@ -186,7 +186,7 @@ async def edit_image(
     reference_images: list[dict],
     instruction: str,
 ) -> str:
-    """Каскад: Gemini Flash Image (img2img) → GPT Image 2 edit."""
+    """Каскад: Gemini Flash Image (img2img) → gpt-image-2 edit → gpt-image-1-mini edit."""
     errors: list[str] = []
 
     if settings.GEMINI_API_KEY:
@@ -197,10 +197,11 @@ async def edit_image(
             errors.append(f"Gemini edit: {e}")
 
     if settings.OPENAI_API_KEY:
-        try:
-            return await _openai_edit(base_image, reference_images, instruction)
-        except Exception as e:
-            log.error("[OpenAI edit] failed: %s", e)
-            errors.append(f"GPT Image 2 edit: {e}")
+        for model_name in ("gpt-image-2", "gpt-image-1-mini"):
+            try:
+                return await _openai_edit(base_image, reference_images, instruction, model_name)
+            except Exception as e:
+                log.error("[OpenAI %s edit] failed: %s", model_name, e)
+                errors.append(f"{model_name} edit: {e}")
 
     raise ValueError("Все редакторы недоступны: " + " | ".join(errors))

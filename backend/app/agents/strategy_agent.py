@@ -1,9 +1,25 @@
 import json
 import re
+import logging
 from anthropic import AsyncAnthropic
+from openai import AsyncOpenAI
 from app.config import settings
 
+log = logging.getLogger(__name__)
 client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+
+_CLAUDE_MODEL = "claude-sonnet-4-6"
+_GPT_MODEL = "gpt-5.4"
+
+
+async def _gpt_strategy(messages: list, max_tokens: int) -> str:
+    async with AsyncOpenAI(api_key=settings.OPENAI_API_KEY) as oai:
+        resp = await oai.chat.completions.create(
+            model=_GPT_MODEL,
+            max_completion_tokens=max_tokens,
+            messages=messages,
+        )
+    return resp.choices[0].message.content.strip()
 
 
 def _parse_json(text: str):
@@ -33,10 +49,7 @@ def _parse_json(text: str):
 
 
 async def refine_strategy(current_strategy: list, user_message: str, business_profile: dict) -> list:
-    response = await client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=16000,
-        messages=[{"role": "user", "content": f"""Ты SMM-стратег. Пользователь хочет изменить контент-стратегию.
+    msg_content = f"""Ты SMM-стратег. Пользователь хочет изменить контент-стратегию.
 
 Текущая стратегия:
 {json.dumps(current_strategy, ensure_ascii=False, indent=2)}
@@ -47,9 +60,19 @@ async def refine_strategy(current_strategy: list, user_message: str, business_pr
 {json.dumps(business_profile, ensure_ascii=False, indent=2)}
 
 Внеси изменения согласно запросу. Верни ПОЛНУЮ обновлённую стратегию в том же JSON формате.
-ВАЖНО: верни ТОЛЬКО валидный JSON-массив. Без markdown, без комментариев, без trailing commas."""}]
-    )
-    text = response.content[0].text
+ВАЖНО: верни ТОЛЬКО валидный JSON-массив. Без markdown, без комментариев, без trailing commas."""
+
+    try:
+        response = await client.messages.create(
+            model=_CLAUDE_MODEL,
+            max_tokens=16000,
+            messages=[{"role": "user", "content": msg_content}],
+        )
+        return _parse_json(response.content[0].text)
+    except Exception as e:
+        log.error("[Claude refine_strategy] failed, falling back to GPT: %s", e)
+
+    text = await _gpt_strategy([{"role": "user", "content": msg_content}], 16000)
     return _parse_json(text)
 
 
@@ -60,12 +83,7 @@ async def generate_strategy(business_profile: dict) -> list[dict]:
     """
     platforms = business_profile.get("platforms", ["vk"])
 
-    response = await client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=16000,
-        messages=[{
-            "role": "user",
-            "content": f"""Ты ведущий SMM-стратег с опытом работы с малым бизнесом в России.
+    msg_content = f"""Ты ведущий SMM-стратег с опытом работы с малым бизнесом в России.
 
 Тебе передан профиль бизнеса. Создай контент-стратегию для следующих площадок: {', '.join(platforms)}
 
@@ -109,7 +127,16 @@ async def generate_strategy(business_profile: dict) -> list[dict]:
 
 Профиль бизнеса:
 {json.dumps(business_profile, ensure_ascii=False, indent=2)}"""
-        }]
-    )
 
-    return _parse_json(response.content[0].text)
+    try:
+        response = await client.messages.create(
+            model=_CLAUDE_MODEL,
+            max_tokens=16000,
+            messages=[{"role": "user", "content": msg_content}],
+        )
+        return _parse_json(response.content[0].text)
+    except Exception as e:
+        log.error("[Claude generate_strategy] failed, falling back to GPT: %s", e)
+
+    text = await _gpt_strategy([{"role": "user", "content": msg_content}], 16000)
+    return _parse_json(text)

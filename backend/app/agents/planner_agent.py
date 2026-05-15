@@ -1,12 +1,16 @@
+import logging
 import anthropic
 import json
 import uuid
 from datetime import datetime
 from calendar import monthrange
+from openai import OpenAI as _OpenAI
 
 from app.config import settings
 
-MODEL = "claude-haiku-4-5-20251001"
+log = logging.getLogger(__name__)
+MODEL = "claude-sonnet-4-6"
+_GPT_MODEL = "gpt-5.4"
 
 RU_HOLIDAYS = {
     "01-01": "Новый год", "01-07": "Рождество",
@@ -161,26 +165,36 @@ is_sensitive = true (Категория 2 — чувствительная ин�
 
 Верни JSON-массив. Без markdown, без пояснений."""
 
-        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-        resp = client.messages.create(
-            model=MODEL,
-            max_tokens=8000,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        raw = resp.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+        messages = [{"role": "user", "content": prompt}]
+        raw = None
         try:
-            ideas = json.loads(raw)
-            all_ideas.extend(ideas)
-        except json.JSONDecodeError as e:
-            print(f"✗ JSON parse error in ideas batch {i//batch_size}: {e}")
-            # Fallback: генерируем идеи без классификации
-            fallback_ideas = await _generate_ideas_simple(batch, batch_simple, business_profile, client)
-            all_ideas.extend(fallback_ideas)
+            cl = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+            resp = cl.messages.create(model=MODEL, max_tokens=8000, messages=messages)
+            raw = resp.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+        except Exception as e:
+            log.error("[Claude generate_ideas_for_slots] batch %d failed, falling back to GPT: %s", i // batch_size, e)
+            try:
+                oai = _OpenAI(api_key=settings.OPENAI_API_KEY)
+                gpt_resp = oai.chat.completions.create(model=_GPT_MODEL, max_completion_tokens=8000, messages=messages)
+                raw = gpt_resp.choices[0].message.content.strip().replace("```json", "").replace("```", "").strip()
+            except Exception as e2:
+                log.error("[GPT generate_ideas_for_slots] batch %d also failed: %s", i // batch_size, e2)
+
+        if raw:
+            try:
+                ideas = json.loads(raw)
+                all_ideas.extend(ideas)
+                continue
+            except json.JSONDecodeError as e:
+                print(f"✗ JSON parse error in ideas batch {i//batch_size}: {e}")
+
+        fallback_ideas = await _generate_ideas_simple(batch, batch_simple, business_profile)
+        all_ideas.extend(fallback_ideas)
 
     return all_ideas
 
 
-async def _generate_ideas_simple(batch, batch_simple, business_profile: dict, client) -> list:
+async def _generate_ideas_simple(batch, batch_simple, business_profile: dict) -> list:
     """Fallback: генерирует идеи в простом формате без классификации."""
     prompt = f"""Ты SMM-стратег. Придумай идеи постов.
 
@@ -194,15 +208,19 @@ async def _generate_ideas_simple(batch, batch_simple, business_profile: dict, cl
 
 Верни JSON-массив. Без markdown."""
 
+    messages = [{"role": "user", "content": prompt}]
     try:
-        resp = client.messages.create(
-            model=MODEL,
-            max_tokens=4000,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        cl = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        resp = cl.messages.create(model=MODEL, max_tokens=4000, messages=messages)
         raw = resp.content[0].text.strip().replace("```json", "").replace("```", "").strip()
         return json.loads(raw)
     except Exception as e:
-        print(f"✗ Fallback ideas also failed: {e}")
-        # Последний резерв: пустые идеи (посты будут в статусе planned)
+        log.error("[Claude _generate_ideas_simple] failed, trying GPT: %s", e)
+    try:
+        oai = _OpenAI(api_key=settings.OPENAI_API_KEY)
+        gpt_resp = oai.chat.completions.create(model=_GPT_MODEL, max_completion_tokens=4000, messages=messages)
+        raw = gpt_resp.choices[0].message.content.strip().replace("```json", "").replace("```", "").strip()
+        return json.loads(raw)
+    except Exception as e2:
+        print(f"✗ GPT fallback ideas also failed: {e2}")
         return []

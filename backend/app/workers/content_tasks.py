@@ -9,11 +9,25 @@ from app.agents.planner_agent import build_content_plan, generate_ideas_for_slot
 from app.config import settings
 from sqlalchemy import select
 
+import logging
 import anthropic
 import json
+from openai import OpenAI as _OpenAI
 
 
-MODEL = "claude-haiku-4-5-20251001"
+log = logging.getLogger(__name__)
+MODEL = "claude-sonnet-4-6"
+_GPT_MODEL = "gpt-5.4"
+
+
+def _gpt_sync(messages: list, max_tokens: int) -> str:
+    oai = _OpenAI(api_key=settings.OPENAI_API_KEY)
+    resp = oai.chat.completions.create(
+        model=_GPT_MODEL,
+        max_completion_tokens=max_tokens,
+        messages=messages,
+    )
+    return resp.choices[0].message.content.strip()
 
 
 @celery_app.task(name="app.workers.content_tasks.generate_content_plan_task")
@@ -134,13 +148,15 @@ async def _generate_post_text(slot, profile: dict) -> dict:
 Верни ТОЛЬКО JSON без markdown:
 {{"text": "текст поста", "hashtags": ["тег1", "тег2"], "char_count": 500}}"""
 
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-    resp = client.messages.create(
-        model=MODEL,
-        max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    raw = resp.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+    messages = [{"role": "user", "content": prompt}]
+    try:
+        cl = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        resp = cl.messages.create(model=MODEL, max_tokens=2000, messages=messages)
+        raw = resp.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+        return json.loads(raw)
+    except Exception as e:
+        log.error("[Claude _generate_post_text] failed, falling back to GPT: %s", e)
+    raw = _gpt_sync(messages, 2000).replace("```json", "").replace("```", "").strip()
     return json.loads(raw)
 
 
@@ -149,11 +165,7 @@ async def _generate_image_prompt(slot, profile: dict) -> str:
     visual_concept = idea.get("visual_concept", "")
     niche = profile.get("niche", "restaurant")
 
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-    resp = client.messages.create(
-        model=MODEL,
-        max_tokens=400,
-        messages=[{"role": "user", "content": f"""Write a detailed DALL-E 3 image generation prompt for a social media post.
+    img_prompt_content = f"""Write a detailed DALL-E 3 image generation prompt for a social media post.
 
 Business niche: {niche}
 Post topic: {idea.get('idea', '')}
@@ -171,9 +183,16 @@ STRICT RULES — follow every one:
 - The image must look indistinguishable from a real Michelin-star restaurant photograph
 - Every element should be photorealistic, tactile, and crave-inducing
 
-Return ONLY the image prompt in English, 100-130 words. Start directly with the scene description. No preamble."""}]
-    )
-    return resp.content[0].text.strip()
+Return ONLY the image prompt in English, 100-130 words. Start directly with the scene description. No preamble."""
+
+    messages = [{"role": "user", "content": img_prompt_content}]
+    try:
+        cl = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        resp = cl.messages.create(model=MODEL, max_tokens=400, messages=messages)
+        return resp.content[0].text.strip()
+    except Exception as e:
+        log.error("[Claude _generate_image_prompt] failed, falling back to GPT: %s", e)
+    return _gpt_sync(messages, 400)
 
 
 async def _generate_post_text_with_info(slot, profile: dict, answers: list[dict]) -> dict:
@@ -207,11 +226,13 @@ async def _generate_post_text_with_info(slot, profile: dict, answers: list[dict]
 Верни ТОЛЬКО JSON без markdown:
 {{"text": "текст поста", "hashtags": ["тег1", "тег2"], "char_count": 500}}"""
 
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-    resp = client.messages.create(
-        model=MODEL,
-        max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    raw = resp.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+    messages = [{"role": "user", "content": prompt}]
+    try:
+        cl = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        resp = cl.messages.create(model=MODEL, max_tokens=2000, messages=messages)
+        raw = resp.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+        return json.loads(raw)
+    except Exception as e:
+        log.error("[Claude _generate_post_text_with_info] failed, falling back to GPT: %s", e)
+    raw = _gpt_sync(messages, 2000).replace("```json", "").replace("```", "").strip()
     return json.loads(raw)

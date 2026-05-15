@@ -1,8 +1,14 @@
 import json
+import logging
 from anthropic import Anthropic
+from openai import OpenAI as _OpenAI
 from app.config import settings
 
+log = logging.getLogger(__name__)
 client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+
+_CLAUDE_MODEL = "claude-sonnet-4-6"
+_GPT_MODEL = "gpt-5.4"
 
 PLATFORM_SPECS = {
     "vk": {
@@ -82,17 +88,25 @@ async def generate_post_text(slot, business_profile: dict) -> dict:
 Верни ТОЛЬКО JSON без markdown:
 {{"text": "полный текст поста без хэштегов", "hashtags": ["тег1", "тег2"], "char_count": 500}}"""
 
-    response = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    text = response.content[0].text.strip()
-    text = text.replace("```json", "").replace("```", "").strip()
-
     try:
-        return json.loads(text)
+        response = client.messages.create(
+            model=_CLAUDE_MODEL,
+            max_tokens=2000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = response.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+        return json.loads(raw)
+    except Exception as e:
+        log.error("[Claude copywriter] failed, falling back to GPT: %s", e)
+
+    oai = _OpenAI(api_key=settings.OPENAI_API_KEY)
+    resp = oai.chat.completions.create(
+        model=_GPT_MODEL,
+        max_completion_tokens=2000,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw = resp.choices[0].message.content.strip().replace("```json", "").replace("```", "").strip()
+    try:
+        return json.loads(raw)
     except json.JSONDecodeError:
-        # Fallback — возвращаем текст как есть
-        return {"text": text, "hashtags": [], "char_count": len(text)}
+        return {"text": raw, "hashtags": [], "char_count": len(raw)}
