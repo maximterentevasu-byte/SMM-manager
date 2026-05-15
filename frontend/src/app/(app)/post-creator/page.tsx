@@ -6,7 +6,7 @@ import api from "@/lib/api";
 type Platform = "vk" | "telegram";
 type ConnectedPlatform = { platform: Platform; page_name: string };
 type ModelKey = "claude" | "gpt";
-type ImageMode = "prompt" | "upload" | "edit" | null;
+type ImageMode = "prompt" | "upload" | "edit" | "video" | null;
 
 interface UploadSlot { data: string; mime: string }
 
@@ -347,6 +347,12 @@ export default function PostCreatorPage() {
   const [editInstruction, setEditInstruction] = useState("");
   const editActiveSlotRef = useRef<number>(-1);
 
+  // ── Block 3d: Video ───────────────────────────────────────────────────────
+  const [videoFiles, setVideoFiles] = useState<Array<File | null>>([null, null, null]);
+  const [videoPreviewUrls, setVideoPreviewUrls] = useState<Array<string | null>>([null, null, null]);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const videoActiveRef = useRef<number>(-1);
+
   // ── AI image history + inline edit (shared for prompt & edit modes) ───────
   const [imageHistory, setImageHistory] = useState<string[]>([]);
   const [currentImageIdx, setCurrentImageIdx] = useState(-1);
@@ -376,7 +382,7 @@ export default function PostCreatorPage() {
   const uploadImageB64 = uploadFilled[Math.min(uploadCarouselIdx, uploadFilled.length - 1)]?.data ?? "";
   const imageBase64ForPublish = imageMode === "upload" ? (uploadFilled.length === 1 ? uploadFilled[0].data : null) : aiImageB64 || null;
   const imagesBase64ForPublish = imageMode === "upload" && uploadFilled.length > 1 ? uploadFilled.map(s => s.data) : undefined;
-  const hasImage = imageMode === "upload" ? uploadFilled.length > 0 : !!aiImageB64;
+  const hasImage = imageMode === "upload" ? uploadFilled.length > 0 : imageMode === "video" ? videoFiles.some(Boolean) : !!aiImageB64;
   const hasText = !!postText.trim();
 
   // ── Draft ─────────────────────────────────────────────────────────────────
@@ -498,6 +504,34 @@ export default function PostCreatorPage() {
     setEditSlots(newSlots);
   };
 
+  // ── Video handlers ────────────────────────────────────────────────────────
+
+  const addVideoFiles = (files: File[], startIdx = -1) => {
+    const newFiles = [...videoFiles];
+    const newUrls = [...videoPreviewUrls];
+    let idx = startIdx >= 0 ? startIdx : 0;
+    for (const file of files) {
+      while (idx < 3 && newFiles[idx] !== null) idx++;
+      if (idx >= 3) break;
+      if (newUrls[idx]) URL.revokeObjectURL(newUrls[idx]!);
+      newFiles[idx] = file;
+      newUrls[idx] = URL.createObjectURL(file);
+      idx++;
+    }
+    setVideoFiles(newFiles);
+    setVideoPreviewUrls(newUrls);
+  };
+
+  const removeVideoFile = (idx: number) => {
+    const newFiles = [...videoFiles];
+    const newUrls = [...videoPreviewUrls];
+    if (newUrls[idx]) URL.revokeObjectURL(newUrls[idx]!);
+    newFiles[idx] = null;
+    newUrls[idx] = null;
+    setVideoFiles(newFiles);
+    setVideoPreviewUrls(newUrls);
+  };
+
   // Upload slot: multiple files, fill slots sequentially from clicked position
   const onSlotFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []).filter(f => f.type.startsWith("image/"));
@@ -556,6 +590,8 @@ export default function PostCreatorPage() {
     setUploadSlots(Array(MAX_UPLOAD_SLOTS).fill(null)); setUploadCarouselIdx(0);
     setImagePrompt("");
     setEditSlots(Array(MAX_UPLOAD_SLOTS).fill(null)); setEditInstruction("");
+    setVideoPreviewUrls(prev => { prev.forEach(u => u && URL.revokeObjectURL(u)); return [null, null, null]; });
+    setVideoFiles([null, null, null]);
   };
 
   const switchMode = (mode: ImageMode) => {
@@ -800,6 +836,7 @@ export default function PostCreatorPage() {
                     { mode: "prompt" as ImageMode, label: "🖼 Создать изображение по промту" },
                     { mode: "upload" as ImageMode, label: "📁 Загрузить изображение" },
                     { mode: "edit"   as ImageMode, label: "✂️ Загрузить и отредактировать" },
+                    { mode: "video"  as ImageMode, label: "🎬 Загрузить видео" },
                   ]).map(({ mode, label }) => {
                     const active = imageMode === mode;
                     return (
@@ -950,6 +987,90 @@ export default function PostCreatorPage() {
               onInlineEdit={editImageInline}
               brandShortcutsNode={brandShortcutsNode(setInlineEditInstruction, inlineEditInstruction)}
             />
+          </div>
+        )}
+
+        {/* ── 3d. Загрузить видео ── */}
+        {imageMode === "video" && (
+          <div
+            style={card}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => {
+              e.preventDefault();
+              const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("video/"));
+              if (files.length) addVideoFiles(files);
+            }}
+          >
+            <SectionTitle n={3} label="Видео к посту" done={videoFiles.some(Boolean)} />
+            <p style={{ color: "#888", fontSize: 13, margin: "0 0 16px" }}>
+              Нажмите на ячейку или перетащите видео из папки / рабочего стола. Можно добавить до 3 видео.
+            </p>
+
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {videoFiles.map((file, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => { if (!file) { videoActiveRef.current = idx; videoInputRef.current?.click(); } }}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => {
+                    e.preventDefault();
+                    const dropped = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("video/"));
+                    if (dropped.length) addVideoFiles(dropped, idx);
+                  }}
+                  style={{
+                    width: 200, height: 130, borderRadius: 12,
+                    border: file ? "1.5px solid #E0DED8" : "2px dashed #C0BDB6",
+                    background: file ? "#000" : "rgba(0,0,0,0.04)",
+                    cursor: file ? "default" : "pointer",
+                    position: "relative", overflow: "hidden",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  {file && videoPreviewUrls[idx] ? (
+                    <>
+                      <video
+                        src={videoPreviewUrls[idx]!}
+                        muted
+                        preload="metadata"
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        onLoadedMetadata={e => { (e.target as HTMLVideoElement).currentTime = 0.001; }}
+                      />
+                      <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.2)", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+                        <span style={{ fontSize: 32, color: "#fff", opacity: 0.9 }}>▶</span>
+                      </div>
+                      <button
+                        onClick={e => { e.stopPropagation(); removeVideoFile(idx); }}
+                        style={{ position: "absolute", top: 6, right: 6, width: 22, height: 22, borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "none", color: "#fff", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}
+                      >✕</button>
+                      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "4px 8px", background: "linear-gradient(transparent, rgba(0,0,0,0.6))", fontSize: 10, color: "rgba(255,255,255,0.9)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", pointerEvents: "none" }}>
+                        {file.name}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, color: "#C0BDB6", userSelect: "none" }}>
+                      <span style={{ fontSize: 36 }}>🎬</span>
+                      <span style={{ fontSize: 12, fontWeight: 600 }}>+ Добавить видео</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <input
+              ref={videoInputRef}
+              type="file"
+              accept="video/*"
+              multiple
+              style={{ display: "none" }}
+              onChange={e => {
+                const files = Array.from(e.target.files || []).filter(f => f.type.startsWith("video/"));
+                if (files.length) addVideoFiles(files, videoActiveRef.current);
+                videoActiveRef.current = -1;
+                e.target.value = "";
+              }}
+            />
+            <div style={{ marginTop: 10, fontSize: 12, color: "#aaa" }}>Поддерживаются форматы MP4, MOV, AVI, WebM и др.</div>
           </div>
         )}
 
