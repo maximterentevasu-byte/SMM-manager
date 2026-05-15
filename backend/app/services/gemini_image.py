@@ -33,7 +33,7 @@ def _gemini(prompt: str) -> str:
                 "responseModalities": ["IMAGE"],
             },
         },
-        timeout=90,
+        timeout=45,
     )
     d = r.json()
     if "error" in d:

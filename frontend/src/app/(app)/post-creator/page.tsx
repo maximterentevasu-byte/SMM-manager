@@ -568,12 +568,13 @@ export default function PostCreatorPage() {
     if (!imagePrompt.trim() || imageGenCount >= MAX_IMAGE_ATTEMPTS) return;
     setLoadingImage(true);
     try {
-      const { data } = await api.post(`/post-creator/${businessId}/generate-image`, { prompt: imagePrompt.trim(), aspect_ratio: "1:1" });
+      const { data } = await api.post(`/post-creator/${businessId}/generate-image`, { prompt_ru: imagePrompt.trim(), aspect_ratio: "1:1" });
       const newHistory = [...imageHistory, data.image_base64 as string];
       setImageHistory(newHistory); setCurrentImageIdx(newHistory.length - 1);
       setImageGenCount(imageGenCount + 1);
     } catch (e: any) {
-      alert("Ошибка генерации: " + (e?.response?.data?.detail || "попробуй изменить промт"));
+      const detail = e?.response?.data?.detail || e?.message || "попробуй изменить промт";
+      alert("Ошибка генерации: " + (typeof detail === "string" ? detail : JSON.stringify(detail)));
     } finally { setLoadingImage(false); }
   };
 

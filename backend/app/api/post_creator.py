@@ -472,7 +472,12 @@ async def generate_image(
         raise HTTPException(400, "Укажите prompt или prompt_ru")
 
     try:
-        b64 = await asyncio.to_thread(generate_image_sync, prompt, body.aspect_ratio)
+        b64 = await asyncio.wait_for(
+            asyncio.to_thread(generate_image_sync, prompt, body.aspect_ratio),
+            timeout=110.0,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "Тайм-аут генерации — попробуйте ещё раз")
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"image_base64": b64, "prompt_en": prompt}
