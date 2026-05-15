@@ -48,6 +48,26 @@ const readFileAsBase64 = (f: File): Promise<{ data: string; mime: string }> =>
     r.onerror = rej; r.readAsDataURL(f);
   });
 
+const extractVideoFrame = (objectUrl: string): Promise<string | null> =>
+  new Promise(resolve => {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.preload = "metadata";
+    video.crossOrigin = "anonymous";
+    video.src = objectUrl;
+    video.onloadeddata = () => { video.currentTime = 0.001; };
+    video.onseeked = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(null); return; }
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.9));
+    };
+    video.onerror = () => resolve(null);
+  });
+
 // ── Shared UI ─────────────────────────────────────────────────────────────────
 
 const card: React.CSSProperties = { background: "#fff", border: "1px solid #EAE8E2", borderRadius: 18, padding: "28px 32px", marginBottom: 16 };
@@ -352,6 +372,12 @@ export default function PostCreatorPage() {
   const [videoPreviewUrls, setVideoPreviewUrls] = useState<Array<string | null>>([null, null, null]);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const videoActiveRef = useRef<number>(-1);
+  const [videoCoverDataUrl, setVideoCoverDataUrl] = useState<string | null>(null);
+  const [videoCoverSource, setVideoCoverSource] = useState<"auto" | "upload" | "ai" | null>(null);
+  const [videoCoverPrompt, setVideoCoverPrompt] = useState("");
+  const [showVideoCoverPrompt, setShowVideoCoverPrompt] = useState(false);
+  const [loadingVideoCover, setLoadingVideoCover] = useState(false);
+  const videoCoverInputRef = useRef<HTMLInputElement>(null);
 
   // ── AI image history + inline edit (shared for prompt & edit modes) ───────
   const [imageHistory, setImageHistory] = useState<string[]>([]);
@@ -506,9 +532,10 @@ export default function PostCreatorPage() {
 
   // ── Video handlers ────────────────────────────────────────────────────────
 
-  const addVideoFiles = (files: File[], startIdx = -1) => {
+  const addVideoFiles = async (files: File[], startIdx = -1) => {
     const newFiles = [...videoFiles];
     const newUrls = [...videoPreviewUrls];
+    const hadFirst = newFiles[0] !== null;
     let idx = startIdx >= 0 ? startIdx : 0;
     for (const file of files) {
       while (idx < 3 && newFiles[idx] !== null) idx++;
@@ -520,6 +547,11 @@ export default function PostCreatorPage() {
     }
     setVideoFiles(newFiles);
     setVideoPreviewUrls(newUrls);
+    // Авто-обложка: извлекаем первый кадр из первого видео, если обложка ещё авто или не задана
+    if (!hadFirst && newUrls[0] && (videoCoverSource === null || videoCoverSource === "auto")) {
+      const dataUrl = await extractVideoFrame(newUrls[0]);
+      if (dataUrl) { setVideoCoverDataUrl(dataUrl); setVideoCoverSource("auto"); }
+    }
   };
 
   const removeVideoFile = (idx: number) => {
@@ -530,6 +562,34 @@ export default function PostCreatorPage() {
     newUrls[idx] = null;
     setVideoFiles(newFiles);
     setVideoPreviewUrls(newUrls);
+    if (idx === 0 && videoCoverSource === "auto") {
+      setVideoCoverDataUrl(null); setVideoCoverSource(null);
+    }
+  };
+
+  const onVideoCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    const { data, mime } = await readFileAsBase64(f);
+    setVideoCoverDataUrl(`data:${mime};base64,${data}`);
+    setVideoCoverSource("upload");
+    e.target.value = "";
+  };
+
+  const generateVideoCover = async () => {
+    if (!videoCoverPrompt.trim()) return;
+    setLoadingVideoCover(true);
+    try {
+      const { data: taskData } = await api.post(`/post-creator/${businessId}/generate-image`, {
+        prompt_ru: videoCoverPrompt.trim(),
+        aspect_ratio: "16:9",
+      });
+      const b64 = await pollImageTask(taskData.task_id);
+      setVideoCoverDataUrl(`data:image/png;base64,${b64}`);
+      setVideoCoverSource("ai");
+      setShowVideoCoverPrompt(false);
+    } catch (e: any) {
+      alert("Ошибка генерации обложки: " + (e?.message || "попробуйте ещё раз"));
+    } finally { setLoadingVideoCover(false); }
   };
 
   // Upload slot: multiple files, fill slots sequentially from clicked position
@@ -592,6 +652,8 @@ export default function PostCreatorPage() {
     setEditSlots(Array(MAX_UPLOAD_SLOTS).fill(null)); setEditInstruction("");
     setVideoPreviewUrls(prev => { prev.forEach(u => u && URL.revokeObjectURL(u)); return [null, null, null]; });
     setVideoFiles([null, null, null]);
+    setVideoCoverDataUrl(null); setVideoCoverSource(null);
+    setVideoCoverPrompt(""); setShowVideoCoverPrompt(false);
   };
 
   const switchMode = (mode: ImageMode) => {
@@ -1071,6 +1133,59 @@ export default function PostCreatorPage() {
               }}
             />
             <div style={{ marginTop: 10, fontSize: 12, color: "#aaa" }}>Поддерживаются форматы MP4, MOV, AVI, WebM и др.</div>
+
+            {/* ── Обложка для видео ── */}
+            {videoFiles.some(Boolean) && (
+              <div style={{ marginTop: 20, paddingTop: 18, borderTop: "1px solid #F0EEE8" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", marginBottom: 14 }}>Обложка для видео</div>
+                <div style={{ display: "flex", gap: 18, alignItems: "flex-start", flexWrap: "wrap" }}>
+
+                  {/* Превью обложки */}
+                  <div style={{ flexShrink: 0 }}>
+                    {videoCoverDataUrl ? (
+                      <div style={{ position: "relative", width: 176, height: 99, borderRadius: 10, overflow: "hidden", border: "1.5px solid #E0DED8" }}>
+                        <img src={videoCoverDataUrl} alt="cover" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                        <div style={{ position: "absolute", top: 5, left: 5, background: videoCoverSource === "ai" ? "#6B46C1" : videoCoverSource === "upload" ? "#4680C2" : "#0F6E56", color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 6, padding: "2px 7px", letterSpacing: 0.3 }}>
+                          {videoCoverSource === "ai" ? "ИИ" : videoCoverSource === "upload" ? "Загружено" : "Авто"}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ width: 176, height: 99, borderRadius: 10, border: "2px dashed #C0BDB6", background: "rgba(0,0,0,0.03)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#C0BDB6", fontWeight: 600 }}>
+                        Нет обложки
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Кнопки */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 4 }}>
+                    <button
+                      onClick={() => videoCoverInputRef.current?.click()}
+                      style={{ padding: "7px 14px", background: "none", border: "1px solid #E0DED8", borderRadius: 8, cursor: "pointer", fontSize: 12, color: "#555", display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}
+                    >
+                      📷 Загрузить обложку
+                    </button>
+                    <button
+                      onClick={() => setShowVideoCoverPrompt(v => !v)}
+                      style={{ padding: "7px 14px", background: showVideoCoverPrompt ? "#F0EBF8" : "none", border: `1px solid ${showVideoCoverPrompt ? "#6B46C1" : "#E0DED8"}`, borderRadius: 8, cursor: "pointer", fontSize: 12, color: showVideoCoverPrompt ? "#6B46C1" : "#555", display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}
+                    >
+                      🤖 Сгенерировать в ИИ
+                    </button>
+                  </div>
+                </div>
+
+                {/* Промт для ИИ-генерации обложки */}
+                {showVideoCoverPrompt && (
+                  <div style={{ marginTop: 14 }}>
+                    <Textarea value={videoCoverPrompt} onChange={setVideoCoverPrompt} placeholder="Опишите обложку: стиль, объекты, цвета. Например: яркий постер в стиле 90-х с логотипом бренда..." rows={2} />
+                    <div style={{ marginTop: 8 }}>
+                      <Btn label={loadingVideoCover ? "Генерирую..." : "Сгенерировать обложку"} onClick={generateVideoCover} disabled={!videoCoverPrompt.trim() || loadingVideoCover} loading={loadingVideoCover} color="#6B46C1" small />
+                    </div>
+                  </div>
+                )}
+
+                <input ref={videoCoverInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={onVideoCoverUpload} />
+              </div>
+            )}
           </div>
         )}
 
