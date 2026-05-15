@@ -477,7 +477,7 @@ async def generate_image(
     try:
         b64 = await asyncio.wait_for(
             _gen_image(prompt, body.aspect_ratio),
-            timeout=65.0,
+            timeout=100.0,
         )
     except asyncio.TimeoutError:
         raise HTTPException(504, "Тайм-аут генерации — попробуйте ещё раз")
