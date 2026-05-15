@@ -451,8 +451,9 @@ async def generate_image(
     body: ImageIn,
     current_user: User = Depends(get_current_user),
 ):
+    """Переводит промт и немедленно возвращает task_id (генерация идёт в Celery-воркере)."""
     import asyncio
-    from app.services.gemini_image import generate_image as _gen_image
+    from app.workers.image_tasks import generate_image_task
 
     prompt = body.prompt
 
@@ -474,16 +475,27 @@ async def generate_image(
     if not prompt:
         raise HTTPException(400, "Укажите prompt или prompt_ru")
 
-    try:
-        b64 = await asyncio.wait_for(
-            _gen_image(prompt, body.aspect_ratio),
-            timeout=100.0,
-        )
-    except asyncio.TimeoutError:
-        raise HTTPException(504, "Тайм-аут генерации — попробуйте ещё раз")
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    return {"image_base64": b64, "prompt_en": prompt}
+    task = generate_image_task.apply_async(args=[prompt, body.aspect_ratio])
+    return {"task_id": task.id, "prompt_en": prompt}
+
+
+@router.get("/{business_id}/image-task/{task_id}")
+async def get_image_task(
+    business_id: str,
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Поллинг статуса задачи генерации изображения."""
+    from celery.result import AsyncResult
+    from app.workers.celery_app import celery_app as _celery
+
+    result = AsyncResult(task_id, app=_celery)
+    state = result.state
+    if state in ("PENDING", "RECEIVED", "STARTED", "RETRY"):
+        return {"status": "pending"}
+    if state == "SUCCESS":
+        return result.result or {"status": "error", "error": "пустой результат"}
+    return {"status": "error", "error": str(result.result)}
 
 
 # ─── 3б. Редактирование изображения ─────────────────────────────────────────

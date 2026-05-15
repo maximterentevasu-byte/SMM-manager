@@ -568,10 +568,28 @@ export default function PostCreatorPage() {
     if (!imagePrompt.trim() || imageGenCount >= MAX_IMAGE_ATTEMPTS) return;
     setLoadingImage(true);
     try {
-      const { data } = await api.post(`/post-creator/${businessId}/generate-image`, { prompt_ru: imagePrompt.trim(), aspect_ratio: "1:1" });
-      const newHistory = [...imageHistory, data.image_base64 as string];
-      setImageHistory(newHistory); setCurrentImageIdx(newHistory.length - 1);
-      setImageGenCount(imageGenCount + 1);
+      // Сразу получаем task_id, генерация идёт в Celery-воркере
+      const { data: taskData } = await api.post(`/post-creator/${businessId}/generate-image`, {
+        prompt_ru: imagePrompt.trim(),
+        aspect_ratio: "1:1",
+      });
+      const taskId: string = taskData.task_id;
+
+      // Поллинг каждые 5 секунд, максимум 3 минуты
+      for (let i = 0; i < 36; i++) {
+        await new Promise<void>(r => setTimeout(r, 5000));
+        const { data: statusData } = await api.get(`/post-creator/${businessId}/image-task/${taskId}`);
+        if (statusData.status === "done") {
+          const newHistory = [...imageHistory, statusData.image_base64 as string];
+          setImageHistory(newHistory); setCurrentImageIdx(newHistory.length - 1);
+          setImageGenCount(imageGenCount + 1);
+          return;
+        }
+        if (statusData.status === "error") {
+          throw new Error(statusData.error || "Ошибка генерации");
+        }
+      }
+      throw new Error("Тайм-аут генерации — попробуйте ещё раз");
     } catch (e: any) {
       const detail = e?.response?.data?.detail || e?.message || "попробуй изменить промт";
       alert("Ошибка генерации: " + (typeof detail === "string" ? detail : JSON.stringify(detail)));

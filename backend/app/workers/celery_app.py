@@ -12,6 +12,7 @@ celery_app = Celery(
         "app.workers.posting_tasks",
         "app.workers.analytics_tasks",
         "app.workers.notification_tasks",
+        "app.workers.image_tasks",
     ]
 )
 
@@ -25,6 +26,7 @@ celery_app.conf.update(
         "app.workers.strategy_tasks.*": {"queue": "default"},
         "app.workers.content_tasks.*":  {"queue": "generation"},
         "app.workers.posting_tasks.*":  {"queue": "posting"},
+        "app.workers.image_tasks.*":    {"queue": "generation"},
     },
     beat_schedule={
         "check-publish-queue": {
