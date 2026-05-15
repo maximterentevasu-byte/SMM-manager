@@ -128,11 +128,12 @@ function BrandContextPanel({ brand, onInsert }: { brand: BrandContext; onInsert:
 
 // ── Upload Grid ────────────────────────────────────────────────────────────────
 
-function UploadGrid({ slots, onSlotClick, onRemove, onReorder }: {
+function UploadGrid({ slots, onSlotClick, onRemove, onReorder, onFileDrop }: {
   slots: Array<UploadSlot | null>;
   onSlotClick: (idx: number) => void;
   onRemove: (idx: number) => void;
   onReorder: (from: number, to: number) => void;
+  onFileDrop: (startIdx: number, files: File[]) => void;
 }) {
   const dragFrom = useRef(-1);
   const [dragOver, setDragOver] = useState(-1);
@@ -142,12 +143,21 @@ function UploadGrid({ slots, onSlotClick, onRemove, onReorder }: {
       {slots.map((slot, idx) => (
         <div
           key={idx}
-          onClick={() => onSlotClick(idx)}
+          onClick={() => !slot && onSlotClick(idx)}
           draggable={!!slot}
-          onDragStart={() => { dragFrom.current = idx; }}
+          onDragStart={e => { dragFrom.current = idx; }}
           onDragOver={e => { e.preventDefault(); setDragOver(idx); }}
           onDragLeave={() => setDragOver(-1)}
-          onDrop={e => { e.preventDefault(); setDragOver(-1); if (dragFrom.current >= 0 && dragFrom.current !== idx) { onReorder(dragFrom.current, idx); } dragFrom.current = -1; }}
+          onDrop={e => {
+            e.preventDefault();
+            setDragOver(-1);
+            if (e.dataTransfer.files.length > 0) {
+              onFileDrop(idx, Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/")));
+            } else if (dragFrom.current >= 0 && dragFrom.current !== idx) {
+              onReorder(dragFrom.current, idx);
+            }
+            dragFrom.current = -1;
+          }}
           onDragEnd={() => { dragFrom.current = -1; setDragOver(-1); }}
           style={{
             position: "relative",
@@ -173,7 +183,7 @@ function UploadGrid({ slots, onSlotClick, onRemove, onReorder }: {
                 style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.65)", border: "none", color: "#fff", cursor: "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}>
                 ✕
               </button>
-              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.18)", fontSize: 8, color: "rgba(255,255,255,0.8)", textAlign: "center", padding: "2px 0", letterSpacing: 0.5 }}>
+              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.18)", fontSize: 8, color: "rgba(255,255,255,0.8)", textAlign: "center", padding: "2px 0", letterSpacing: 0.5, pointerEvents: "none" }}>
                 ТЯНУТЬ
               </div>
             </>
@@ -186,7 +196,7 @@ function UploadGrid({ slots, onSlotClick, onRemove, onReorder }: {
   );
 }
 
-// ── Upload Carousel (Block 4 for upload mode) ──────────────────────────────────
+// ── Upload Carousel ────────────────────────────────────────────────────────────
 
 function UploadCarousel({ slots, carouselIdx, setCarouselIdx }: {
   slots: Array<UploadSlot | null>;
@@ -227,6 +237,71 @@ function UploadCarousel({ slots, carouselIdx, setCarouselIdx }: {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── AI Image Preview (inline, used inside 3a and 3c) ──────────────────────────
+
+function AiImagePreview({
+  aiImageB64, imageHistory, currentImageIdx, setCurrentImageIdx,
+  loadingImage, inlineEditCount, showInlineEdit, setShowInlineEdit,
+  inlineEditInstruction, setInlineEditInstruction,
+  onInlineEdit, brandShortcutsNode,
+}: {
+  aiImageB64: string;
+  imageHistory: string[];
+  currentImageIdx: number;
+  setCurrentImageIdx: (i: number) => void;
+  loadingImage: boolean;
+  inlineEditCount: number;
+  showInlineEdit: boolean;
+  setShowInlineEdit: (v: boolean) => void;
+  inlineEditInstruction: string;
+  setInlineEditInstruction: (v: string) => void;
+  onInlineEdit: () => void;
+  brandShortcutsNode: React.ReactNode;
+}) {
+  if (loadingImage && !aiImageB64) {
+    return <div style={{ marginTop: 20, padding: "28px", background: "#F8F7F4", borderRadius: 14, textAlign: "center", color: "#888" }}>⏳ Обрабатываю изображение...</div>;
+  }
+  if (!aiImageB64) return null;
+
+  return (
+    <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #F0EEE8" }}>
+      {imageHistory.length > 1 && (
+        <div style={{ marginBottom: 8 }}>
+          <span style={{ fontSize: 11, color: "#6B46C1", background: "#F0EBF8", borderRadius: 12, padding: "2px 9px", fontWeight: 600 }}>{imageHistory.length} версий</span>
+        </div>
+      )}
+      <img src={`data:image/png;base64,${aiImageB64}`} alt="generated" style={{ width: 280, height: 280, objectFit: "cover", borderRadius: 14, border: "1px solid #EAE8E2", display: "block" }} />
+      {imageHistory.length > 1 && (
+        <HistoryNav
+          current={currentImageIdx} total={imageHistory.length}
+          onPrev={() => { const i = currentImageIdx - 1; if (i >= 0) setCurrentImageIdx(i); }}
+          onNext={() => { const i = currentImageIdx + 1; if (i < imageHistory.length) setCurrentImageIdx(i); }}
+        />
+      )}
+      <div style={{ marginTop: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a" }}>Редактировать изображение</div>
+          <AttemptBadge current={inlineEditCount} max={MAX_INLINE_EDITS} label="Правок" />
+        </div>
+        {!showInlineEdit && inlineEditCount < MAX_INLINE_EDITS && (
+          <button onClick={() => setShowInlineEdit(true)} style={{ padding: "8px 18px", background: "none", border: "1.5px solid #6B46C1", borderRadius: 10, color: "#6B46C1", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>✏️ Внести правки</button>
+        )}
+        {showInlineEdit && (
+          <>
+            {brandShortcutsNode}
+            <Textarea value={inlineEditInstruction} onChange={setInlineEditInstruction} placeholder="Например: измени фон на белый, добавь тёплые цвета..." rows={3} />
+            <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+              <Btn label={loadingImage ? "Редактирую..." : "Обновить"} onClick={onInlineEdit} disabled={!inlineEditInstruction.trim() || loadingImage || inlineEditCount >= MAX_INLINE_EDITS} loading={loadingImage} color="#6B46C1" small />
+              <button onClick={() => { setShowInlineEdit(false); setInlineEditInstruction(""); }} style={{ padding: "7px 14px", background: "none", border: "1px solid #E0DED8", borderRadius: 8, cursor: "pointer", fontSize: 12, color: "#666" }}>Отмена</button>
+            </div>
+          </>
+        )}
+        {inlineEditCount >= MAX_INLINE_EDITS && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 6 }}>Достигнут лимит правок ({MAX_INLINE_EDITS}).</div>}
+      </div>
     </div>
   );
 }
@@ -273,7 +348,7 @@ export default function PostCreatorPage() {
   const [editBaseUploadedPreview, setEditBaseUploadedPreview] = useState("");
   const [editInstruction, setEditInstruction] = useState("");
 
-  // ── Block 4: AI-generated image history + inline edit ────────────────────
+  // ── AI image history + inline edit (shared for prompt & edit modes) ───────
   const [imageHistory, setImageHistory] = useState<string[]>([]);
   const [currentImageIdx, setCurrentImageIdx] = useState(-1);
   const [inlineEditInstruction, setInlineEditInstruction] = useState("");
@@ -299,7 +374,8 @@ export default function PostCreatorPage() {
   const aiImageB64 = currentImageIdx >= 0 ? imageHistory[currentImageIdx] : "";
   const uploadFilled = uploadSlots.filter((s): s is UploadSlot => s !== null);
   const uploadImageB64 = uploadFilled[Math.min(uploadCarouselIdx, uploadFilled.length - 1)]?.data ?? "";
-  const imageBase64ForPublish = imageMode === "upload" ? uploadImageB64 : aiImageB64;
+  const imageBase64ForPublish = imageMode === "upload" ? (uploadFilled.length === 1 ? uploadFilled[0].data : null) : aiImageB64 || null;
+  const imagesBase64ForPublish = imageMode === "upload" && uploadFilled.length > 1 ? uploadFilled.map(s => s.data) : undefined;
   const hasImage = imageMode === "upload" ? uploadFilled.length > 0 : !!aiImageB64;
   const hasText = !!postText.trim();
 
@@ -387,13 +463,20 @@ export default function PostCreatorPage() {
     reader.readAsDataURL(f); e.target.value = "";
   };
 
-  // Upload slot file handler
+  // Upload slot: multiple files, fill slots sequentially from clicked position
   const onSlotFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f || activeSlotRef.current < 0) return;
-    const { data, mime } = await readFileAsBase64(f);
-    const idx = activeSlotRef.current;
-    setUploadSlots(prev => { const n = [...prev]; n[idx] = { data, mime }; return n; });
+    const files = Array.from(e.target.files || []).filter(f => f.type.startsWith("image/"));
+    if (!files.length) return;
+    const newSlots = [...uploadSlots];
+    let startIdx = activeSlotRef.current >= 0 ? activeSlotRef.current : 0;
+    for (const file of files) {
+      while (startIdx < MAX_UPLOAD_SLOTS && newSlots[startIdx] !== null) startIdx++;
+      if (startIdx >= MAX_UPLOAD_SLOTS) break;
+      const { data, mime } = await readFileAsBase64(file);
+      newSlots[startIdx] = { data, mime };
+      startIdx++;
+    }
+    setUploadSlots(newSlots);
     activeSlotRef.current = -1;
     e.target.value = "";
   };
@@ -415,7 +498,22 @@ export default function PostCreatorPage() {
     });
   };
 
-  // ── Mode switching (clears previous image state) ──────────────────────────
+  // Drag-and-drop from OS file manager
+  const onFileDrop = async (startIdx: number, files: File[]) => {
+    if (!files.length) return;
+    const newSlots = [...uploadSlots];
+    let idx = startIdx;
+    for (const file of files) {
+      while (idx < MAX_UPLOAD_SLOTS && newSlots[idx] !== null) idx++;
+      if (idx >= MAX_UPLOAD_SLOTS) break;
+      const { data, mime } = await readFileAsBase64(file);
+      newSlots[idx] = { data, mime };
+      idx++;
+    }
+    setUploadSlots(newSlots);
+  };
+
+  // ── Mode switching ────────────────────────────────────────────────────────
 
   const clearImageState = () => {
     setImageHistory([]); setCurrentImageIdx(-1); setImageGenCount(0);
@@ -525,8 +623,8 @@ export default function PostCreatorPage() {
   const appendToPrompt = (t: string) => setImagePrompt(prev => prev ? `${prev}\n${t}` : t);
   const togglePlatform = (p: Platform) => setSelectedPlatforms(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
 
-  const brandShortcuts = (setter: (v: string) => void, current: string) => (
-    (brandContext.visual_style || brandContext.brand_colors.length > 0) && (
+  const brandShortcutsNode = (setter: (v: string) => void, current: string): React.ReactNode =>
+    (brandContext.visual_style || brandContext.brand_colors.length > 0) ? (
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
         {brandContext.brand_colors.length > 0 && (
           <button onClick={() => setter(current ? `${current}. Используй фирменные цвета: ${brandContext.brand_colors.join(", ")}` : `Используй фирменные цвета: ${brandContext.brand_colors.join(", ")}`)}
@@ -541,8 +639,7 @@ export default function PostCreatorPage() {
           </button>
         )}
       </div>
-    )
-  );
+    ) : null;
 
   const resetForm = () => {
     setIdea(""); setIdeaUrl(""); setIdeaFiles([]); setIdeaFilePreviews([]);
@@ -561,7 +658,9 @@ export default function PostCreatorPage() {
     try {
       const { data } = await api.post(`/post-creator/${businessId}/publish`, {
         post_text: postText, image_prompt: imagePrompt || null,
-        image_base64: imageBase64ForPublish || null, platforms: selectedPlatforms, scheduled_at,
+        image_base64: imageBase64ForPublish || null,
+        images_base64: imagesBase64ForPublish || null,
+        platforms: selectedPlatforms, scheduled_at,
       });
       const results: { platform: string; status: string; error?: string; warning?: string }[] = data.results || [];
       const ok = results.filter(r => r.status === "published");
@@ -583,7 +682,6 @@ export default function PostCreatorPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  // Active image mode button label/color
   const MODE_META: Record<NonNullable<ImageMode>, { label: string; color: string }> = {
     prompt: { label: "🖼 Создать промт изображения", color: "#0F6E56" },
     upload: { label: "📁 Загрузить изображение", color: "#0F6E56" },
@@ -659,7 +757,6 @@ export default function PostCreatorPage() {
               <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #F0EEE8" }}>
                 <div style={{ fontSize: 12, color: "#888", marginBottom: 12, fontWeight: 600 }}>Изображение к посту:</div>
 
-                {/* Нет режима — показываем все 3 */}
                 {imageMode === null && (
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     <button onClick={() => switchMode("prompt")} style={{ padding: "10px 20px", background: "#4680C2", color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>🖼 Создать промт изображения</button>
@@ -668,7 +765,6 @@ export default function PostCreatorPage() {
                   </div>
                 )}
 
-                {/* Режим выбран — только активная кнопка + «Изменить» */}
                 {imageMode !== null && (
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <button style={{ padding: "10px 20px", background: MODE_META[imageMode].color, color: "#fff", border: "none", borderRadius: 10, cursor: "default", fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -682,7 +778,7 @@ export default function PostCreatorPage() {
           </div>
         )}
 
-        {/* ── 3a. Промт для фото ── */}
+        {/* ── 3a. Промт для фото + предпросмотр ── */}
         {imageMode === "prompt" && (
           <div style={card}>
             <SectionTitle n={3} label="Промт для изображения" done={!!imagePrompt.trim()} />
@@ -702,24 +798,65 @@ export default function PostCreatorPage() {
               {imageGenCount > 0 && <AttemptBadge current={imageGenCount} max={MAX_IMAGE_ATTEMPTS} label="Генераций" />}
             </div>
             {imageGenCount >= MAX_IMAGE_ATTEMPTS && <div style={{ marginTop: 8, fontSize: 12, color: "#DC2626" }}>Достигнут лимит генераций ({MAX_IMAGE_ATTEMPTS}).</div>}
+
+            {/* Предпросмотр внутри блока */}
+            <AiImagePreview
+              aiImageB64={aiImageB64}
+              imageHistory={imageHistory}
+              currentImageIdx={currentImageIdx}
+              setCurrentImageIdx={setCurrentImageIdx}
+              loadingImage={loadingImage}
+              inlineEditCount={inlineEditCount}
+              showInlineEdit={showInlineEdit}
+              setShowInlineEdit={setShowInlineEdit}
+              inlineEditInstruction={inlineEditInstruction}
+              setInlineEditInstruction={setInlineEditInstruction}
+              onInlineEdit={editImageInline}
+              brandShortcutsNode={brandShortcutsNode(setInlineEditInstruction, inlineEditInstruction)}
+            />
           </div>
         )}
 
-        {/* ── 3b. Загрузить изображение (грид 10 слотов) ── */}
+        {/* ── 3b. Загрузить изображение (грид 10 слотов + предпросмотр) ── */}
         {imageMode === "upload" && (
-          <div style={card}>
+          <div
+            style={card}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => {
+              e.preventDefault();
+              const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
+              if (files.length) onFileDrop(0, files);
+            }}
+          >
             <SectionTitle n={3} label="Загрузить изображение" done={uploadFilled.length > 0} />
             <p style={{ color: "#888", fontSize: 13, margin: "0 0 16px" }}>
-              Нажмите на ячейку, чтобы добавить фото. Перетащите, чтобы изменить порядок.
-              {uploadFilled.length > 1 && <span style={{ color: "#4680C2", fontWeight: 600 }}> Загружено {uploadFilled.length} фото — отображается как альбом.</span>}
+              Нажмите на ячейку, чтобы добавить фото (можно выбрать сразу несколько). Или перетащите фото прямо из папки.
+              {uploadFilled.length > 1 && <span style={{ color: "#4680C2", fontWeight: 600 }}> Загружено {uploadFilled.length} фото — будет опубликовано как альбом.</span>}
             </p>
-            <UploadGrid slots={uploadSlots} onSlotClick={onSlotClick} onRemove={removeUploadSlot} onReorder={reorderUploadSlots} />
-            <input ref={slotInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={onSlotFileChange} />
+            <UploadGrid
+              slots={uploadSlots}
+              onSlotClick={onSlotClick}
+              onRemove={removeUploadSlot}
+              onReorder={reorderUploadSlots}
+              onFileDrop={onFileDrop}
+            />
+            <input ref={slotInputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onSlotFileChange} />
             <div style={{ marginTop: 10, fontSize: 12, color: "#aaa" }}>Можно добавить до {MAX_UPLOAD_SLOTS} изображений</div>
+
+            {/* Предпросмотр внутри блока */}
+            {uploadFilled.length > 0 && (
+              <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #F0EEE8" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a" }}>Предпросмотр</div>
+                  {uploadFilled.length > 1 && <span style={{ fontSize: 11, color: "#4680C2", background: "#EFF6FF", borderRadius: 12, padding: "2px 9px", fontWeight: 600 }}>Альбом: {uploadFilled.length} фото</span>}
+                </div>
+                <UploadCarousel slots={uploadSlots} carouselIdx={uploadCarouselIdx} setCarouselIdx={setUploadCarouselIdx} />
+              </div>
+            )}
           </div>
         )}
 
-        {/* ── 3c. Загрузить и отредактировать ── */}
+        {/* ── 3c. Загрузить и отредактировать + предпросмотр ── */}
         {imageMode === "edit" && (
           <div style={card}>
             <SectionTitle n={3} label="Загрузить и отредактировать фото" done={false} />
@@ -750,77 +887,36 @@ export default function PostCreatorPage() {
             </div>
 
             <div style={{ fontSize: 12, color: "#666", fontWeight: 600, marginBottom: 6 }}>Инструкция по редактированию (на русском):</div>
-            {brandShortcuts(setEditInstruction, editInstruction)}
+            {brandShortcutsNode(setEditInstruction, editInstruction)}
             <Textarea value={editInstruction} onChange={setEditInstruction} placeholder="Например: замени фон на белый, добавь тёплые фирменные цвета, сохрани общую композицию..." rows={4} />
             <div style={{ marginTop: 14 }}>
               <Btn label={loadingImage ? "Редактирую..." : "✂️ Редактировать фото"} onClick={editImageFromBlock3c}
                 disabled={!editInstruction.trim() || loadingImage || (!editBaseUploaded && (ideaFiles.length === 0 || editBaseIdx < 0))}
                 loading={loadingImage} color="#6B46C1" />
             </div>
+
+            {/* Предпросмотр внутри блока */}
+            <AiImagePreview
+              aiImageB64={aiImageB64}
+              imageHistory={imageHistory}
+              currentImageIdx={currentImageIdx}
+              setCurrentImageIdx={setCurrentImageIdx}
+              loadingImage={loadingImage}
+              inlineEditCount={inlineEditCount}
+              showInlineEdit={showInlineEdit}
+              setShowInlineEdit={setShowInlineEdit}
+              inlineEditInstruction={inlineEditInstruction}
+              setInlineEditInstruction={setInlineEditInstruction}
+              onInlineEdit={editImageInline}
+              brandShortcutsNode={brandShortcutsNode(setInlineEditInstruction, inlineEditInstruction)}
+            />
           </div>
         )}
 
-        {/* Загрузка идёт, изображений ещё нет */}
-        {loadingImage && !hasImage && (
-          <div style={{ ...card, textAlign: "center", padding: "40px 32px", color: "#888" }}>⏳ Обрабатываю изображение...</div>
-        )}
-
-        {/* ── 4. Изображение ── */}
-        {hasImage && (
-          <div style={card}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, background: "#0F6E56", color: "#fff" }}>✓</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a1a" }}>Изображение</div>
-              </div>
-              {imageMode === "upload" && uploadFilled.length > 1 && (
-                <span style={{ fontSize: 11, color: "#4680C2", background: "#EFF6FF", borderRadius: 12, padding: "2px 9px", fontWeight: 600 }}>Альбом: {uploadFilled.length} фото</span>
-              )}
-              {imageMode !== "upload" && imageHistory.length > 1 && (
-                <span style={{ fontSize: 11, color: "#6B46C1", background: "#F0EBF8", borderRadius: 12, padding: "2px 9px", fontWeight: 600 }}>{imageHistory.length} версий</span>
-              )}
-            </div>
-
-            {/* Режим загрузки — карусель без редактирования */}
-            {imageMode === "upload" && (
-              <UploadCarousel slots={uploadSlots} carouselIdx={uploadCarouselIdx} setCarouselIdx={setUploadCarouselIdx} />
-            )}
-
-            {/* Режим промта/редактирования — одно изображение + инлайн правки */}
-            {imageMode !== "upload" && !!aiImageB64 && (
-              <>
-                <img src={`data:image/png;base64,${aiImageB64}`} alt="generated" style={{ width: 280, height: 280, objectFit: "cover", borderRadius: 14, border: "1px solid #EAE8E2", display: "block" }} />
-                {imageHistory.length > 1 && <HistoryNav current={currentImageIdx} total={imageHistory.length} onPrev={() => { const i = currentImageIdx - 1; if (i >= 0) { setCurrentImageIdx(i); } }} onNext={() => { const i = currentImageIdx + 1; if (i < imageHistory.length) { setCurrentImageIdx(i); } }} />}
-
-                <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #F0EEE8" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a" }}>Редактировать изображение</div>
-                    <AttemptBadge current={inlineEditCount} max={MAX_INLINE_EDITS} label="Правок" />
-                  </div>
-                  {!showInlineEdit && inlineEditCount < MAX_INLINE_EDITS && (
-                    <button onClick={() => setShowInlineEdit(true)} style={{ padding: "8px 18px", background: "none", border: "1.5px solid #6B46C1", borderRadius: 10, color: "#6B46C1", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>✏️ Внести правки</button>
-                  )}
-                  {showInlineEdit && (
-                    <>
-                      {brandShortcuts(setInlineEditInstruction, inlineEditInstruction)}
-                      <Textarea value={inlineEditInstruction} onChange={setInlineEditInstruction} placeholder="Например: измени фон на белый, добавь тёплые цвета..." rows={3} />
-                      <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-                        <Btn label={loadingImage ? "Редактирую..." : "Обновить"} onClick={editImageInline} disabled={!inlineEditInstruction.trim() || loadingImage || inlineEditCount >= MAX_INLINE_EDITS} loading={loadingImage} color="#6B46C1" small />
-                        <button onClick={() => { setShowInlineEdit(false); setInlineEditInstruction(""); }} style={{ padding: "7px 14px", background: "none", border: "1px solid #E0DED8", borderRadius: 8, cursor: "pointer", fontSize: 12, color: "#666" }}>Отмена</button>
-                      </div>
-                    </>
-                  )}
-                  {inlineEditCount >= MAX_INLINE_EDITS && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 6 }}>Достигнут лимит правок ({MAX_INLINE_EDITS}).</div>}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ── 5. Платформы ── */}
+        {/* ── 4. Платформы ── */}
         {hasText && (
           <div style={card}>
-            <SectionTitle n={5} label="Куда публиковать" done={selectedPlatforms.length > 0} />
+            <SectionTitle n={4} label="Куда публиковать" done={selectedPlatforms.length > 0} />
             <p style={{ color: "#888", fontSize: 13, margin: "0 0 16px" }}>Выберите одну или несколько подключённых платформ.</p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               {connectedPlatforms.length === 0 && <div style={{ fontSize: 13, color: "#aaa" }}>Нет подключённых платформ. <a href="/platforms" style={{ color: "#1a1a1a", fontWeight: 600 }}>Подключить →</a></div>}
@@ -841,10 +937,10 @@ export default function PostCreatorPage() {
           </div>
         )}
 
-        {/* ── 6. Расписание ── */}
+        {/* ── 5. Расписание ── */}
         {hasText && selectedPlatforms.length > 0 && (
           <div style={card}>
-            <SectionTitle n={6} label="Время публикации" done={false} />
+            <SectionTitle n={5} label="Время публикации" done={false} />
             <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
               {[{ v: true, l: "⚡ Опубликовать сейчас" }, { v: false, l: "📅 Запланировать" }].map(o => (
                 <button key={String(o.v)} onClick={() => setPublishNow(o.v)} style={{ padding: "9px 20px", borderRadius: 10, border: "2px solid", borderColor: publishNow === o.v ? "#1a1a1a" : "#E0DED8", background: publishNow === o.v ? "#1a1a1a" : "#fff", color: publishNow === o.v ? "#fff" : "#666", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>{o.l}</button>
