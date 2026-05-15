@@ -509,7 +509,10 @@ async def edit_image_endpoint(
         "Return ONLY the English translation, no comments."
     )
     try:
-        instruction_en, _ = await _generate_text(translation_system, body.instruction_ru, 400)
+        instruction_en, _ = await asyncio.wait_for(
+            _generate_text(translation_system, body.instruction_ru, 400),
+            timeout=10.0,
+        )
     except Exception:
         instruction_en = body.instruction_ru
 

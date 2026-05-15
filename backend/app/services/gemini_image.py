@@ -108,8 +108,14 @@ async def generate_image(prompt: str, aspect_ratio: str = "1:1") -> str:
 # ─── Редактирование изображений ───────────────────────────────────────────────
 
 async def _gemini_edit(base_image: dict, reference_images: list[dict], instruction: str) -> str:
-    norm_base = _normalize_to_jpeg(base_image)
-    norm_refs = [_normalize_to_jpeg(r) for r in reference_images[:13]]
+    import asyncio
+    # PIL-операции блокируют event loop — запускаем в потоке
+    norm_base, norm_refs = await asyncio.to_thread(
+        lambda: (
+            _normalize_to_jpeg(base_image),
+            [_normalize_to_jpeg(r) for r in reference_images[:13]],
+        )
+    )
 
     parts: list = []
     for img in [norm_base] + norm_refs:
@@ -144,16 +150,17 @@ async def _gemini_edit(base_image: dict, reference_images: list[dict], instructi
 
 
 async def _openai_edit(base_image: dict, reference_images: list[dict], instruction: str) -> str:
+    import asyncio
+    # PIL-операции блокируют event loop — запускаем в потоке
+    png_buf = await asyncio.to_thread(_to_png_buf, base_image)
+
     client = AsyncOpenAI(
         api_key=settings.OPENAI_API_KEY,
-        timeout=httpx.Timeout(connect=5.0, read=_OAI_TIMEOUT, write=5.0, pool=5.0),
+        timeout=httpx.Timeout(connect=5.0, read=_OAI_TIMEOUT, write=15.0, pool=5.0),
     )
-    images = [_to_png_buf(base_image)]
-    for ref in reference_images[:6]:
-        images.append(_to_png_buf(ref))
     result = await client.images.edit(
         model="gpt-image-2",
-        image=images,
+        image=png_buf,
         prompt=instruction[:1000],
         size="1024x1024",
     )
