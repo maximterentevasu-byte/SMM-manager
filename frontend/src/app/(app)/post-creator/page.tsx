@@ -22,6 +22,14 @@ const MAX_EDITS = 3;
 const MAX_FILES = 10;
 const DRAFT_KEY_PREFIX = "qp_draft_v1_";
 
+interface BrandContext {
+  visual_style: string;
+  brand_colors: string[];
+  brand_voice: string;
+  niche: string;
+  usp: string;
+}
+
 interface Draft {
   idea: string;
   ideaUrl: string;
@@ -30,7 +38,8 @@ interface Draft {
   currentTextIdx: number;
   textGenCount: number;
   imagePrompt: string;
-  imageBase64: string;
+  imageHistory: string[];
+  currentImageIdx: number;
   imageGenCount: number;
   editCount: number;
   selectedPlatforms: Platform[];
@@ -157,10 +166,123 @@ function AttemptBadge({ current, max, label }: { current: number; max: number; l
   );
 }
 
+function HistoryNav({
+  current, total, onPrev, onNext,
+}: { current: number; total: number; onPrev: () => void; onNext: () => void }) {
+  if (total <= 1) return null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+      <button onClick={onPrev} disabled={current <= 0}
+        style={{ padding: "5px 12px", border: "1px solid #E0DED8", borderRadius: 8,
+          background: "#fff", cursor: current <= 0 ? "not-allowed" : "pointer",
+          fontSize: 13, color: current <= 0 ? "#ccc" : "#555" }}>
+        ← Пред.
+      </button>
+      <span style={{ fontSize: 12, color: "#888" }}>
+        Версия {current + 1} из {total}
+      </span>
+      <button onClick={onNext} disabled={current >= total - 1}
+        style={{ padding: "5px 12px", border: "1px solid #E0DED8", borderRadius: 8,
+          background: "#fff", cursor: current >= total - 1 ? "not-allowed" : "pointer",
+          fontSize: 13, color: current >= total - 1 ? "#ccc" : "#555" }}>
+        След. →
+      </button>
+    </div>
+  );
+}
+
 const PLATFORM_META: Record<Platform, { label: string; color: string; icon: string }> = {
   vk:       { label: "ВКонтакте", color: "#4680C2", icon: "В" },
   telegram: { label: "Telegram",  color: "#229ED9", icon: "✈" },
 };
+
+// ── Brand Context Panel ────────────────────────────────────────────────────────
+
+function BrandContextPanel({
+  brand,
+  onInsert,
+}: {
+  brand: BrandContext;
+  onInsert: (text: string) => void;
+}) {
+  const hasBrand = brand.visual_style || brand.brand_colors.length > 0;
+  if (!hasBrand) return null;
+
+  const phrases: { label: string; value: string }[] = [];
+
+  if (brand.visual_style) {
+    phrases.push({
+      label: "Фирменный стиль",
+      value: `Use brand visual style: ${brand.visual_style}`,
+    });
+  }
+  if (brand.brand_colors.length > 0) {
+    phrases.push({
+      label: "Фирменные цвета",
+      value: `Use brand colors: ${brand.brand_colors.join(", ")}`,
+    });
+  }
+  if (brand.visual_style) {
+    phrases.push({
+      label: "Фон как в магазине",
+      value: `Background style matching our store aesthetic: ${brand.visual_style}`,
+    });
+  }
+  if (brand.brand_colors.length > 0) {
+    phrases.push({
+      label: "Цвета + стиль",
+      value: `Brand color palette ${brand.brand_colors.join(", ")} with ${brand.visual_style || "our visual identity"}`,
+    });
+  }
+
+  return (
+    <div style={{
+      marginBottom: 16, padding: "14px 16px",
+      background: "#F8F6FF", border: "1px solid #DDD6FE",
+      borderRadius: 12,
+    }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#6B46C1", marginBottom: 10 }}>
+        Фирменный стиль бизнеса — нажмите чтобы добавить в промт:
+      </div>
+
+      {brand.visual_style && (
+        <div style={{ fontSize: 12, color: "#555", marginBottom: 8 }}>
+          <span style={{ fontWeight: 600, color: "#6B46C1" }}>Стиль:</span> {brand.visual_style}
+        </div>
+      )}
+
+      {brand.brand_colors.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "#6B46C1" }}>Цвета:</span>
+          {brand.brand_colors.slice(0, 8).map((c, i) => (
+            <div key={i} title={c} style={{
+              width: 22, height: 22, borderRadius: 6,
+              background: c.startsWith("#") ? c : `#${c}`,
+              border: "1.5px solid #E0DED8", flexShrink: 0,
+            }} />
+          ))}
+          <span style={{ fontSize: 11, color: "#aaa" }}>
+            {brand.brand_colors.slice(0, 8).join(", ")}
+          </span>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {phrases.map((p, i) => (
+          <button key={i} onClick={() => onInsert(p.value)}
+            style={{
+              padding: "5px 12px", background: "#fff",
+              border: "1.5px solid #DDD6FE", borderRadius: 20,
+              color: "#6B46C1", cursor: "pointer", fontSize: 11, fontWeight: 600,
+              display: "inline-flex", alignItems: "center", gap: 4,
+            }}>
+            + {p.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
@@ -170,6 +292,9 @@ export default function PostCreatorPage() {
   );
   const [connectedPlatforms, setConnectedPlatforms] = useState<ConnectedPlatform[]>([]);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [brandContext, setBrandContext] = useState<BrandContext>({
+    visual_style: "", brand_colors: [], brand_voice: "", niche: "", usp: "",
+  });
 
   // ── Block 1 ───────────────────────────────────────────────────────────────
   const [idea, setIdea] = useState("");
@@ -188,8 +313,9 @@ export default function PostCreatorPage() {
   const [showPromptBlock, setShowPromptBlock] = useState(false);
   const [imagePrompt, setImagePrompt] = useState("");
 
-  // ── Block 4: Image + inline edit ─────────────────────────────────────────
-  const [imageBase64, setImageBase64] = useState("");
+  // ── Block 4: Image history + inline edit ─────────────────────────────────
+  const [imageHistory, setImageHistory] = useState<string[]>([]);
+  const [currentImageIdx, setCurrentImageIdx] = useState(-1);
   const [imageGenCount, setImageGenCount] = useState(0);
   const [inlineEditInstruction, setInlineEditInstruction] = useState("");
   const [editCount, setEditCount] = useState(0);
@@ -210,32 +336,36 @@ export default function PostCreatorPage() {
   const multiFileRef = useRef<HTMLInputElement>(null);
   const ownPhotoRef = useRef<HTMLInputElement>(null);
 
+  // Current image b64 derived from history
+  const imageBase64 = currentImageIdx >= 0 ? imageHistory[currentImageIdx] : "";
+  const hasImage = !!imageBase64;
+
   // ── Draft persistence ─────────────────────────────────────────────────────
 
   const buildDraft = useCallback((): Draft => ({
     idea, ideaUrl, postText, textHistory, currentTextIdx, textGenCount,
-    imagePrompt, imageBase64, imageGenCount, editCount,
+    imagePrompt, imageHistory, currentImageIdx, imageGenCount, editCount,
     selectedPlatforms, publishNow, publishDate, publishTime, usedModel,
   }), [idea, ideaUrl, postText, textHistory, currentTextIdx, textGenCount,
-       imagePrompt, imageBase64, imageGenCount, editCount,
+       imagePrompt, imageHistory, currentImageIdx, imageGenCount, editCount,
        selectedPlatforms, publishNow, publishDate, publishTime, usedModel]);
 
-  // Save draft on any relevant state change
   useEffect(() => {
     if (!businessId) return;
     const draft = buildDraft();
-    const hasContent = idea || postText || imageBase64 || imagePrompt;
+    const hasContent = idea || postText || imageHistory.length > 0 || imagePrompt;
     if (!hasContent) return;
     saveDraft(businessId, draft);
     setDraftSaved(true);
     const t = setTimeout(() => setDraftSaved(false), 2000);
     return () => clearTimeout(t);
   }, [idea, ideaUrl, postText, textHistory, currentTextIdx, imagePrompt,
-      imageBase64, selectedPlatforms, publishNow, publishDate, publishTime]);
+      imageHistory, currentImageIdx, selectedPlatforms, publishNow, publishDate, publishTime]);
 
-  // Load draft + platforms on mount
+  // Load draft + platforms + brand context on mount
   useEffect(() => {
     if (!businessId) return;
+
     api.get(`/platforms/list/${businessId}`).then(({ data }) => {
       setConnectedPlatforms(
         (data || []).filter((p: any) => p.is_active).map((p: any) => ({
@@ -243,6 +373,10 @@ export default function PostCreatorPage() {
           page_name: p.page_name,
         }))
       );
+    }).catch(() => {});
+
+    api.get(`/post-creator/${businessId}/brand-context`).then(({ data }) => {
+      setBrandContext(data);
     }).catch(() => {});
 
     const today = new Date();
@@ -260,7 +394,8 @@ export default function PostCreatorPage() {
       setCurrentTextIdx(draft.currentTextIdx ?? -1);
       setTextGenCount(draft.textGenCount || 0);
       setImagePrompt(draft.imagePrompt || "");
-      setImageBase64(draft.imageBase64 || "");
+      setImageHistory(draft.imageHistory || []);
+      setCurrentImageIdx(draft.currentImageIdx ?? -1);
       setImageGenCount(draft.imageGenCount || 0);
       setEditCount(draft.editCount || 0);
       setSelectedPlatforms(draft.selectedPlatforms || []);
@@ -293,10 +428,19 @@ export default function PostCreatorPage() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const result = ev.target?.result as string;
-      setImageBase64(result.split(",")[1] || "");
+      const b64 = result.split(",")[1] || "";
+      const newHistory = [...imageHistory, b64];
+      setImageHistory(newHistory);
+      setCurrentImageIdx(newHistory.length - 1);
     };
     reader.readAsDataURL(f);
     e.target.value = "";
+  };
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  const appendToPrompt = (text: string) => {
+    setImagePrompt(prev => prev ? `${prev}\n${text}` : text);
   };
 
   // ── AI actions ─────────────────────────────────────────────────────────────
@@ -316,12 +460,10 @@ export default function PostCreatorPage() {
       const newText: string = data.text;
       const newModel: ModelKey = data.model_used === "gpt" ? "gpt" : "claude";
       const newHistory = [...textHistory, newText];
-      const newIdx = newHistory.length - 1;
-      const newCount = textGenCount + 1;
       setTextHistory(newHistory);
-      setCurrentTextIdx(newIdx);
+      setCurrentTextIdx(newHistory.length - 1);
       setPostText(newText);
-      setTextGenCount(newCount);
+      setTextGenCount(textGenCount + 1);
       setUsedModel(newModel);
     } catch (e: any) {
       const d = e?.response?.data;
@@ -354,7 +496,10 @@ export default function PostCreatorPage() {
         prompt,
         aspect_ratio: "1:1",
       });
-      setImageBase64(data.image_base64);
+      const b64: string = data.image_base64;
+      const newHistory = [...imageHistory, b64];
+      setImageHistory(newHistory);
+      setCurrentImageIdx(newHistory.length - 1);
       setImageGenCount(imageGenCount + 1);
       setShowInlineEdit(false);
       setInlineEditInstruction("");
@@ -365,6 +510,12 @@ export default function PostCreatorPage() {
     }
   };
 
+  const navigateImage = (dir: -1 | 1) => {
+    const newIdx = currentImageIdx + dir;
+    if (newIdx < 0 || newIdx >= imageHistory.length) return;
+    setCurrentImageIdx(newIdx);
+  };
+
   const editImageInline = async () => {
     if (!inlineEditInstruction.trim() || !imageBase64 || editCount >= MAX_EDITS) return;
     setLoadingImage(true);
@@ -373,7 +524,10 @@ export default function PostCreatorPage() {
         base_image: { data: imageBase64, mime: "image/png" },
         instruction_ru: inlineEditInstruction,
       });
-      setImageBase64(data.image_base64);
+      const b64: string = data.image_base64;
+      const newHistory = [...imageHistory, b64];
+      setImageHistory(newHistory);
+      setCurrentImageIdx(newHistory.length - 1);
       setEditCount(editCount + 1);
       setInlineEditInstruction("");
       setShowInlineEdit(false);
@@ -394,8 +548,8 @@ export default function PostCreatorPage() {
     setIdea(""); setIdeaUrl(""); setIdeaFiles([]); setIdeaFilePreviews([]);
     setPostText(""); setTextHistory([]); setCurrentTextIdx(-1); setTextGenCount(0);
     setImagePrompt(""); setShowPromptBlock(false);
-    setImageBase64(""); setImageGenCount(0); setEditCount(0); setShowInlineEdit(false);
-    setInlineEditInstruction("");
+    setImageHistory([]); setCurrentImageIdx(-1); setImageGenCount(0);
+    setEditCount(0); setShowInlineEdit(false); setInlineEditInstruction("");
     setSelectedPlatforms([]); setPublishNow(true); setPublishMsg("");
   };
 
@@ -446,7 +600,6 @@ export default function PostCreatorPage() {
   };
 
   const hasText = !!postText.trim();
-  const hasImage = !!imageBase64;
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -469,8 +622,7 @@ export default function PostCreatorPage() {
             )}
           </div>
           {(hasText || idea) && (
-            <button
-              onClick={deletePost}
+            <button onClick={deletePost}
               style={{ padding: "7px 16px", background: "none", border: "1.5px solid #DC2626",
                 borderRadius: 10, color: "#DC2626", cursor: "pointer",
                 fontSize: 13, fontWeight: 600 }}>
@@ -493,23 +645,18 @@ export default function PostCreatorPage() {
             <label style={{ fontSize: 12, color: "#888", display: "block", marginBottom: 6 }}>
               🔗 Ссылка на сайт или пост (ИИ проанализирует)
             </label>
-            <input
-              type="url"
-              value={ideaUrl}
-              onChange={(e) => setIdeaUrl(e.target.value)}
+            <input type="url" value={ideaUrl} onChange={(e) => setIdeaUrl(e.target.value)}
               placeholder="https://example.com/post или https://vk.com/wall..."
-              style={{ width: "100%", padding: "10px 14px",
-                border: "1px solid #E0DED8", borderRadius: 10,
-                fontSize: 13, background: "#FAFAF8", outline: "none", boxSizing: "border-box" }}
-            />
+              style={{ width: "100%", padding: "10px 14px", border: "1px solid #E0DED8",
+                borderRadius: 10, fontSize: 13, background: "#FAFAF8", outline: "none",
+                boxSizing: "border-box" }} />
           </div>
 
           <Textarea value={idea} onChange={setIdea}
             placeholder="Например: открываем новую точку 20 мая, адрес Ленина 15, скидка 20%..." rows={4} />
 
           <div style={{ marginTop: 12 }}>
-            <button
-              onClick={() => multiFileRef.current?.click()}
+            <button onClick={() => multiFileRef.current?.click()}
               style={{ background: "none", border: "1px solid #E0DED8", borderRadius: 8,
                 padding: "7px 14px", cursor: "pointer", fontSize: 12, color: "#666",
                 display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -584,7 +731,6 @@ export default function PostCreatorPage() {
 
             <Textarea value={postText} onChange={(v) => {
               setPostText(v);
-              // update current history slot on manual edit
               if (currentTextIdx >= 0) {
                 const updated = [...textHistory];
                 updated[currentTextIdx] = v;
@@ -592,29 +738,13 @@ export default function PostCreatorPage() {
               }
             }} placeholder="Здесь появится сгенерированный текст..." rows={14} />
 
-            {/* History navigation */}
             {textHistory.length > 1 && (
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12 }}>
-                <button onClick={() => navigateText(-1)} disabled={currentTextIdx <= 0}
-                  style={{ padding: "5px 12px", border: "1px solid #E0DED8", borderRadius: 8,
-                    background: "#fff", cursor: currentTextIdx <= 0 ? "not-allowed" : "pointer",
-                    fontSize: 13, color: currentTextIdx <= 0 ? "#ccc" : "#555" }}>
-                  ← Пред.
-                </button>
-                <span style={{ fontSize: 12, color: "#888" }}>
-                  Вариант {currentTextIdx + 1} из {textHistory.length}
-                </span>
-                <button onClick={() => navigateText(1)} disabled={currentTextIdx >= textHistory.length - 1}
-                  style={{ padding: "5px 12px", border: "1px solid #E0DED8", borderRadius: 8,
-                    background: "#fff",
-                    cursor: currentTextIdx >= textHistory.length - 1 ? "not-allowed" : "pointer",
-                    fontSize: 13, color: currentTextIdx >= textHistory.length - 1 ? "#ccc" : "#555" }}>
-                  След. →
-                </button>
-              </div>
+              <HistoryNav
+                current={currentTextIdx} total={textHistory.length}
+                onPrev={() => navigateText(-1)} onNext={() => navigateText(1)}
+              />
             )}
 
-            {/* Image action buttons */}
             {hasText && (
               <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #F0EEE8" }}>
                 <div style={{ fontSize: 12, color: "#888", marginBottom: 10, fontWeight: 600 }}>
@@ -622,10 +752,7 @@ export default function PostCreatorPage() {
                 </div>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <button
-                    onClick={() => {
-                      setShowPromptBlock(true);
-                      if (!imagePrompt) setImagePrompt("");
-                    }}
+                    onClick={() => { setShowPromptBlock(true); }}
                     style={{ padding: "10px 22px",
                       background: showPromptBlock ? "#0F6E56" : "#4680C2",
                       color: "#fff", border: "none", borderRadius: 10,
@@ -633,8 +760,7 @@ export default function PostCreatorPage() {
                       display: "inline-flex", alignItems: "center", gap: 6 }}>
                     🖼 Создать промт фото
                   </button>
-                  <button
-                    onClick={() => ownPhotoRef.current?.click()}
+                  <button onClick={() => ownPhotoRef.current?.click()}
                     style={{ padding: "10px 22px", background: "#fff",
                       color: "#555", border: "1.5px solid #E0DED8",
                       borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600,
@@ -649,16 +775,42 @@ export default function PostCreatorPage() {
           </div>
         )}
 
-        {/* ── 3. Промт для фото (пустое поле, пользователь пишет сам) ── */}
+        {/* ── 3. Промт для фото ── */}
         {showPromptBlock && (
           <div style={card}>
             <SectionTitle n={3} label="Промт для изображения" done={!!imagePrompt.trim()} />
             <p style={{ color: "#888", fontSize: 13, margin: "0 0 14px" }}>
               Напишите промт на английском — опишите что должно быть на изображении.
+              Если в вашем магазине/офисе есть определённый стиль, цвета или фирменные элементы — укажите их.
             </p>
+
+            <BrandContextPanel brand={brandContext} onInsert={appendToPrompt} />
+
+            {/* Подсказки-фразы для пользователя */}
+            <div style={{ marginBottom: 12, padding: "10px 14px",
+              background: "#F8F7F4", borderRadius: 10, fontSize: 12, color: "#666" }}>
+              <div style={{ fontWeight: 600, marginBottom: 6, color: "#555" }}>Примеры фраз:</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {[
+                  "background style like my store",
+                  "use my brand colors",
+                  "consistent with our visual identity",
+                  "same aesthetic as our shop interior",
+                ].map((hint, i) => (
+                  <button key={i} onClick={() => appendToPrompt(hint)}
+                    style={{ padding: "3px 10px", background: "#fff",
+                      border: "1px solid #E0DED8", borderRadius: 12,
+                      cursor: "pointer", fontSize: 11, color: "#555" }}>
+                    + {hint}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <Textarea value={imagePrompt} onChange={setImagePrompt}
               placeholder="A professional product photo of a coffee cup on a wooden table, warm lighting, bokeh background, photorealistic..."
               rows={4} />
+
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, flexWrap: "wrap" }}>
               {imagePrompt.trim() && (
                 <Btn
@@ -681,15 +833,33 @@ export default function PostCreatorPage() {
           </div>
         )}
 
-        {/* ── 4. Изображение + инлайн редактирование ── */}
+        {/* ── 4. Изображение + история + инлайн редактирование ── */}
         {(hasImage || loadingImage) && (
           <div style={card}>
-            <SectionTitle n={4} label="Изображение" done={hasImage} />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 28, height: 28, borderRadius: "50%", display: "flex",
+                  alignItems: "center", justifyContent: "center", flexShrink: 0,
+                  fontSize: 13, fontWeight: 700,
+                  background: hasImage ? "#0F6E56" : "#1a1a1a", color: "#fff" }}>
+                  {hasImage ? "✓" : 4}
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a1a" }}>Изображение</div>
+              </div>
+              {imageHistory.length > 1 && (
+                <span style={{ fontSize: 11, color: "#6B46C1",
+                  background: "#F0EBF8", borderRadius: 12, padding: "2px 9px", fontWeight: 600 }}>
+                  {imageHistory.length} версий
+                </span>
+              )}
+            </div>
+
             {loadingImage && !hasImage && (
               <div style={{ padding: "40px 0", textAlign: "center", color: "#888" }}>
                 ⏳ Генерирую изображение...
               </div>
             )}
+
             {hasImage && (
               <>
                 <img
@@ -697,6 +867,12 @@ export default function PostCreatorPage() {
                   alt="generated"
                   style={{ width: 280, height: 280, objectFit: "cover",
                     borderRadius: 14, border: "1px solid #EAE8E2", display: "block" }}
+                />
+
+                {/* Навигация по истории изображений */}
+                <HistoryNav
+                  current={currentImageIdx} total={imageHistory.length}
+                  onPrev={() => navigateImage(-1)} onNext={() => navigateImage(1)}
                 />
 
                 {/* Inline edit section */}
@@ -709,8 +885,7 @@ export default function PostCreatorPage() {
                   </div>
 
                   {!showInlineEdit && editCount < MAX_EDITS && (
-                    <button
-                      onClick={() => setShowInlineEdit(true)}
+                    <button onClick={() => setShowInlineEdit(true)}
                       style={{ padding: "8px 18px", background: "none",
                         border: "1.5px solid #6B46C1", borderRadius: 10,
                         color: "#6B46C1", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
@@ -720,10 +895,44 @@ export default function PostCreatorPage() {
 
                   {showInlineEdit && (
                     <>
+                      <p style={{ color: "#888", fontSize: 13, margin: "0 0 10px" }}>
+                        Опишите что изменить. Можно ссылаться на стиль магазина или фирменные цвета.
+                      </p>
+
+                      {/* Быстрые фразы для редактирования */}
+                      {(brandContext.visual_style || brandContext.brand_colors.length > 0) && (
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                          {brandContext.brand_colors.length > 0 && (
+                            <button
+                              onClick={() => setInlineEditInstruction(prev =>
+                                prev ? `${prev}. Используй фирменные цвета: ${brandContext.brand_colors.join(", ")}` :
+                                       `Используй фирменные цвета: ${brandContext.brand_colors.join(", ")}`
+                              )}
+                              style={{ padding: "4px 10px", background: "#F8F6FF",
+                                border: "1px solid #DDD6FE", borderRadius: 12,
+                                cursor: "pointer", fontSize: 11, color: "#6B46C1", fontWeight: 600 }}>
+                              + Фирменные цвета
+                            </button>
+                          )}
+                          {brandContext.visual_style && (
+                            <button
+                              onClick={() => setInlineEditInstruction(prev =>
+                                prev ? `${prev}. Стиль как в нашем магазине: ${brandContext.visual_style}` :
+                                       `Стиль как в нашем магазине: ${brandContext.visual_style}`
+                              )}
+                              style={{ padding: "4px 10px", background: "#F8F6FF",
+                                border: "1px solid #DDD6FE", borderRadius: 12,
+                                cursor: "pointer", fontSize: 11, color: "#6B46C1", fontWeight: 600 }}>
+                              + Фирменный стиль
+                            </button>
+                          )}
+                        </div>
+                      )}
+
                       <Textarea
                         value={inlineEditInstruction}
                         onChange={setInlineEditInstruction}
-                        placeholder="Например: измени фон на белый, добавь логотип в правый нижний угол..."
+                        placeholder="Например: измени фон на белый, сделай задний фон как в нашем магазине, добавь тёплые фирменные цвета..."
                         rows={3}
                       />
                       <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
@@ -735,8 +944,7 @@ export default function PostCreatorPage() {
                           color="#6B46C1"
                           small
                         />
-                        <button
-                          onClick={() => { setShowInlineEdit(false); setInlineEditInstruction(""); }}
+                        <button onClick={() => { setShowInlineEdit(false); setInlineEditInstruction(""); }}
                           style={{ padding: "7px 14px", background: "none",
                             border: "1px solid #E0DED8", borderRadius: 8,
                             cursor: "pointer", fontSize: 12, color: "#666" }}>
@@ -840,9 +1048,7 @@ export default function PostCreatorPage() {
         {/* ── Финальные кнопки ── */}
         {hasText && selectedPlatforms.length > 0 && (
           <div style={{ marginTop: 8 }}>
-            <button
-              onClick={publish}
-              disabled={publishing}
+            <button onClick={publish} disabled={publishing}
               style={{ width: "100%", padding: "16px", borderRadius: 14, border: "none",
                 background: publishing ? "#888" : "#1a1a1a",
                 color: "#fff", fontSize: 16, fontWeight: 700,
@@ -869,11 +1075,9 @@ export default function PostCreatorPage() {
           </div>
         )}
 
-        {/* Кнопка удаления внизу страницы (всегда видна если есть контент) */}
         {(hasText || idea.trim()) && (
           <div style={{ marginTop: 24, textAlign: "center" }}>
-            <button
-              onClick={deletePost}
+            <button onClick={deletePost}
               style={{ padding: "10px 28px", background: "none",
                 border: "1.5px solid #DC2626", borderRadius: 10,
                 color: "#DC2626", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>

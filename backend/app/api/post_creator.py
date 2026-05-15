@@ -351,6 +351,31 @@ async def generate_post_text(
     return {"text": text, "model_used": model_used}
 
 
+# ─── 2б. Бренд-контекст бизнеса ─────────────────────────────────────────────
+
+@router.get("/{business_id}/brand-context")
+async def get_brand_context(
+    business_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Возвращает визуальный стиль и цвета бренда из профиля."""
+    try:
+        biz = await _get_business(business_id, current_user, db)
+        profile = biz.profile if isinstance(biz.profile, dict) else {}
+        strategy = biz.strategy if isinstance(biz.strategy, dict) else {}
+    except HTTPException:
+        return {"visual_style": "", "brand_colors": [], "brand_voice": "", "niche": ""}
+
+    return {
+        "visual_style": profile.get("visual_style", ""),
+        "brand_colors": profile.get("brand_colors", []),
+        "brand_voice": profile.get("brand_voice", ""),
+        "niche": profile.get("niche", ""),
+        "usp": profile.get("usp", ""),
+    }
+
+
 # ─── 2. Генерация промта для изображения ─────────────────────────────────────
 
 class PromptIn(BaseModel):
