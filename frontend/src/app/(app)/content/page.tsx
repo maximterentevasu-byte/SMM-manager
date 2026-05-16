@@ -87,6 +87,131 @@ function isSameDay(a: Date, b: Date) {
 
 function dayKey(d: Date) { return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }
 
+// ── Shared upload utils ───────────────────────────────────────────────────────
+
+type ModalUploadSlot = { data: string; mime: string };
+
+const readFileAsBase64Modal = (f: File): Promise<ModalUploadSlot> =>
+  new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = (e) => {
+      const s = e.target?.result as string;
+      const p = s.split(",");
+      res({ data: p[1] || "", mime: p[0].replace("data:", "").replace(";base64", "") || "image/jpeg" });
+    };
+    r.onerror = rej;
+    r.readAsDataURL(f);
+  });
+
+function ModalUploadGrid({ slots, onSlotClick, onRemove, onReorder, onFileDrop }: {
+  slots: Array<ModalUploadSlot | null>;
+  onSlotClick: (idx: number) => void;
+  onRemove: (idx: number) => void;
+  onReorder: (from: number, to: number) => void;
+  onFileDrop: (startIdx: number, files: File[]) => void;
+}) {
+  const dragFrom = useRef(-1);
+  const [dragOver, setDragOver] = useState(-1);
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+      {slots.map((slot, idx) => (
+        <div
+          key={idx}
+          onClick={() => !slot && onSlotClick(idx)}
+          draggable={!!slot}
+          onDragStart={() => { dragFrom.current = idx; }}
+          onDragOver={e => { e.preventDefault(); setDragOver(idx); }}
+          onDragLeave={() => setDragOver(-1)}
+          onDrop={e => {
+            e.preventDefault(); setDragOver(-1);
+            if (e.dataTransfer.files.length > 0) {
+              onFileDrop(idx, Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/")));
+            } else if (dragFrom.current >= 0 && dragFrom.current !== idx) {
+              onReorder(dragFrom.current, idx);
+            }
+            dragFrom.current = -1;
+          }}
+          onDragEnd={() => { dragFrom.current = -1; setDragOver(-1); }}
+          style={{
+            position: "relative", aspectRatio: "1",
+            background: slot ? "transparent" : "rgba(0,0,0,0.04)",
+            border: dragOver === idx ? "2px solid #533AB7" : slot ? "1.5px solid #E0DED8" : "2px dashed #C0BDB6",
+            borderRadius: 10, overflow: "hidden",
+            cursor: slot ? "grab" : "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "border-color 0.15s",
+          }}
+        >
+          {slot ? (
+            <>
+              <img src={`data:${slot.mime};base64,${slot.data}`} alt={`u-${idx}`}
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", pointerEvents: "none" }} />
+              <button onClick={e => { e.stopPropagation(); onRemove(idx); }}
+                style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, borderRadius: "50%",
+                  background: "rgba(0,0,0,0.65)", border: "none", color: "#fff", cursor: "pointer",
+                  fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}>✕</button>
+              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.18)",
+                fontSize: 8, color: "rgba(255,255,255,0.8)", textAlign: "center", padding: "2px 0",
+                letterSpacing: 0.5, pointerEvents: "none" }}>ТЯНУТЬ</div>
+            </>
+          ) : (
+            <span style={{ fontSize: 24, color: "#C0BDB6", lineHeight: 1, userSelect: "none" }}>+</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ModalUploadCarousel({ slots, carouselIdx, setCarouselIdx }: {
+  slots: Array<ModalUploadSlot | null>;
+  carouselIdx: number;
+  setCarouselIdx: (i: number) => void;
+}) {
+  const filled = slots.filter((s): s is ModalUploadSlot => s !== null);
+  if (filled.length === 0) return null;
+  const safeIdx = Math.min(carouselIdx, filled.length - 1);
+  const current = filled[safeIdx];
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ position: "relative", display: "block" }}>
+        <img src={`data:${current.mime};base64,${current.data}`} alt="preview-current"
+          style={{ width: "100%", maxHeight: 260, objectFit: "cover", borderRadius: 12,
+            border: "1px solid #EAE8E2", display: "block" }} />
+        {filled.length > 1 && (
+          <>
+            <button onClick={() => setCarouselIdx(Math.max(0, safeIdx - 1))} disabled={safeIdx === 0}
+              style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)",
+                width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.45)",
+                border: "none", color: "#fff", cursor: safeIdx === 0 ? "not-allowed" : "pointer",
+                fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>‹</button>
+            <button onClick={() => setCarouselIdx(Math.min(filled.length - 1, safeIdx + 1))} disabled={safeIdx === filled.length - 1}
+              style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+                width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.45)",
+                border: "none", color: "#fff", cursor: safeIdx === filled.length - 1 ? "not-allowed" : "pointer",
+                fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>›</button>
+            <div style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)",
+              background: "rgba(0,0,0,0.4)", borderRadius: 10, padding: "2px 8px", fontSize: 11, color: "#fff" }}>
+              {safeIdx + 1} / {filled.length}
+            </div>
+          </>
+        )}
+      </div>
+      {filled.length > 1 && (
+        <div style={{ display: "flex", gap: 6, marginTop: 8, overflowX: "auto", paddingBottom: 4 }}>
+          {filled.map((s, i) => (
+            <img key={i} src={`data:${s.mime};base64,${s.data}`} alt={`thumb-${i}`}
+              onClick={() => setCarouselIdx(i)}
+              style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6, flexShrink: 0,
+                cursor: "pointer", border: i === safeIdx ? "2px solid #1a1a1a" : "2px solid transparent",
+                opacity: i === safeIdx ? 1 : 0.6 }} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function ContentPage() {
@@ -128,18 +253,26 @@ export default function ContentPage() {
   const [providingInfo, setProvidingInfo] = useState(false);
 
   // Modal image section state
-  const [modalImageMode, setModalImageMode] = useState<"generate" | "upload" | "edit" | null>(null);
+  const [modalImageMode, setModalImageMode] = useState<"generate" | "upload" | "edit" | "video" | null>(null);
   const [modalGenPrompt, setModalGenPrompt] = useState("");
   const [modalEditInstruction, setModalEditInstruction] = useState("");
-  const [modalUploadedImage, setModalUploadedImage] = useState<string | null>(null);
   const [editingModalImg, setEditingModalImg] = useState(false);
+  // Modal upload grid (10 slots)
+  const [modalUploadSlots, setModalUploadSlots] = useState<Array<ModalUploadSlot | null>>(Array(10).fill(null));
+  const [modalUploadCarouselIdx, setModalUploadCarouselIdx] = useState(0);
+  const modalActiveSlotRef = useRef<number>(-1);
+  // Modal video (3 slots)
+  const [modalVideoFiles, setModalVideoFiles] = useState<Array<File | null>>([null, null, null]);
+  const [modalVideoPreviewUrls, setModalVideoPreviewUrls] = useState<Array<string | null>>([null, null, null]);
+  const modalVideoActiveRef = useRef<number>(-1);
 
   // Date editing state
   const [editingDate, setEditingDate] = useState(false);
   const [modalDate, setModalDate]     = useState("");
   const [savingDate, setSavingDate]   = useState(false);
 
-  const modalUploadRef = useRef<HTMLInputElement>(null);
+  const modalSlotInputRef  = useRef<HTMLInputElement>(null);
+  const modalVideoInputRef = useRef<HTMLInputElement>(null);
 
   const [businessId] = useState(() =>
     typeof window !== "undefined" ? localStorage.getItem("businessId") || "" : ""
@@ -299,22 +432,38 @@ export default function ContentPage() {
     setInfoAnswers((slot.needs_info_for || []).map(() => ""));
     setModalDate(new Date(slot.scheduled_at).toISOString().slice(0, 16));
     setModalImageMode(null);
-    setModalUploadedImage(null);
+    setModalUploadSlots(Array(10).fill(null));
+    setModalUploadCarouselIdx(0);
+    setModalVideoFiles([null, null, null]);
+    setModalVideoPreviewUrls(prev => { prev.forEach(u => u && URL.revokeObjectURL(u)); return [null, null, null]; });
     setEditingDate(false);
     setModalEditInstruction("");
   };
   const closeModal = () => {
     setExpanded(null); setShowNeedsInfo(false); setEditingPrompt(false);
-    setEditingDate(false); setModalImageMode(null); setModalUploadedImage(null);
+    setEditingDate(false); setModalImageMode(null);
+    setModalUploadSlots(Array(10).fill(null));
+    setModalVideoPreviewUrls(prev => { prev.forEach(u => u && URL.revokeObjectURL(u)); return [null, null, null]; });
+    setModalVideoFiles([null, null, null]);
   };
 
   const saveModal = async () => {
     if (!expanded) return;
     setModalSaving(true);
     try {
-      await api.patch(`/content/slot/${expanded.id}`, { post_text: modalText });
-      setSlots(prev => prev.map(s => s.id === expanded.id ? { ...s, post_text: modalText } : s));
-      setExpanded(prev => prev ? { ...prev, post_text: modalText } : null);
+      const payload: Record<string, unknown> = { post_text: modalText };
+      if (modalUploadFilled.length === 1) {
+        payload.image_base64 = modalUploadFilled[0].data;
+      } else if (modalUploadFilled.length > 1) {
+        payload.image_base64 = modalUploadFilled[0].data;
+        payload.images_base64 = modalUploadFilled.map(s => s.data);
+      }
+      await api.patch(`/content/slot/${expanded.id}`, payload);
+      const updates: Partial<Slot> = { post_text: modalText };
+      if (modalUploadFilled.length > 0) updates.image_base64 = modalUploadFilled[0].data;
+      setSlots(prev => prev.map(s => s.id === expanded.id ? { ...s, ...updates } : s));
+      setExpanded(prev => prev ? { ...prev, ...updates } : null);
+      if (modalUploadFilled.length > 0) setModalUploadSlots(Array(10).fill(null));
     } catch { alert("Ошибка сохранения"); }
     finally { setModalSaving(false); }
   };
@@ -353,23 +502,78 @@ export default function ContentPage() {
     finally { setSavingDate(false); }
   };
 
-  const handleModalUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !expanded) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const dataUrl = ev.target?.result as string;
-      const base64 = dataUrl.split(",")[1];
-      setModalUploadedImage(dataUrl);
-      try {
-        await api.patch(`/content/slot/${expanded.id}`, { image_base64: base64 });
-        setSlots(prev => prev.map(s => s.id === expanded.id ? { ...s, image_base64: base64 } : s));
-        setExpanded(prev => prev ? { ...prev, image_base64: base64 } : null);
-        setModalUploadedImage(null);
-      } catch { alert("Ошибка загрузки изображения"); }
-    };
-    reader.readAsDataURL(file);
+  // ── Modal upload slot handlers ─────────────────────────────────────────────
+
+  const onModalSlotClick = (idx: number) => {
+    modalActiveSlotRef.current = idx;
+    modalSlotInputRef.current?.click();
+  };
+
+  const onModalSlotFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).filter(f => f.type.startsWith("image/"));
+    if (!files.length) return;
+    const newSlots = [...modalUploadSlots];
+    let startIdx = modalActiveSlotRef.current >= 0 ? modalActiveSlotRef.current : 0;
+    for (const file of files) {
+      while (startIdx < 10 && newSlots[startIdx] !== null) startIdx++;
+      if (startIdx >= 10) break;
+      const slot = await readFileAsBase64Modal(file);
+      newSlots[startIdx] = slot;
+      startIdx++;
+    }
+    setModalUploadSlots(newSlots);
+    modalActiveSlotRef.current = -1;
     e.target.value = "";
+  };
+
+  const removeModalUploadSlot = (idx: number) => {
+    setModalUploadSlots(prev => { const n = [...prev]; n[idx] = null; return n; });
+  };
+
+  const reorderModalUploadSlots = (from: number, to: number) => {
+    setModalUploadSlots(prev => {
+      const n = [...prev]; [n[from], n[to]] = [n[to], n[from]]; return n;
+    });
+  };
+
+  const onModalFileDrop = async (startIdx: number, files: File[]) => {
+    if (!files.length) return;
+    const newSlots = [...modalUploadSlots];
+    let idx = startIdx;
+    for (const file of files) {
+      while (idx < 10 && newSlots[idx] !== null) idx++;
+      if (idx >= 10) break;
+      newSlots[idx] = await readFileAsBase64Modal(file);
+      idx++;
+    }
+    setModalUploadSlots(newSlots);
+  };
+
+  // ── Modal video handlers ───────────────────────────────────────────────────
+
+  const addModalVideoFiles = (files: File[], startIdx = -1) => {
+    const newFiles = [...modalVideoFiles];
+    const newUrls  = [...modalVideoPreviewUrls];
+    let idx = startIdx >= 0 ? startIdx : 0;
+    for (const file of files) {
+      while (idx < 3 && newFiles[idx] !== null) idx++;
+      if (idx >= 3) break;
+      if (newUrls[idx]) URL.revokeObjectURL(newUrls[idx]!);
+      newFiles[idx] = file;
+      newUrls[idx]  = URL.createObjectURL(file);
+      idx++;
+    }
+    setModalVideoFiles(newFiles);
+    setModalVideoPreviewUrls(newUrls);
+  };
+
+  const removeModalVideoFile = (idx: number) => {
+    const newFiles = [...modalVideoFiles];
+    const newUrls  = [...modalVideoPreviewUrls];
+    if (newUrls[idx]) URL.revokeObjectURL(newUrls[idx]!);
+    newFiles[idx] = null; newUrls[idx] = null;
+    setModalVideoFiles(newFiles);
+    setModalVideoPreviewUrls(newUrls);
   };
 
   const editModalImage = async () => {
@@ -439,6 +643,7 @@ export default function ContentPage() {
   );
 
   const generatingCount = slots.filter(s => s.status === "planned" || s.status === "idea_ready").length;
+  const modalUploadFilled = modalUploadSlots.filter((s): s is ModalUploadSlot => s !== null);
 
   const stats = {
     total:      slots.length,
@@ -830,13 +1035,15 @@ export default function ContentPage() {
       {/* ── Slot modal ── */}
       {expanded && (() => {
         const st = STATUS_CONFIG[expanded.status] || STATUS_CONFIG.planned;
-        const hasImage = !!(expanded.image_base64 || expanded.image_url || modalUploadedImage);
+        const hasImage = !!(expanded.image_base64 || expanded.image_url) ||
+                          modalUploadFilled.length > 0 ||
+                          modalVideoFiles.some(Boolean);
         const hasText  = !!modalText.trim();
         const allInfoDone = !expanded.needs_info_for || infoAnswers.every(a => a?.trim());
         const canApprove  = hasText && hasImage && allInfoDone;
         const imgSrc = expanded.image_base64
           ? `data:image/png;base64,${expanded.image_base64}`
-          : expanded.image_url || modalUploadedImage || null;
+          : expanded.image_url || null;
         const inp13: React.CSSProperties = {
           width: "100%", padding: "9px 12px", border: "1.5px solid #E0DED8",
           borderRadius: 10, fontSize: 13, fontFamily: "inherit", outline: "none",
@@ -975,50 +1182,69 @@ export default function ContentPage() {
                     onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
                 </div>
 
-                {/* 4. Изображение */}
+                {/* 4. Изображение / Видео */}
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "#999", marginBottom: 12,
-                    textTransform: "uppercase", letterSpacing: .5 }}>Изображение</div>
+                    textTransform: "uppercase", letterSpacing: .5 }}>Изображение / Видео</div>
 
-                  {/* 3 кнопки режима */}
-                  <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                  {/* 4 кнопки режима */}
+                  <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
                     <button onClick={() => setModalImageMode(modalImageMode === "generate" ? null : "generate")}
-                      style={imgBtn(modalImageMode === "generate")}>
-                      ✨ Сгенерировать
-                    </button>
-                    <button onClick={() => modalUploadRef.current?.click()}
-                      style={imgBtn(modalImageMode === "upload")}>
-                      📁 Загрузить
-                    </button>
+                      style={imgBtn(modalImageMode === "generate")}>✨ Сгенерировать</button>
+                    <button onClick={() => setModalImageMode(modalImageMode === "upload" ? null : "upload")}
+                      style={imgBtn(modalImageMode === "upload")}>📁 Загрузить фото</button>
                     <button onClick={() => setModalImageMode(modalImageMode === "edit" ? null : "edit")}
-                      style={imgBtn(modalImageMode === "edit")}>
-                      🖌 Редактировать
-                    </button>
-                    <input ref={modalUploadRef} type="file" accept="image/*" style={{ display: "none" }}
-                      onChange={handleModalUpload} />
+                      style={imgBtn(modalImageMode === "edit")}>🖌 Редактировать</button>
+                    <button onClick={() => setModalImageMode(modalImageMode === "video" ? null : "video")}
+                      style={imgBtn(modalImageMode === "video")}>🎬 Загрузить видео</button>
                   </div>
 
                   {/* Подблок: генерация */}
                   {modalImageMode === "generate" && (
                     <div style={{ background: "#F8F7F4", borderRadius: 12, padding: 14, marginBottom: 12 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 8 }}>
-                        Промт для генерации
-                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 8 }}>Промт для генерации</div>
                       <textarea value={modalGenPrompt} onChange={e => setModalGenPrompt(e.target.value)}
                         placeholder="Опишите желаемое изображение на русском или английском..."
                         style={{ ...inp13, minHeight: 80 }}
                         onFocus={e => (e.target.style.borderColor = "#533AB7")}
                         onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
-                      <p style={{ margin: "6px 0 12px", fontSize: 11, color: "#aaa" }}>
-                        Можно писать на русском — модель понимает оба языка
-                      </p>
+                      <p style={{ margin: "6px 0 12px", fontSize: 11, color: "#aaa" }}>Можно писать на русском — модель понимает оба языка</p>
                       <button onClick={() => generateImage(expanded, modalGenPrompt || undefined)}
                         disabled={generatingImg === expanded.id}
                         style={{ padding: "9px 20px", background: generatingImg === expanded.id ? "#ccc" : "#533AB7",
-                          color: "#fff", border: "none", borderRadius: 10, cursor: "pointer",
-                          fontSize: 13, fontWeight: 600 }}>
+                          color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
                         {generatingImg === expanded.id ? "Генерирую..." : imgSrc ? "🔄 Перегенерировать" : "✨ Сгенерировать"}
                       </button>
+                    </div>
+                  )}
+
+                  {/* Подблок: загрузка фото (10 слотов, 5×2) */}
+                  {modalImageMode === "upload" && (
+                    <div
+                      style={{ background: "#F8F7F4", borderRadius: 12, padding: 14, marginBottom: 12 }}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => {
+                        e.preventDefault();
+                        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
+                        if (files.length) onModalFileDrop(0, files);
+                      }}
+                    >
+                      <p style={{ fontSize: 13, color: "#888", margin: "0 0 12px" }}>
+                        Нажмите на ячейку, чтобы добавить фото (можно выбрать сразу несколько). Или перетащите прямо из папки.
+                        {modalUploadFilled.length > 1 && <span style={{ color: "#533AB7", fontWeight: 600 }}> Загружено {modalUploadFilled.length} фото — будет опубликовано как альбом.</span>}
+                      </p>
+                      <ModalUploadGrid
+                        slots={modalUploadSlots}
+                        onSlotClick={onModalSlotClick}
+                        onRemove={removeModalUploadSlot}
+                        onReorder={reorderModalUploadSlots}
+                        onFileDrop={onModalFileDrop}
+                      />
+                      <input ref={modalSlotInputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onModalSlotFileChange} />
+                      <div style={{ marginTop: 8, fontSize: 12, color: "#aaa" }}>Можно добавить до 10 изображений</div>
+                      {modalUploadFilled.length > 0 && (
+                        <ModalUploadCarousel slots={modalUploadSlots} carouselIdx={modalUploadCarouselIdx} setCarouselIdx={setModalUploadCarouselIdx} />
+                      )}
                     </div>
                   )}
 
@@ -1030,11 +1256,8 @@ export default function ContentPage() {
                           ⚠ Сначала добавьте изображение (загрузите или сгенерируйте)
                         </div>
                       )}
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 8 }}>
-                        Инструкция по редактированию
-                      </div>
-                      <textarea value={modalEditInstruction}
-                        onChange={e => setModalEditInstruction(e.target.value)}
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 8 }}>Инструкция по редактированию</div>
+                      <textarea value={modalEditInstruction} onChange={e => setModalEditInstruction(e.target.value)}
                         placeholder="Что изменить в изображении? Например: сделать фон белым, добавить логотип..."
                         style={{ ...inp13, minHeight: 70 }}
                         onFocus={e => (e.target.style.borderColor = "#533AB7")}
@@ -1043,23 +1266,107 @@ export default function ContentPage() {
                         disabled={editingModalImg || !expanded.image_base64 || !modalEditInstruction.trim()}
                         style={{ marginTop: 10, padding: "9px 20px",
                           background: editingModalImg || !expanded.image_base64 ? "#ccc" : "#533AB7",
-                          color: "#fff", border: "none", borderRadius: 10, cursor: "pointer",
-                          fontSize: 13, fontWeight: 600 }}>
+                          color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
                         {editingModalImg ? "Редактирую..." : "🖌 Редактировать"}
                       </button>
                     </div>
                   )}
 
-                  {/* Превью */}
-                  {imgSrc ? (
-                    <img src={imgSrc} alt="preview"
-                      style={{ width: "100%", maxHeight: 320, objectFit: "cover", borderRadius: 12 }} />
-                  ) : (
-                    <div style={{ background: "#F8F7F4", borderRadius: 12, padding: "40px 16px",
-                      display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
-                      border: "2px dashed #E0DED8" }}>
-                      <span style={{ fontSize: 40 }}>🖼</span>
-                      <span style={{ fontSize: 13, color: "#999" }}>Изображение не прикреплено</span>
+                  {/* Подблок: загрузка видео (3 плитки) */}
+                  {modalImageMode === "video" && (
+                    <div
+                      style={{ background: "#F8F7F4", borderRadius: 12, padding: 14, marginBottom: 12 }}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => {
+                        e.preventDefault();
+                        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("video/"));
+                        if (files.length) addModalVideoFiles(files);
+                      }}
+                    >
+                      <p style={{ fontSize: 13, color: "#888", margin: "0 0 12px" }}>
+                        Нажмите на ячейку или перетащите видео из папки / рабочего стола. Можно добавить до 3 видео.
+                      </p>
+                      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                        {modalVideoFiles.map((file, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => { if (!file) { modalVideoActiveRef.current = idx; modalVideoInputRef.current?.click(); } }}
+                            onDragOver={e => e.preventDefault()}
+                            onDrop={e => {
+                              e.preventDefault();
+                              const dropped = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("video/"));
+                              if (dropped.length) addModalVideoFiles(dropped, idx);
+                            }}
+                            style={{
+                              width: 180, height: 120, borderRadius: 12,
+                              border: file ? "1.5px solid #E0DED8" : "2px dashed #C0BDB6",
+                              background: file ? "#000" : "rgba(0,0,0,0.04)",
+                              cursor: file ? "default" : "pointer",
+                              position: "relative", overflow: "hidden",
+                              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                            }}
+                          >
+                            {file && modalVideoPreviewUrls[idx] ? (
+                              <>
+                                <video src={modalVideoPreviewUrls[idx]!} muted preload="metadata"
+                                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                  onLoadedMetadata={e => { (e.target as HTMLVideoElement).currentTime = 0.001; }} />
+                                <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.2)",
+                                  display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+                                  <span style={{ fontSize: 28, color: "#fff", opacity: 0.9 }}>▶</span>
+                                </div>
+                                <button onClick={e => { e.stopPropagation(); removeModalVideoFile(idx); }}
+                                  style={{ position: "absolute", top: 6, right: 6, width: 22, height: 22, borderRadius: "50%",
+                                    background: "rgba(0,0,0,0.7)", border: "none", color: "#fff", cursor: "pointer",
+                                    fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}>✕</button>
+                                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "4px 8px",
+                                  background: "linear-gradient(transparent, rgba(0,0,0,0.6))", fontSize: 10,
+                                  color: "rgba(255,255,255,0.9)", fontWeight: 600, overflow: "hidden",
+                                  textOverflow: "ellipsis", whiteSpace: "nowrap", pointerEvents: "none" }}>
+                                  {file.name}
+                                </div>
+                              </>
+                            ) : (
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center",
+                                gap: 6, color: "#C0BDB6", userSelect: "none" }}>
+                                <span style={{ fontSize: 30 }}>🎬</span>
+                                <span style={{ fontSize: 11, fontWeight: 600 }}>+ Добавить видео</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <input ref={modalVideoInputRef} type="file" accept="video/*" multiple style={{ display: "none" }}
+                        onChange={e => {
+                          const files = Array.from(e.target.files || []).filter(f => f.type.startsWith("video/"));
+                          if (files.length) addModalVideoFiles(files, modalVideoActiveRef.current);
+                          modalVideoActiveRef.current = -1;
+                          e.target.value = "";
+                        }} />
+                      <div style={{ marginTop: 8, fontSize: 12, color: "#aaa" }}>Поддерживаются форматы MP4, MOV, AVI, WebM и др.</div>
+                    </div>
+                  )}
+
+                  {/* Превью сохранённого изображения (когда нет активного upload/video) */}
+                  {(modalImageMode === null || modalImageMode === "generate" || modalImageMode === "edit") && (
+                    imgSrc ? (
+                      <img src={imgSrc} alt="preview"
+                        style={{ width: "100%", maxHeight: 320, objectFit: "cover", borderRadius: 12 }} />
+                    ) : (
+                      <div style={{ background: "#F8F7F4", borderRadius: 12, padding: "40px 16px",
+                        display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                        border: "2px dashed #E0DED8" }}>
+                        <span style={{ fontSize: 40 }}>🖼</span>
+                        <span style={{ fontSize: 13, color: "#999" }}>Изображение не прикреплено</span>
+                      </div>
+                    )
+                  )}
+                  {/* Показываем сохранённое изображение в режимах upload/video если новых файлов ещё нет */}
+                  {(modalImageMode === "upload" || modalImageMode === "video") && imgSrc && modalUploadFilled.length === 0 && !modalVideoFiles.some(Boolean) && (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ fontSize: 12, color: "#888", marginBottom: 6 }}>Текущее изображение:</div>
+                      <img src={imgSrc} alt="current"
+                        style={{ width: "100%", maxHeight: 200, objectFit: "cover", borderRadius: 12 }} />
                     </div>
                   )}
                 </div>
