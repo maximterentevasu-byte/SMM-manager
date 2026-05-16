@@ -65,6 +65,72 @@ async def health():
     return {"status": "ok"}
 
 
+@app.post("/api/debug/trigger-notifications")
+async def debug_trigger_notifications():
+    """Ручной запуск уведомлений (для тестирования)."""
+    from app.workers.notification_tasks import notify_pending_posts
+    notify_pending_posts.delay()
+    return {"status": "triggered", "message": "Задача уведомлений поставлена в очередь Celery"}
+
+
+@app.post("/api/debug/trigger-replies-check")
+async def debug_trigger_replies_check():
+    """Ручной запуск опроса Telegram на ответы."""
+    from app.workers.notification_tasks import check_telegram_replies
+    check_telegram_replies.delay()
+    return {"status": "triggered", "message": "Задача проверки ответов поставлена в очередь Celery"}
+
+
+@app.get("/api/debug/notifications-status")
+async def debug_notifications_status():
+    """Статус системы уведомлений: слоты, подключения, последние уведомления."""
+    from sqlalchemy import text
+    from app.database import AsyncSessionLocal
+    from datetime import datetime, timedelta
+
+    async with AsyncSessionLocal() as db:
+        now = datetime.utcnow()
+        deadline = now + timedelta(days=3)
+
+        slots_result = await db.execute(text(
+            "SELECT id, platform, scheduled_at, status FROM content_slots "
+            "WHERE status = 'needs_info' AND scheduled_at >= :now AND scheduled_at <= :deadline "
+            "ORDER BY scheduled_at"
+        ), {"now": now, "deadline": deadline})
+        slots = [dict(r._mapping) for r in slots_result]
+
+        conns_result = await db.execute(text(
+            "SELECT id, platform, admin_chat_id, tg_update_offset FROM platform_connections "
+            "WHERE platform = 'telegram' AND is_active = true"
+        ))
+        conns = [dict(r._mapping) for r in conns_result]
+
+        # Проверяем существование таблицы slot_notifications
+        try:
+            notifs_result = await db.execute(text(
+                "SELECT slot_id, tg_message_id, sent_at FROM slot_notifications "
+                "ORDER BY sent_at DESC LIMIT 10"
+            ))
+            notifs = [dict(r._mapping) for r in notifs_result]
+            table_exists = True
+        except Exception as e:
+            notifs = []
+            table_exists = False
+
+    return {
+        "now_utc": now.isoformat(),
+        "now_msk": (now + timedelta(hours=3)).isoformat(),
+        "needs_info_slots_in_3_days": len(slots),
+        "slots": [{"id": str(s["id"]), "platform": s["platform"],
+                   "scheduled_at": str(s["scheduled_at"])} for s in slots],
+        "telegram_connections_with_admin_chat": len([c for c in conns if c["admin_chat_id"]]),
+        "connections": [{"id": str(c["id"]), "has_admin_chat": bool(c["admin_chat_id"]),
+                         "tg_update_offset": c["tg_update_offset"]} for c in conns],
+        "slot_notifications_table_exists": table_exists,
+        "recent_notifications_sent": len(notifs),
+    }
+
+
 @app.get("/api/debug/gemini-models")
 async def debug_gemini_models():
     """Список моделей Gemini доступных по текущему API-ключу."""

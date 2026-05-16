@@ -82,11 +82,6 @@ async def _notify():
     now_utc = datetime.utcnow()
     now_msk = now_utc + MSK_OFFSET
 
-    # Задача запускается только в правильные часы (10, 13, 16, 19, 22 МСК).
-    # Дополнительная защита: не отправляем раньше 10:00 МСК.
-    if now_msk.hour < NOTIFY_HOUR_MSK:
-        return
-
     async with get_worker_db() as db:
         deadline = now_utc + timedelta(days=NOTIFY_DAYS_BEFORE)
 
