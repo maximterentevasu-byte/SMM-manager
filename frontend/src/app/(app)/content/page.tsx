@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 
@@ -126,6 +126,20 @@ export default function ContentPage() {
   // Category-2 info provision state
   const [infoAnswers, setInfoAnswers]   = useState<string[]>([]);
   const [providingInfo, setProvidingInfo] = useState(false);
+
+  // Modal image section state
+  const [modalImageMode, setModalImageMode] = useState<"generate" | "upload" | "edit" | null>(null);
+  const [modalGenPrompt, setModalGenPrompt] = useState("");
+  const [modalEditInstruction, setModalEditInstruction] = useState("");
+  const [modalUploadedImage, setModalUploadedImage] = useState<string | null>(null);
+  const [editingModalImg, setEditingModalImg] = useState(false);
+
+  // Date editing state
+  const [editingDate, setEditingDate] = useState(false);
+  const [modalDate, setModalDate]     = useState("");
+  const [savingDate, setSavingDate]   = useState(false);
+
+  const modalUploadRef = useRef<HTMLInputElement>(null);
 
   const [businessId] = useState(() =>
     typeof window !== "undefined" ? localStorage.getItem("businessId") || "" : ""
@@ -277,13 +291,22 @@ export default function ContentPage() {
     setExpanded(slot);
     setModalText(slot.post_text || "");
     setModalPrompt(slot.image_prompt || "");
+    setModalGenPrompt(slot.image_prompt || "");
     setCarouselIdx(0);
     setShowNeedsInfo(false);
     setEditingPrompt(false);
     setSelectedInfoItems(slot.needs_info_for || []);
     setInfoAnswers((slot.needs_info_for || []).map(() => ""));
+    setModalDate(new Date(slot.scheduled_at).toISOString().slice(0, 16));
+    setModalImageMode(null);
+    setModalUploadedImage(null);
+    setEditingDate(false);
+    setModalEditInstruction("");
   };
-  const closeModal = () => { setExpanded(null); setShowNeedsInfo(false); setEditingPrompt(false); };
+  const closeModal = () => {
+    setExpanded(null); setShowNeedsInfo(false); setEditingPrompt(false);
+    setEditingDate(false); setModalImageMode(null); setModalUploadedImage(null);
+  };
 
   const saveModal = async () => {
     if (!expanded) return;
@@ -315,6 +338,67 @@ export default function ContentPage() {
       await api.patch(`/content/slot/${slotId}`, { scheduled_at: newDate.toISOString() });
       setSlots(prev => prev.map(s => s.id === slotId ? { ...s, scheduled_at: newDate.toISOString() } : s));
     } catch { alert("Ошибка перемещения поста"); }
+  };
+
+  const saveModalDate = async () => {
+    if (!expanded || !modalDate) return;
+    setSavingDate(true);
+    try {
+      const iso = new Date(modalDate).toISOString();
+      await api.patch(`/content/slot/${expanded.id}`, { scheduled_at: iso });
+      setSlots(prev => prev.map(s => s.id === expanded.id ? { ...s, scheduled_at: iso } : s));
+      setExpanded(prev => prev ? { ...prev, scheduled_at: iso } : null);
+      setEditingDate(false);
+    } catch { alert("Ошибка сохранения даты"); }
+    finally { setSavingDate(false); }
+  };
+
+  const handleModalUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !expanded) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const dataUrl = ev.target?.result as string;
+      const base64 = dataUrl.split(",")[1];
+      setModalUploadedImage(dataUrl);
+      try {
+        await api.patch(`/content/slot/${expanded.id}`, { image_base64: base64 });
+        setSlots(prev => prev.map(s => s.id === expanded.id ? { ...s, image_base64: base64 } : s));
+        setExpanded(prev => prev ? { ...prev, image_base64: base64 } : null);
+        setModalUploadedImage(null);
+      } catch { alert("Ошибка загрузки изображения"); }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const editModalImage = async () => {
+    if (!expanded || !modalEditInstruction.trim()) return;
+    const currentBase64 = expanded.image_base64;
+    if (!currentBase64) { alert("Сначала добавьте изображение для редактирования"); return; }
+    setEditingModalImg(true);
+    try {
+      const { data } = await api.post(`/post-creator/${businessId}/edit-image`, {
+        base_image: { data: currentBase64, mime: "image/jpeg" },
+        reference_images: [],
+        instruction_ru: modalEditInstruction,
+      });
+      const taskId = data.task_id;
+      for (let i = 0; i < 60; i++) {
+        await new Promise(r => setTimeout(r, 5000));
+        const { data: res } = await api.get(`/post-creator/${businessId}/image-task/${taskId}`);
+        if (res.status === "done") {
+          const b64 = res.image_base64;
+          await api.patch(`/content/slot/${expanded.id}`, { image_base64: b64 });
+          setSlots(prev => prev.map(s => s.id === expanded.id ? { ...s, image_base64: b64 } : s));
+          setExpanded(prev => prev ? { ...prev, image_base64: b64 } : null);
+          setModalEditInstruction("");
+          break;
+        }
+        if (res.status === "error") { alert("Ошибка редактирования: " + res.error); break; }
+      }
+    } catch (e: any) { alert(e?.response?.data?.detail || "Ошибка редактирования"); }
+    finally { setEditingModalImg(false); }
   };
 
   const navCal = (dir: -1 | 1) => {
@@ -744,113 +828,245 @@ export default function ContentPage() {
       </div>
 
       {/* ── Slot modal ── */}
-      {expanded && (
-        <div onClick={closeModal}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)",
-            display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}>
-          <div onClick={e => e.stopPropagation()}
-            style={{ background: "#fff", borderRadius: 20, width: "min(760px, 95vw)",
-              maxHeight: "92vh", overflow: "auto", padding: "28px 32px", boxSizing: "border-box" }}>
+      {expanded && (() => {
+        const st = STATUS_CONFIG[expanded.status] || STATUS_CONFIG.planned;
+        const hasImage = !!(expanded.image_base64 || expanded.image_url || modalUploadedImage);
+        const hasText  = !!modalText.trim();
+        const allInfoDone = !expanded.needs_info_for || infoAnswers.every(a => a?.trim());
+        const canApprove  = hasText && hasImage && allInfoDone;
+        const imgSrc = expanded.image_base64
+          ? `data:image/png;base64,${expanded.image_base64}`
+          : expanded.image_url || modalUploadedImage || null;
+        const inp13: React.CSSProperties = {
+          width: "100%", padding: "9px 12px", border: "1.5px solid #E0DED8",
+          borderRadius: 10, fontSize: 13, fontFamily: "inherit", outline: "none",
+          resize: "vertical" as const, boxSizing: "border-box" as const, background: "#fff",
+        };
+        const imgBtn = (active: boolean): React.CSSProperties => ({
+          flex: 1, padding: "9px 0", border: `1.5px solid ${active ? "#533AB7" : "#E0DED8"}`,
+          borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 500,
+          background: active ? "#EEEDFE" : "#fff", color: active ? "#533AB7" : "#555",
+        });
 
-            {/* Modal header */}
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 20 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, display: "flex",
-                alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700,
-                background: PLATFORM_COLORS[expanded.platform]?.bg || "#F1EFE8",
-                border: `2px solid ${PLATFORM_COLORS[expanded.platform]?.border || "#bbb"}`,
-                flexShrink: 0 }}>
-                {PLATFORM_ICON[expanded.platform]}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a1a" }}>{expanded.rubric_name}</div>
-                <div style={{ fontSize: 13, color: "#888", marginTop: 2 }}>
-                  {new Date(expanded.scheduled_at).toLocaleDateString("ru-RU", {
-                    weekday: "long", year: "numeric", month: "long", day: "numeric",
-                  })} · {String(new Date(expanded.scheduled_at).getHours()).padStart(2,"0")}:{String(new Date(expanded.scheduled_at).getMinutes()).padStart(2,"0")}
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 20,
-                  color: (STATUS_CONFIG[expanded.status] || STATUS_CONFIG.planned).color,
-                  background: (STATUS_CONFIG[expanded.status] || STATUS_CONFIG.planned).bg }}>
-                  {(STATUS_CONFIG[expanded.status] || STATUS_CONFIG.planned).label}
-                </span>
-                <button onClick={closeModal}
-                  style={{ width: 32, height: 32, borderRadius: "50%", border: "1px solid #E0DED8",
-                    background: "#fff", cursor: "pointer", fontSize: 16, color: "#888",
-                    display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
-              </div>
-            </div>
+        return (
+          <div onClick={closeModal}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)",
+              display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "1rem" }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background: "#fff", borderRadius: 20, width: "min(760px, 95vw)",
+                maxHeight: "92vh", display: "flex", flexDirection: "column", boxSizing: "border-box" }}>
 
-            {/* ── Category 2: needs_info без текста — форма ответов ── */}
-            {expanded.status === "needs_info" && !expanded.post_text && expanded.needs_info_for && (
-              <div style={{ background: "#FFF8ED", borderRadius: 12, padding: "16px 18px",
-                marginBottom: 20, border: "1px solid #FFD699" }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#7C4400", marginBottom: 4 }}>
-                  📋 Нужна информация для генерации поста
-                </div>
-                <div style={{ fontSize: 13, color: "#8B5500", marginBottom: 16, lineHeight: 1.5 }}>
-                  Ответьте на вопросы ниже — AI сгенерирует точный текст поста на основе ваших ответов
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  {expanded.needs_info_for.map((question, i) => (
-                    <div key={i}>
-                      <label style={{ fontSize: 13, fontWeight: 600, color: "#444", display: "block", marginBottom: 6 }}>
-                        {question}
-                      </label>
-                      <textarea
-                        value={infoAnswers[i] || ""}
-                        onChange={e => {
-                          const next = [...infoAnswers];
-                          next[i] = e.target.value;
-                          setInfoAnswers(next);
-                        }}
-                        placeholder="Ваш ответ..."
-                        rows={2}
-                        style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #E0DED8",
-                          borderRadius: 10, fontSize: 13, fontFamily: "inherit", outline: "none",
-                          resize: "vertical", boxSizing: "border-box", background: "#fff" }}
-                        onFocus={e => (e.target.style.borderColor = "#EA580C")}
-                        onBlur={e => (e.target.style.borderColor = "#E0DED8")}
-                      />
+              {/* ── Header (fixed) ── */}
+              <div style={{ padding: "22px 28px 16px", borderBottom: "1px solid #F0EEE8", flexShrink: 0 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, display: "flex",
+                    alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700,
+                    background: PLATFORM_COLORS[expanded.platform]?.bg || "#F1EFE8",
+                    border: `2px solid ${PLATFORM_COLORS[expanded.platform]?.border || "#bbb"}`, flexShrink: 0 }}>
+                    {PLATFORM_ICON[expanded.platform]}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", marginBottom: 4 }}>
+                      {expanded.rubric_name}
                     </div>
-                  ))}
+                    {editingDate ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <input type="datetime-local" value={modalDate} onChange={e => setModalDate(e.target.value)}
+                          style={{ padding: "4px 8px", border: "1.5px solid #533AB7", borderRadius: 8,
+                            fontSize: 13, fontFamily: "inherit", outline: "none" }} />
+                        <button onClick={saveModalDate} disabled={savingDate}
+                          style={{ padding: "4px 12px", background: "#533AB7", color: "#fff",
+                            border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                          {savingDate ? "..." : "Сохранить"}
+                        </button>
+                        <button onClick={() => setEditingDate(false)}
+                          style={{ padding: "4px 10px", background: "#F1EFE8", border: "none",
+                            borderRadius: 8, cursor: "pointer", fontSize: 12, color: "#555" }}>
+                          Отмена
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 13, color: "#888" }}>
+                          {new Date(expanded.scheduled_at).toLocaleDateString("ru-RU", {
+                            weekday: "long", year: "numeric", month: "long", day: "numeric",
+                          })} · {String(new Date(expanded.scheduled_at).getHours()).padStart(2,"0")}:{String(new Date(expanded.scheduled_at).getMinutes()).padStart(2,"0")}
+                        </span>
+                        <button onClick={() => setEditingDate(true)}
+                          title="Изменить дату и время"
+                          style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14,
+                            color: "#aaa", padding: "0 2px", lineHeight: 1 }}>✏️</button>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 20,
+                      color: st.color, background: st.bg }}>{st.label}</span>
+                    <button onClick={closeModal}
+                      style={{ width: 32, height: 32, borderRadius: "50%", border: "1px solid #E0DED8",
+                        background: "#fff", cursor: "pointer", fontSize: 16, color: "#888",
+                        display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => provideInfo(expanded)}
-                  disabled={providingInfo || infoAnswers.every(a => !a?.trim())}
-                  style={{ marginTop: 16, padding: "11px 24px", fontSize: 14, fontWeight: 700,
-                    color: "#fff", border: "none", borderRadius: 12, cursor: "pointer",
-                    background: providingInfo || infoAnswers.every(a => !a?.trim()) ? "#ccc" : "#EA580C" }}>
-                  {providingInfo ? "Генерирую пост..." : "✨ Сгенерировать текст поста"}
-                </button>
               </div>
-            )}
 
-            {/* ── Category 1 & approved needs_info: кнопки согласования ── */}
-            {(expanded.status === "pending_approval" ||
-              (expanded.status === "needs_info" && expanded.post_text)) && (
-              <div style={{ background: (STATUS_CONFIG[expanded.status] || STATUS_CONFIG.planned).bg,
-                borderRadius: 12, padding: "14px 16px", marginBottom: 20,
-                border: `1px solid ${(STATUS_CONFIG[expanded.status] || STATUS_CONFIG.planned).color}33` }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "#333", marginBottom: 10 }}>
-                  ⏳ Пост ждёт вашего согласования
-                </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button onClick={() => approveSlot(expanded)} disabled={approvingId === expanded.id}
-                    style={{ padding: "9px 20px", background: "#0F6E56", color: "#fff",
-                      border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
-                    {approvingId === expanded.id ? "..." : "✓ Согласовать"}
-                  </button>
-                  <button onClick={() => setShowNeedsInfo(!showNeedsInfo)}
-                    style={{ padding: "9px 16px", background: "transparent",
-                      border: "1.5px solid #E0DED8", borderRadius: 10, cursor: "pointer", fontSize: 13, color: "#555" }}>
-                    📋 Нужна доп. информация
-                  </button>
+              {/* ── Scrollable body ── */}
+              <div style={{ overflowY: "auto", flex: 1, padding: "20px 28px" }}>
+
+                {/* 1. Идея поста — всегда сверху */}
+                {expanded.idea && (
+                  <div style={{ background: "#F8F7F4", borderRadius: 12, padding: "12px 16px", marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#999", marginBottom: 6,
+                      textTransform: "uppercase", letterSpacing: .5 }}>Идея поста</div>
+                    <div style={{ fontSize: 14, color: "#333", lineHeight: 1.6 }}>{expanded.idea.idea}</div>
+                    {expanded.idea.hook && (
+                      <div style={{ fontSize: 13, color: "#777", marginTop: 5, fontStyle: "italic" }}>
+                        Хук: {expanded.idea.hook}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 2. Запрос информации (needs_info без текста) */}
+                {expanded.status === "needs_info" && !expanded.post_text && expanded.needs_info_for && (
+                  <div style={{ background: "#FFF8ED", borderRadius: 12, padding: "16px 18px",
+                    marginBottom: 16, border: "1px solid #FFD699" }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#7C4400", marginBottom: 4 }}>
+                      📋 Нужна информация для генерации поста
+                    </div>
+                    <div style={{ fontSize: 13, color: "#8B5500", marginBottom: 14, lineHeight: 1.5 }}>
+                      Ответьте на вопросы — AI сгенерирует текст поста на основе ваших ответов
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {expanded.needs_info_for.map((question, i) => (
+                        <div key={i}>
+                          <label style={{ fontSize: 13, fontWeight: 600, color: "#444", display: "block", marginBottom: 5 }}>
+                            {question}
+                          </label>
+                          <textarea value={infoAnswers[i] || ""} rows={2}
+                            onChange={e => { const next = [...infoAnswers]; next[i] = e.target.value; setInfoAnswers(next); }}
+                            placeholder="Ваш ответ..."
+                            style={{ ...inp13 }}
+                            onFocus={e => (e.target.style.borderColor = "#EA580C")}
+                            onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={() => provideInfo(expanded)}
+                      disabled={providingInfo || infoAnswers.every(a => !a?.trim())}
+                      style={{ marginTop: 14, padding: "10px 22px", fontSize: 14, fontWeight: 700,
+                        color: "#fff", border: "none", borderRadius: 10, cursor: "pointer",
+                        background: providingInfo || infoAnswers.every(a => !a?.trim()) ? "#ccc" : "#EA580C" }}>
+                      {providingInfo ? "Генерирую пост..." : "✨ Сгенерировать текст поста"}
+                    </button>
+                  </div>
+                )}
+
+                {/* 3. Текст поста */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#999", marginBottom: 8,
+                    textTransform: "uppercase", letterSpacing: .5 }}>Текст поста</div>
+                  <textarea value={modalText} onChange={e => setModalText(e.target.value)}
+                    style={{ width: "100%", minHeight: 280, padding: "12px 14px", fontSize: 14,
+                      lineHeight: 1.75, border: "1.5px solid #E0DED8", borderRadius: 10,
+                      resize: "vertical", fontFamily: "inherit", outline: "none",
+                      boxSizing: "border-box", color: "#2a2a2a", background: "#FAFAF8" }}
+                    onFocus={e => (e.target.style.borderColor = "#533AB7")}
+                    onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
                 </div>
 
+                {/* 4. Изображение */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#999", marginBottom: 12,
+                    textTransform: "uppercase", letterSpacing: .5 }}>Изображение</div>
+
+                  {/* 3 кнопки режима */}
+                  <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                    <button onClick={() => setModalImageMode(modalImageMode === "generate" ? null : "generate")}
+                      style={imgBtn(modalImageMode === "generate")}>
+                      ✨ Сгенерировать
+                    </button>
+                    <button onClick={() => modalUploadRef.current?.click()}
+                      style={imgBtn(modalImageMode === "upload")}>
+                      📁 Загрузить
+                    </button>
+                    <button onClick={() => setModalImageMode(modalImageMode === "edit" ? null : "edit")}
+                      style={imgBtn(modalImageMode === "edit")}>
+                      🖌 Редактировать
+                    </button>
+                    <input ref={modalUploadRef} type="file" accept="image/*" style={{ display: "none" }}
+                      onChange={handleModalUpload} />
+                  </div>
+
+                  {/* Подблок: генерация */}
+                  {modalImageMode === "generate" && (
+                    <div style={{ background: "#F8F7F4", borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 8 }}>
+                        Промт для генерации
+                      </div>
+                      <textarea value={modalGenPrompt} onChange={e => setModalGenPrompt(e.target.value)}
+                        placeholder="Опишите желаемое изображение на русском или английском..."
+                        style={{ ...inp13, minHeight: 80 }}
+                        onFocus={e => (e.target.style.borderColor = "#533AB7")}
+                        onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
+                      <p style={{ margin: "6px 0 12px", fontSize: 11, color: "#aaa" }}>
+                        Можно писать на русском — модель понимает оба языка
+                      </p>
+                      <button onClick={() => generateImage(expanded, modalGenPrompt || undefined)}
+                        disabled={generatingImg === expanded.id}
+                        style={{ padding: "9px 20px", background: generatingImg === expanded.id ? "#ccc" : "#533AB7",
+                          color: "#fff", border: "none", borderRadius: 10, cursor: "pointer",
+                          fontSize: 13, fontWeight: 600 }}>
+                        {generatingImg === expanded.id ? "Генерирую..." : imgSrc ? "🔄 Перегенерировать" : "✨ Сгенерировать"}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Подблок: редактирование */}
+                  {modalImageMode === "edit" && (
+                    <div style={{ background: "#F8F7F4", borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                      {!expanded.image_base64 && (
+                        <div style={{ fontSize: 13, color: "#EA580C", marginBottom: 10 }}>
+                          ⚠ Сначала добавьте изображение (загрузите или сгенерируйте)
+                        </div>
+                      )}
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 8 }}>
+                        Инструкция по редактированию
+                      </div>
+                      <textarea value={modalEditInstruction}
+                        onChange={e => setModalEditInstruction(e.target.value)}
+                        placeholder="Что изменить в изображении? Например: сделать фон белым, добавить логотип..."
+                        style={{ ...inp13, minHeight: 70 }}
+                        onFocus={e => (e.target.style.borderColor = "#533AB7")}
+                        onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
+                      <button onClick={editModalImage}
+                        disabled={editingModalImg || !expanded.image_base64 || !modalEditInstruction.trim()}
+                        style={{ marginTop: 10, padding: "9px 20px",
+                          background: editingModalImg || !expanded.image_base64 ? "#ccc" : "#533AB7",
+                          color: "#fff", border: "none", borderRadius: 10, cursor: "pointer",
+                          fontSize: 13, fontWeight: 600 }}>
+                        {editingModalImg ? "Редактирую..." : "🖌 Редактировать"}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Превью */}
+                  {imgSrc ? (
+                    <img src={imgSrc} alt="preview"
+                      style={{ width: "100%", maxHeight: 320, objectFit: "cover", borderRadius: 12 }} />
+                  ) : (
+                    <div style={{ background: "#F8F7F4", borderRadius: 12, padding: "40px 16px",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                      border: "2px dashed #E0DED8" }}>
+                      <span style={{ fontSize: 40 }}>🖼</span>
+                      <span style={{ fontSize: 13, color: "#999" }}>Изображение не прикреплено</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 5. "Нужна доп. информация" expandable (для pending_approval) */}
                 {showNeedsInfo && (
-                  <div style={{ marginTop: 12, padding: 14, background: "#fff", borderRadius: 10,
+                  <div style={{ background: "#fff", borderRadius: 12, padding: 14, marginBottom: 8,
                     border: "1px solid #E0DED8" }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#333", marginBottom: 10 }}>
                       Что нужно предоставить?
@@ -872,167 +1088,65 @@ export default function ContentPage() {
                     </div>
                     <button onClick={() => requestInfo(expanded)}
                       disabled={selectedInfoItems.length === 0 || approvingId === expanded.id}
-                      style={{ padding: "8px 16px", background: selectedInfoItems.length === 0 ? "#ccc" : "#EA580C",
-                        color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+                      style={{ padding: "8px 16px",
+                        background: selectedInfoItems.length === 0 ? "#ccc" : "#EA580C",
+                        color: "#fff", border: "none", borderRadius: 10, cursor: "pointer",
+                        fontSize: 13, fontWeight: 600 }}>
                       Поставить статус «Жду инфо»
                     </button>
                   </div>
                 )}
+
               </div>
-            )}
 
-            {/* Idea block */}
-            {expanded.idea && (
-              <div style={{ background: "#F8F7F4", borderRadius: 12, padding: "12px 16px", marginBottom: 16 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "#999", marginBottom: 6, textTransform: "uppercase", letterSpacing: .5 }}>Идея</div>
-                <div style={{ fontSize: 14, color: "#333", lineHeight: 1.6 }}>{expanded.idea.idea}</div>
-                {expanded.idea.hook && (
-                  <div style={{ fontSize: 13, color: "#666", marginTop: 6, fontStyle: "italic" }}>
-                    Хук: {expanded.idea.hook}
-                  </div>
-                )}
-              </div>
-            )}
+              {/* ── Bottom bar (fixed) ── */}
+              <div style={{ padding: "14px 28px", borderTop: "1px solid #F0EEE8", flexShrink: 0,
+                display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
 
-            {/* Post text */}
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "#999", marginBottom: 8,
-                textTransform: "uppercase", letterSpacing: .5 }}>Текст поста</div>
-              <textarea value={modalText} onChange={e => setModalText(e.target.value)}
-                style={{ width: "100%", minHeight: 180, padding: "12px 14px", fontSize: 14,
-                  lineHeight: 1.7, border: "1.5px solid #E0DED8", borderRadius: 10,
-                  resize: "vertical", fontFamily: "inherit", outline: "none",
-                  boxSizing: "border-box", color: "#2a2a2a", background: "#FAFAF8" }}
-                onFocus={e => (e.target.style.borderColor = "#533AB7")}
-                onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
-            </div>
-
-            {/* Image block */}
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "#999", marginBottom: 8,
-                textTransform: "uppercase", letterSpacing: .5 }}>Изображение</div>
-
-              {/* Carousel or single image */}
-              {currentImages.length > 0 ? (
-                <div style={{ position: "relative" }}>
-                  <img
-                    src={currentImages[carouselIdx].startsWith("http")
-                      ? currentImages[carouselIdx]
-                      : `data:image/png;base64,${currentImages[carouselIdx]}`}
-                    alt="post"
-                    style={{ width: "100%", maxHeight: 280, objectFit: "cover", borderRadius: 12 }} />
-                  {currentImages.length > 1 && (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center",
-                      gap: 12, marginTop: 10 }}>
-                      <button onClick={() => setCarouselIdx(i => Math.max(0, i - 1))}
-                        disabled={carouselIdx === 0}
-                        style={{ padding: "6px 14px", background: "#F1EFE8", border: "none",
-                          borderRadius: 8, cursor: carouselIdx === 0 ? "default" : "pointer",
-                          opacity: carouselIdx === 0 ? 0.4 : 1, fontSize: 14 }}>←</button>
-                      <span style={{ fontSize: 13, color: "#888" }}>
-                        {carouselIdx + 1} / {currentImages.length}
-                      </span>
-                      <button onClick={() => setCarouselIdx(i => Math.min(currentImages.length - 1, i + 1))}
-                        disabled={carouselIdx === currentImages.length - 1}
-                        style={{ padding: "6px 14px", background: "#F1EFE8", border: "none",
-                          borderRadius: 8, cursor: carouselIdx === currentImages.length - 1 ? "default" : "pointer",
-                          opacity: carouselIdx === currentImages.length - 1 ? 0.4 : 1, fontSize: 14 }}>→</button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div style={{ background: "#F8F7F4", borderRadius: 12, padding: "28px 16px",
-                  display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 36 }}>🖼</span>
-                  <span style={{ fontSize: 13, color: "#999" }}>Картинка не сгенерирована</span>
-                </div>
-              )}
-
-              {/* Image prompt editor */}
-              <div style={{ marginTop: 14, background: "#F8F7F4", borderRadius: 12, padding: 14 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "#555" }}>Описание для генерации</span>
-                  <button onClick={() => setEditingPrompt(!editingPrompt)}
-                    style={{ fontSize: 12, color: "#533AB7", background: "none", border: "none",
-                      cursor: "pointer", padding: 0, textDecoration: "underline" }}>
-                    {editingPrompt ? "Отмена" : "✏️ Редактировать"}
-                  </button>
-                </div>
-                {editingPrompt ? (
-                  <textarea
-                    value={modalPrompt}
-                    onChange={e => setModalPrompt(e.target.value)}
-                    placeholder="Опишите желаемое изображение на русском или английском..."
-                    style={{ width: "100%", minHeight: 80, padding: "10px 12px", fontSize: 13,
-                      lineHeight: 1.5, border: "1.5px solid #533AB7", borderRadius: 10,
-                      resize: "vertical", fontFamily: "inherit", outline: "none",
-                      boxSizing: "border-box", background: "#fff" }}
-                  />
-                ) : (
-                  <p style={{ margin: 0, fontSize: 12, color: "#666", lineHeight: 1.5,
-                    fontStyle: expanded.image_prompt ? "normal" : "italic" }}>
-                    {expanded.image_prompt || "Промт не задан"}
-                  </p>
-                )}
-                <p style={{ margin: "6px 0 0", fontSize: 11, color: "#aaa" }}>
-                  Можно писать на русском — модель понимает оба языка
-                </p>
-
-                {/* Image action buttons */}
-                <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-                  <button
-                    onClick={() => generateImage(expanded, editingPrompt ? modalPrompt : undefined)}
-                    disabled={generatingImg === expanded.id}
-                    style={{ flex: 1, padding: "9px 14px", background: "#533AB7", color: "#fff",
-                      border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600,
-                      opacity: generatingImg === expanded.id ? 0.6 : 1 }}>
-                    {generatingImg === expanded.id ? "Генерирую..." :
-                      currentImages.length > 0 ? "🔄 Перегенерировать" : "✨ Сгенерировать"}
-                  </button>
-                  <button
-                    onClick={() => generateCarousel(expanded)}
-                    disabled={generatingCarousel || !expanded.image_prompt}
-                    title={!expanded.image_prompt ? "Сначала сгенерируйте изображение" : "Создать 3 варианта картинки"}
-                    style={{ padding: "9px 14px", background: generatingCarousel ? "#ccc" : "#F1EFE8",
-                      color: "#444", border: "1px solid #E0DED8", borderRadius: 10,
-                      cursor: generatingCarousel || !expanded.image_prompt ? "not-allowed" : "pointer",
-                      fontSize: 13, opacity: !expanded.image_prompt ? 0.5 : 1 }}>
-                    {generatingCarousel ? "Создаю..." : "🎠 Карусель (3 варианта)"}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div style={{ display: "flex", gap: 8, paddingTop: 4, flexWrap: "wrap" }}>
-              <button onClick={saveModal} disabled={modalSaving}
-                style={{ padding: "10px 20px", background: "#1a1a1a", color: "#fff",
-                  border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
-                {modalSaving ? "Сохраняю..." : "💾 Сохранить текст"}
-              </button>
-              {(expanded.status === "pending_approval" || expanded.status === "needs_info") && (
-                <button onClick={() => approveSlot(expanded)} disabled={approvingId === expanded.id}
-                  style={{ padding: "10px 20px", background: "#0F6E56", color: "#fff",
+                <button onClick={saveModal} disabled={modalSaving}
+                  style={{ padding: "10px 18px", background: "#1a1a1a", color: "#fff",
                     border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
-                  ✓ Согласовать
+                  {modalSaving ? "Сохраняю..." : "💾 Сохранить текст"}
                 </button>
-              )}
-              {expanded.status === "content_ready" && (
-                <button onClick={publishModal}
-                  style={{ padding: "10px 20px", background: "#0F6E56", color: "#fff",
-                    border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
-                  ✈ Опубликовать
+
+                <button
+                  onClick={() => approveSlot(expanded)}
+                  disabled={!canApprove || approvingId === expanded.id}
+                  title={!canApprove ? "Добавьте текст и изображение, ответьте на все вопросы" : ""}
+                  style={{ padding: "10px 18px",
+                    background: !canApprove || approvingId === expanded.id ? "#ccc" : "#0F6E56",
+                    color: "#fff", border: "none", borderRadius: 10,
+                    cursor: !canApprove ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600 }}>
+                  {approvingId === expanded.id ? "..." : "✓ Согласовать"}
                 </button>
-              )}
-              <button onClick={closeModal}
-                style={{ padding: "10px 20px", background: "#F1EFE8", color: "#555",
-                  border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13 }}>
-                Закрыть
-              </button>
+
+                {expanded.status === "content_ready" && (
+                  <button onClick={publishModal}
+                    style={{ padding: "10px 18px", background: "#185FA5", color: "#fff",
+                      border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+                    ✈ Опубликовать
+                  </button>
+                )}
+
+                <button onClick={() => setShowNeedsInfo(!showNeedsInfo)}
+                  style={{ padding: "10px 16px", background: showNeedsInfo ? "#FFE5CC" : "transparent",
+                    border: `1.5px solid ${showNeedsInfo ? "#EA580C" : "#E0DED8"}`,
+                    borderRadius: 10, cursor: "pointer", fontSize: 13,
+                    color: showNeedsInfo ? "#8B3200" : "#555" }}>
+                  📋 Нужна доп. информация
+                </button>
+
+                <button onClick={closeModal}
+                  style={{ marginLeft: "auto", padding: "10px 18px", background: "#F1EFE8",
+                    color: "#555", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13 }}>
+                  Закрыть
+                </button>
+
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
