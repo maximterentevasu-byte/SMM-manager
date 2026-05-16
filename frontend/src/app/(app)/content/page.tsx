@@ -340,6 +340,15 @@ export default function ContentPage() {
     setStrategyUpdated(!!localStorage.getItem("strategyUpdatedAt"));
   }, [load]);
 
+  // Синхронизация localInfoQuestions при открытии слота
+  useEffect(() => {
+    if (expanded?.needs_info_for && expanded.needs_info_for.length > 0 && localInfoQuestions.length === 0) {
+      setLocalInfoQuestions(expanded.needs_info_for);
+      setInfoAnswers(expanded.needs_info_for.map(() => ""));
+      setInfoAnsweredFlags(expanded.needs_info_for.map(() => false));
+    }
+  }, [expanded?.id]);
+
   // Авто-поллинг пока есть слоты в процессе генерации
   useEffect(() => {
     const generating = slots.some(s =>
@@ -1361,7 +1370,9 @@ export default function ContentPage() {
 
                 {/* 2. Запрос информации */}
                 {(() => {
-                  const qs = localInfoQuestions;
+                  const qs = localInfoQuestions.length > 0
+                    ? localInfoQuestions
+                    : (expanded.needs_info_for || []);
                   if (qs.length === 0) return null;
                   const hasUnfinishedText = qs.some((q, i) => !isMediaQuestion(q) && !infoAnsweredFlags[i]);
                   const hasUnfinishedMedia = qs.some(q => isMediaQuestion(q) && !hasImage);
