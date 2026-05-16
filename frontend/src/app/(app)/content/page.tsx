@@ -228,6 +228,9 @@ function ModalUploadCarousel({ slots, carouselIdx, setCarouselIdx }: {
   );
 }
 
+const MEDIA_QUESTION_KEYWORDS = ["фото", "видео", "пришли", "загрузи", "прикрепи", "изображение", "снимок", "фотографи"];
+const isMediaQuestion = (q: string) => MEDIA_QUESTION_KEYWORDS.some(kw => q.toLowerCase().includes(kw));
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function ContentPage() {
@@ -265,8 +268,9 @@ export default function ContentPage() {
   const [approvingId, setApprovingId]   = useState<string | null>(null);
 
   // Category-2 info provision state
-  const [infoAnswers, setInfoAnswers]   = useState<string[]>([]);
-  const [providingInfo, setProvidingInfo] = useState(false);
+  const [infoAnswers, setInfoAnswers]       = useState<string[]>([]);
+  const [infoAnsweredFlags, setInfoAnsweredFlags] = useState<boolean[]>([]);
+  const [providingInfo, setProvidingInfo]   = useState(false);
 
   // Modal image section state
   const [modalImageMode, setModalImageMode] = useState<"generate" | "upload" | "edit" | "video" | null>(null);
@@ -439,7 +443,8 @@ export default function ContentPage() {
   const provideInfo = async (slot: Slot) => {
     const questions = slot.needs_info_for || [];
     const answers = questions.map((q, i) => ({ question: q, answer: infoAnswers[i] || "" }));
-    if (answers.every(a => !a.answer.trim())) return;
+    const textAnswers = answers.filter((_, i) => !isMediaQuestion(questions[i]));
+    if (textAnswers.every(a => !a.answer.trim())) return;
     setProvidingInfo(true);
     try {
       const { data } = await api.post(`/content/slot/${slot.id}/provide-info`, { answers });
@@ -469,6 +474,7 @@ export default function ContentPage() {
     setEditingPrompt(false);
     setSelectedInfoItems(slot.needs_info_for || []);
     setInfoAnswers((slot.needs_info_for || []).map(() => ""));
+    setInfoAnsweredFlags((slot.needs_info_for || []).map(() => false));
     setModalDate(new Date(slot.scheduled_at).toISOString().slice(0, 16));
     setModalImageMode(null);
     setModalUploadSlots(Array(10).fill(null)); setModalUploadCarouselIdx(0);
@@ -482,6 +488,7 @@ export default function ContentPage() {
     setModalInlineEditInstruction(""); setModalAiImageSaved(false);
     setEditingDate(false);
     setModalEditInstruction("");
+    setInfoAnswers([]); setInfoAnsweredFlags([]);
   };
   const closeModal = () => {
     setExpanded(null); setShowNeedsInfo(false); setEditingPrompt(false);
@@ -493,6 +500,7 @@ export default function ContentPage() {
     setModalImageHistory([]); setModalCurrentImageIdx(-1); setModalImageGenCount(0);
     setModalEditAttemptCount(0); setModalInlineEditCount(0); setModalShowInlineEdit(false);
     setModalAiImageSaved(false);
+    setInfoAnswers([]); setInfoAnsweredFlags([]);
   };
 
   const saveModal = async () => {
@@ -1233,7 +1241,8 @@ export default function ContentPage() {
                           modalVideoFiles.some(Boolean) ||
                           modalAiImageSaved;
         const hasText  = !!modalText.trim();
-        const allInfoDone = !expanded.needs_info_for || infoAnswers.every(a => a?.trim());
+        const allInfoDone = !expanded.needs_info_for ||
+          (expanded.needs_info_for || []).every((q, i) => isMediaQuestion(q) || infoAnsweredFlags[i]);
         const canApprove  = hasText && hasImage && allInfoDone;
         const imgSrc = expanded.image_base64
           ? `data:image/png;base64,${expanded.image_base64}`
@@ -1329,39 +1338,88 @@ export default function ContentPage() {
                 )}
 
                 {/* 2. Запрос информации (needs_info без текста) */}
-                {expanded.status === "needs_info" && !expanded.post_text && expanded.needs_info_for && (
-                  <div style={{ background: "#FFF8ED", borderRadius: 12, padding: "16px 18px",
-                    marginBottom: 16, border: "1px solid #FFD699" }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#7C4400", marginBottom: 4 }}>
-                      📋 Нужна информация для генерации поста
-                    </div>
-                    <div style={{ fontSize: 13, color: "#8B5500", marginBottom: 14, lineHeight: 1.5 }}>
-                      Ответьте на вопросы — AI сгенерирует текст поста на основе ваших ответов
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                      {expanded.needs_info_for.map((question, i) => (
-                        <div key={i}>
-                          <label style={{ fontSize: 13, fontWeight: 600, color: "#444", display: "block", marginBottom: 5 }}>
-                            {question}
-                          </label>
-                          <textarea value={infoAnswers[i] || ""} rows={2}
-                            onChange={e => { const next = [...infoAnswers]; next[i] = e.target.value; setInfoAnswers(next); }}
-                            placeholder="Ваш ответ..."
-                            style={{ ...inp13 }}
-                            onFocus={e => (e.target.style.borderColor = "#EA580C")}
-                            onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
+                {expanded.status === "needs_info" && !expanded.post_text && expanded.needs_info_for && (() => {
+                  const qs = expanded.needs_info_for;
+                  const allTextDone = qs.every((q, i) => isMediaQuestion(q) || infoAnsweredFlags[i]);
+                  const anyVisible = qs.some((q, i) =>
+                    isMediaQuestion(q) ? !hasImage : !infoAnsweredFlags[i]
+                  );
+                  return (
+                    <div style={{ background: "#FFF8ED", borderRadius: 12, padding: "16px 18px",
+                      marginBottom: 16, border: "1px solid #FFD699" }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#7C4400", marginBottom: 4 }}>
+                        📋 Нужна информация для генерации поста
+                      </div>
+                      {anyVisible && (
+                        <div style={{ fontSize: 13, color: "#8B5500", marginBottom: 14, lineHeight: 1.5 }}>
+                          Ответьте на запросы — AI сгенерирует текст поста на основе ваших данных
                         </div>
-                      ))}
+                      )}
+                      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                        {qs.map((question, i) => {
+                          const isMedia = isMediaQuestion(question);
+                          if (isMedia) {
+                            if (hasImage) return null;
+                            return (
+                              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10,
+                                padding: "10px 14px", background: "#FFF3E0", borderRadius: 10,
+                                border: "1px solid #FFD580" }}>
+                                <span style={{ fontSize: 18, lineHeight: 1 }}>📎</span>
+                                <span style={{ fontSize: 13, color: "#7C4400", fontWeight: 600, lineHeight: 1.5 }}>
+                                  {question}
+                                  <span style={{ display: "block", fontSize: 12, fontWeight: 400, color: "#9A6000", marginTop: 3 }}>
+                                    Прикрепите в блоке «Изображение / Видео» ниже
+                                  </span>
+                                </span>
+                              </div>
+                            );
+                          }
+                          if (infoAnsweredFlags[i]) return null;
+                          return (
+                            <div key={i}>
+                              <label style={{ fontSize: 13, fontWeight: 600, color: "#444",
+                                display: "block", marginBottom: 6, lineHeight: 1.5 }}>
+                                {question}
+                              </label>
+                              <textarea value={infoAnswers[i] || ""} rows={2}
+                                onChange={e => { const next = [...infoAnswers]; next[i] = e.target.value; setInfoAnswers(next); }}
+                                placeholder="Ваш ответ..."
+                                style={{ ...inp13 }}
+                                onFocus={e => (e.target.style.borderColor = "#EA580C")}
+                                onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
+                              <div style={{ marginTop: 6 }}>
+                                <button
+                                  onClick={() => {
+                                    if (!infoAnswers[i]?.trim()) return;
+                                    const next = [...infoAnsweredFlags];
+                                    next[i] = true;
+                                    setInfoAnsweredFlags(next);
+                                  }}
+                                  disabled={!infoAnswers[i]?.trim()}
+                                  style={{ padding: "7px 18px", fontSize: 13, fontWeight: 600,
+                                    border: "none", borderRadius: 8,
+                                    cursor: infoAnswers[i]?.trim() ? "pointer" : "not-allowed",
+                                    background: infoAnswers[i]?.trim() ? "#EA580C" : "#E0DED8",
+                                    color: infoAnswers[i]?.trim() ? "#fff" : "#999" }}>
+                                  Ответить
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {allTextDone && (
+                        <button onClick={() => provideInfo(expanded)}
+                          disabled={providingInfo}
+                          style={{ marginTop: 16, padding: "10px 22px", fontSize: 14, fontWeight: 700,
+                            color: "#fff", border: "none", borderRadius: 10, cursor: providingInfo ? "not-allowed" : "pointer",
+                            background: providingInfo ? "#ccc" : "#EA580C" }}>
+                          {providingInfo ? "Генерирую пост..." : "✨ Сгенерировать текст поста"}
+                        </button>
+                      )}
                     </div>
-                    <button onClick={() => provideInfo(expanded)}
-                      disabled={providingInfo || infoAnswers.every(a => !a?.trim())}
-                      style={{ marginTop: 14, padding: "10px 22px", fontSize: 14, fontWeight: 700,
-                        color: "#fff", border: "none", borderRadius: 10, cursor: "pointer",
-                        background: providingInfo || infoAnswers.every(a => !a?.trim()) ? "#ccc" : "#EA580C" }}>
-                      {providingInfo ? "Генерирую пост..." : "✨ Сгенерировать текст поста"}
-                    </button>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* 3. Текст поста */}
                 <div style={{ marginBottom: 20 }}>
