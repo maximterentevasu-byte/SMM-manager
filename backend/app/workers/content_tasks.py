@@ -131,11 +131,16 @@ async def _generate_post_text(slot, profile: dict) -> dict:
     rubric = slot.rubric
     idea = slot.idea
 
+    address = profile.get('address', '')
+    contact_info = profile.get('contact_info', '')
+
     prompt = f"""Ты SMM-копирайтер для бренда "{profile.get('name', '')}".
 Голос бренда: {profile.get('brand_voice', 'дружелюбный')}
 Площадка: {spec['note']}
 Аудитория: {profile.get('audience', {}).get('primary', profile.get('audience_primary', ''))}
 УТП бизнеса: {profile.get('usp', '')}
+{f"Адрес: {address}" if address else ""}
+{f"Контакты: {contact_info}" if contact_info else ""}
 
 Рубрика: {rubric['name']}
 Структура: {' → '.join(rubric.get('structure', []))}
@@ -150,7 +155,7 @@ async def _generate_post_text(slot, profile: dict) -> dict:
 - НЕ придумывай имена сотрудников, клиентов, партнёров
 - НЕ указывай конкретные цены и цифры которых нет в профиле
 - НЕ призывай к действию со ссылкой на акцию или конкретный продукт
-- Если адрес не указан — не упоминай его
+- Если адрес указан — используй его, НЕ придумывай другой
 
 Длина: {spec['ideal_length']} символов ±20%
 Эмодзи: {spec['emoji']}
@@ -217,10 +222,16 @@ async def _generate_post_text_with_info(slot, profile: dict, answers: list[dict]
         for a in answers if a.get("answer", "").strip()
     )
 
+    address = profile.get('address', '')
+    contact_info = profile.get('contact_info', '')
+
     prompt = f"""Ты SMM-копирайтер для бренда "{profile.get('name', '')}".
 Голос бренда: {profile.get('brand_voice', 'дружелюбный')}
 Площадка: {spec['note']}
 Аудитория: {profile.get('audience', {}).get('primary', profile.get('audience_primary', ''))}
+УТП бизнеса: {profile.get('usp', '')}
+{f"Адрес: {address}" if address else ""}
+{f"Контакты: {contact_info}" if contact_info else ""}
 
 Рубрика: {rubric['name']}
 Структура: {' → '.join(rubric.get('structure', []))}
@@ -230,6 +241,7 @@ async def _generate_post_text_with_info(slot, profile: dict, answers: list[dict]
 ИНФОРМАЦИЯ ОТ ВЛАДЕЛЬЦА (обязательно использовать в посте):
 {answers_text}
 
+- Если адрес указан — используй его в посте
 Длина: {spec['ideal_length']} символов ±20%
 Эмодзи: {spec['emoji']}
 Хэштеги: {spec['hashtags']} штук в конце

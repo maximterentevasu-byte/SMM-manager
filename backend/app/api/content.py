@@ -299,10 +299,9 @@ async def generate_image_for_slot(
         slot.image_prompt = prompt
         await db.commit()
 
-    import asyncio
-    from app.services.gemini_image import generate_image_sync
+    from app.services.gemini_image import generate_image
     try:
-        b64 = await asyncio.to_thread(generate_image_sync, prompt, "1:1")
+        b64 = await generate_image(prompt, "1:1")
     except ValueError as e:
         raise HTTPException(400, f"Ошибка генерации: {str(e)}")
 
@@ -422,8 +421,7 @@ async def generate_carousel(
     if not slot.image_prompt:
         raise HTTPException(400, "Нет промта для генерации изображений")
 
-    import asyncio
-    from app.services.gemini_image import generate_image_sync
+    from app.services.gemini_image import generate_image
 
     variations = [
         slot.image_prompt,
@@ -434,7 +432,7 @@ async def generate_carousel(
     images = []
     for prompt in variations:
         try:
-            b64 = await asyncio.to_thread(generate_image_sync, prompt[:1000], "1:1")
+            b64 = await generate_image(prompt[:1000], "1:1")
             images.append(b64)
         except ValueError:
             pass

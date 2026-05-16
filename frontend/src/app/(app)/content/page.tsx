@@ -1420,9 +1420,9 @@ export default function ContentPage() {
                                     border: "1px solid #FFD580" }}>
                                     <span style={{ fontSize: 18, lineHeight: 1 }}>📎</span>
                                     <span style={{ fontSize: 13, color: "#7C4400", fontWeight: 600, lineHeight: 1.5 }}>
-                                      {question}
+                                      Добавь фото или видео товара
                                       <span style={{ display: "block", fontSize: 12, fontWeight: 400, color: "#9A6000", marginTop: 3 }}>
-                                        Прикрепите в блоке «Изображение / Видео» ниже
+                                        Загрузите в блоке «Изображение / Видео» ниже
                                       </span>
                                     </span>
                                   </div>
@@ -1996,14 +1996,6 @@ export default function ContentPage() {
                     ✈ Опубликовать
                   </button>
                 )}
-
-                <button onClick={() => setShowNeedsInfo(!showNeedsInfo)}
-                  style={{ padding: "10px 16px", background: showNeedsInfo ? "#FFE5CC" : "transparent",
-                    border: `1.5px solid ${showNeedsInfo ? "#EA580C" : "#E0DED8"}`,
-                    borderRadius: 10, cursor: "pointer", fontSize: 13,
-                    color: showNeedsInfo ? "#8B3200" : "#555" }}>
-                  📋 Нужна доп. информация
-                </button>
 
                 <button onClick={closeModal}
                   style={{ marginLeft: "auto", padding: "10px 18px", background: "#F1EFE8",
