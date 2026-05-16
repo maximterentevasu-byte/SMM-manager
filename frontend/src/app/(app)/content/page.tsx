@@ -103,7 +103,7 @@ export default function ContentPage() {
   const [strategyUpdated, setStrategyUpdated] = useState(false);
 
   // View state
-  const [viewMode, setViewMode]         = useState<"list" | "calendar">("list");
+  const [viewMode, setViewMode]         = useState<"list" | "calendar">("calendar");
   const [calMode, setCalMode]           = useState<"month" | "week">("month");
   const [calDate, setCalDate]           = useState(new Date());
   const [expanded, setExpanded]         = useState<Slot | null>(null);
@@ -448,7 +448,7 @@ export default function ContentPage() {
           <div style={{ flex: 1 }} />
 
           <div style={{ display: "flex", background: "#F1EFE8", borderRadius: 10, padding: 3, gap: 2 }}>
-            {(["list", "calendar"] as const).map(mode => (
+            {(["calendar", "list"] as const).map(mode => (
               <button key={mode} onClick={() => setViewMode(mode)}
                 style={{ padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer",
                   fontSize: 13, fontWeight: 500,

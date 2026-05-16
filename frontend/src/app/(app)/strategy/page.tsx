@@ -107,10 +107,8 @@ export default function StrategyPage() {
   const saveProfile = async () => {
     setSavingProfile(true);
     try {
-      const products = (profile.products_raw || "")
-        .split("\n").map((s: string) => s.trim()).filter(Boolean);
       await api.post(`/onboarding/save-profile/${businessId}`, {
-        ...profile, products, brand_voice_examples: [],
+        ...profile, products: [], active_promotions: "", brand_voice_examples: [],
         audience_pains: (profile.audience_pains || []).filter(Boolean),
         audience_objections: (profile.audience_objections || []).filter(Boolean),
         competitors: (profile.competitors || []).filter((c: any) => c.name || c.url),
@@ -382,23 +380,6 @@ export default function StrategyPage() {
                   </div>
                 ))}
 
-                <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, padding: "16px 20px" }}>
-                  <label style={lbl}>Товары / услуги</label>
-                  <textarea
-                    value={Array.isArray(profile.products) ? profile.products.join("\n") : (profile.products_raw || "")}
-                    onChange={(e) => setProfile({ ...profile, products_raw: e.target.value, products: e.target.value.split("\n").map((s: string) => s.trim()).filter(Boolean) })}
-                    placeholder={"Японские чипсы умами\nКорейская лапша Shin Ramyun\nТайские конфеты манго"}
-                    style={{ ...inp, minHeight: 100, resize: "vertical" }} />
-                  <p style={hint}>Каждый товар с новой строки</p>
-                </div>
-
-                <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, padding: "16px 20px" }}>
-                  <label style={lbl}>Текущие акции</label>
-                  <textarea value={profile.active_promotions || ""}
-                    onChange={(e) => setProfile({ ...profile, active_promotions: e.target.value })}
-                    placeholder="Если акций нет — оставьте пустым"
-                    style={{ ...inp, minHeight: 70, resize: "vertical" }} />
-                </div>
 
                 {profileSaved && (
                   <div style={{ padding: "12px 16px", background: "#E1F5EE", borderRadius: 10,
