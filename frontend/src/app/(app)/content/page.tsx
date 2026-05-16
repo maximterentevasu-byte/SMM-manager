@@ -103,6 +103,22 @@ const readFileAsBase64Modal = (f: File): Promise<ModalUploadSlot> =>
     r.readAsDataURL(f);
   });
 
+const extractVideoFrameModal = (objectUrl: string): Promise<string | null> =>
+  new Promise(resolve => {
+    const video = document.createElement("video");
+    video.muted = true; video.preload = "metadata"; video.crossOrigin = "anonymous"; video.src = objectUrl;
+    video.onloadeddata = () => { video.currentTime = 0.001; };
+    video.onseeked = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 1280; canvas.height = video.videoHeight || 720;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(null); return; }
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.9));
+    };
+    video.onerror = () => resolve(null);
+  });
+
 function ModalUploadGrid({ slots, onSlotClick, onRemove, onReorder, onFileDrop }: {
   slots: Array<ModalUploadSlot | null>;
   onSlotClick: (idx: number) => void;
@@ -176,8 +192,8 @@ function ModalUploadCarousel({ slots, carouselIdx, setCarouselIdx }: {
     <div style={{ marginTop: 14 }}>
       <div style={{ position: "relative", display: "block" }}>
         <img src={`data:${current.mime};base64,${current.data}`} alt="preview-current"
-          style={{ width: "100%", maxHeight: 260, objectFit: "cover", borderRadius: 12,
-            border: "1px solid #EAE8E2", display: "block" }} />
+          style={{ width: "100%", height: "auto", maxHeight: "55vh", objectFit: "contain",
+            borderRadius: 12, border: "1px solid #EAE8E2", display: "block", background: "#F8F7F4" }} />
         {filled.length > 1 && (
           <>
             <button onClick={() => setCarouselIdx(Math.max(0, safeIdx - 1))} disabled={safeIdx === 0}
@@ -265,14 +281,37 @@ export default function ContentPage() {
   const [modalVideoFiles, setModalVideoFiles] = useState<Array<File | null>>([null, null, null]);
   const [modalVideoPreviewUrls, setModalVideoPreviewUrls] = useState<Array<string | null>>([null, null, null]);
   const modalVideoActiveRef = useRef<number>(-1);
+  // Modal video cover
+  const [modalVideoCoverDataUrl, setModalVideoCoverDataUrl] = useState<string | null>(null);
+  const [modalVideoCoverAutoDataUrl, setModalVideoCoverAutoDataUrl] = useState<string | null>(null);
+  const [modalVideoCoverSource, setModalVideoCoverSource] = useState<"auto" | "upload" | "ai" | null>(null);
+  const [modalVideoCoverPrompt, setModalVideoCoverPrompt] = useState("");
+  const [modalShowVideoCoverPrompt, setModalShowVideoCoverPrompt] = useState(false);
+  const [modalLoadingVideoCover, setModalLoadingVideoCover] = useState(false);
+  const [modalVideoCoverRefPhoto, setModalVideoCoverRefPhoto] = useState<ModalUploadSlot | null>(null);
+  // Modal AI image history (shared: generate + edit)
+  const [modalImageHistory, setModalImageHistory] = useState<string[]>([]);
+  const [modalCurrentImageIdx, setModalCurrentImageIdx] = useState(-1);
+  const [modalImageGenCount, setModalImageGenCount] = useState(0);
+  const [modalEditAttemptCount, setModalEditAttemptCount] = useState(0);
+  const [modalInlineEditInstruction, setModalInlineEditInstruction] = useState("");
+  const [modalInlineEditCount, setModalInlineEditCount] = useState(0);
+  const [modalShowInlineEdit, setModalShowInlineEdit] = useState(false);
+  const [modalAiImageSaved, setModalAiImageSaved] = useState(false);
+  // Modal edit slots (base + reference)
+  const [modalEditSlots, setModalEditSlots] = useState<Array<ModalUploadSlot | null>>(Array(10).fill(null));
 
   // Date editing state
   const [editingDate, setEditingDate] = useState(false);
   const [modalDate, setModalDate]     = useState("");
   const [savingDate, setSavingDate]   = useState(false);
 
-  const modalSlotInputRef  = useRef<HTMLInputElement>(null);
-  const modalVideoInputRef = useRef<HTMLInputElement>(null);
+  const modalSlotInputRef       = useRef<HTMLInputElement>(null);
+  const modalVideoInputRef      = useRef<HTMLInputElement>(null);
+  const modalEditSlotInputRef   = useRef<HTMLInputElement>(null);
+  const modalEditActiveSlotRef  = useRef<number>(-1);
+  const modalVideoCoverInputRef = useRef<HTMLInputElement>(null);
+  const modalVideoCoverRefInputRef = useRef<HTMLInputElement>(null);
 
   const [businessId] = useState(() =>
     typeof window !== "undefined" ? localStorage.getItem("businessId") || "" : ""
@@ -432,19 +471,28 @@ export default function ContentPage() {
     setInfoAnswers((slot.needs_info_for || []).map(() => ""));
     setModalDate(new Date(slot.scheduled_at).toISOString().slice(0, 16));
     setModalImageMode(null);
-    setModalUploadSlots(Array(10).fill(null));
-    setModalUploadCarouselIdx(0);
+    setModalUploadSlots(Array(10).fill(null)); setModalUploadCarouselIdx(0);
+    setModalEditSlots(Array(10).fill(null));
     setModalVideoFiles([null, null, null]);
     setModalVideoPreviewUrls(prev => { prev.forEach(u => u && URL.revokeObjectURL(u)); return [null, null, null]; });
+    setModalVideoCoverDataUrl(null); setModalVideoCoverAutoDataUrl(null); setModalVideoCoverSource(null);
+    setModalVideoCoverPrompt(""); setModalShowVideoCoverPrompt(false); setModalVideoCoverRefPhoto(null);
+    setModalImageHistory([]); setModalCurrentImageIdx(-1); setModalImageGenCount(0);
+    setModalEditAttemptCount(0); setModalInlineEditCount(0); setModalShowInlineEdit(false);
+    setModalInlineEditInstruction(""); setModalAiImageSaved(false);
     setEditingDate(false);
     setModalEditInstruction("");
   };
   const closeModal = () => {
     setExpanded(null); setShowNeedsInfo(false); setEditingPrompt(false);
     setEditingDate(false); setModalImageMode(null);
-    setModalUploadSlots(Array(10).fill(null));
+    setModalUploadSlots(Array(10).fill(null)); setModalEditSlots(Array(10).fill(null));
     setModalVideoPreviewUrls(prev => { prev.forEach(u => u && URL.revokeObjectURL(u)); return [null, null, null]; });
     setModalVideoFiles([null, null, null]);
+    setModalVideoCoverDataUrl(null); setModalVideoCoverAutoDataUrl(null); setModalVideoCoverSource(null);
+    setModalImageHistory([]); setModalCurrentImageIdx(-1); setModalImageGenCount(0);
+    setModalEditAttemptCount(0); setModalInlineEditCount(0); setModalShowInlineEdit(false);
+    setModalAiImageSaved(false);
   };
 
   const saveModal = async () => {
@@ -465,6 +513,18 @@ export default function ContentPage() {
       setExpanded(prev => prev ? { ...prev, ...updates } : null);
       if (modalUploadFilled.length > 0) setModalUploadSlots(Array(10).fill(null));
     } catch { alert("Ошибка сохранения"); }
+    finally { setModalSaving(false); }
+  };
+
+  const saveModalAiImage = async () => {
+    if (!expanded || !modalAiImageB64) return;
+    setModalSaving(true);
+    try {
+      await api.patch(`/content/slot/${expanded.id}`, { image_base64: modalAiImageB64 });
+      setSlots(prev => prev.map(s => s.id === expanded.id ? { ...s, image_base64: modalAiImageB64 } : s));
+      setExpanded(prev => prev ? { ...prev, image_base64: modalAiImageB64 } : null);
+      setModalAiImageSaved(true);
+    } catch { alert("Ошибка сохранения изображения"); }
     finally { setModalSaving(false); }
   };
 
@@ -549,11 +609,119 @@ export default function ContentPage() {
     setModalUploadSlots(newSlots);
   };
 
+  // ── Modal image AI helpers ─────────────────────────────────────────────────
+
+  const pollModalImageTask = async (taskId: string): Promise<string> => {
+    for (let i = 0; i < 60; i++) {
+      await new Promise<void>(r => setTimeout(r, 5000));
+      const { data } = await api.get(`/post-creator/${businessId}/image-task/${taskId}`);
+      if (data.status === "done") return data.image_base64 as string;
+      if (data.status === "error") throw new Error(data.error || "Ошибка");
+    }
+    throw new Error("Тайм-аут — попробуйте ещё раз");
+  };
+
+  const generateImageModal = async () => {
+    if (!expanded || !modalGenPrompt.trim() || modalImageGenCount >= 3) return;
+    setEditingModalImg(true);
+    try {
+      const { data } = await api.post(`/content/slot/${expanded.id}/generate-image`, { prompt: modalGenPrompt });
+      const b64 = data.image_base64 || null;
+      if (b64) {
+        const newH = [...modalImageHistory, b64];
+        setModalImageHistory(newH); setModalCurrentImageIdx(newH.length - 1);
+        setModalImageGenCount(c => c + 1);
+      }
+    } catch (e: any) { alert(e?.response?.data?.detail || "Ошибка генерации"); }
+    finally { setEditingModalImg(false); }
+  };
+
+  const editImageFromModalSlots = async () => {
+    if (!expanded || !modalEditInstruction.trim() || modalEditFilled.length === 0 || modalEditAttemptCount >= 3) return;
+    setEditingModalImg(true);
+    try {
+      const baseImage = modalEditFilled[0];
+      const refImages = modalEditFilled.slice(1);
+      const { data: taskData } = await api.post(`/post-creator/${businessId}/edit-image`, {
+        base_image: baseImage,
+        reference_images: refImages.length > 0 ? refImages : undefined,
+        instruction_ru: modalEditInstruction,
+      });
+      const b64 = await pollModalImageTask(taskData.task_id);
+      const newH = [...modalImageHistory, b64];
+      setModalImageHistory(newH); setModalCurrentImageIdx(newH.length - 1);
+      setModalEditAttemptCount(c => c + 1);
+      setModalEditInstruction("");
+    } catch (e: any) { alert(e?.response?.data?.detail || "Ошибка редактирования"); }
+    finally { setEditingModalImg(false); }
+  };
+
+  const editImageModalInline = async () => {
+    if (!expanded || !modalInlineEditInstruction.trim() || !modalAiImageB64 || modalInlineEditCount >= 3) return;
+    setEditingModalImg(true);
+    try {
+      const { data: taskData } = await api.post(`/post-creator/${businessId}/edit-image`, {
+        base_image: { data: modalAiImageB64, mime: "image/png" },
+        instruction_ru: modalInlineEditInstruction,
+      });
+      const b64 = await pollModalImageTask(taskData.task_id);
+      const newH = [...modalImageHistory, b64];
+      setModalImageHistory(newH); setModalCurrentImageIdx(newH.length - 1);
+      setModalInlineEditCount(c => c + 1);
+      setModalInlineEditInstruction(""); setModalShowInlineEdit(false);
+    } catch (e: any) { alert(e?.response?.data?.detail || "Ошибка редактирования"); }
+    finally { setEditingModalImg(false); }
+  };
+
+  // ── Modal edit slot handlers ───────────────────────────────────────────────
+
+  const onModalEditSlotClick = (idx: number) => {
+    modalEditActiveSlotRef.current = idx;
+    modalEditSlotInputRef.current?.click();
+  };
+
+  const onModalEditSlotFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).filter(f => f.type.startsWith("image/"));
+    if (!files.length) return;
+    const newSlots = [...modalEditSlots];
+    let startIdx = modalEditActiveSlotRef.current >= 0 ? modalEditActiveSlotRef.current : 0;
+    for (const file of files) {
+      while (startIdx < 10 && newSlots[startIdx] !== null) startIdx++;
+      if (startIdx >= 10) break;
+      newSlots[startIdx] = await readFileAsBase64Modal(file);
+      startIdx++;
+    }
+    setModalEditSlots(newSlots);
+    modalEditActiveSlotRef.current = -1;
+    e.target.value = "";
+  };
+
+  const removeModalEditSlot = (idx: number) => {
+    setModalEditSlots(prev => { const n = [...prev]; n[idx] = null; return n; });
+  };
+
+  const reorderModalEditSlots = (from: number, to: number) => {
+    setModalEditSlots(prev => { const n = [...prev]; [n[from], n[to]] = [n[to], n[from]]; return n; });
+  };
+
+  const onModalEditFileDrop = async (startIdx: number, files: File[]) => {
+    const newSlots = [...modalEditSlots];
+    let idx = startIdx;
+    for (const file of files) {
+      while (idx < 10 && newSlots[idx] !== null) idx++;
+      if (idx >= 10) break;
+      newSlots[idx] = await readFileAsBase64Modal(file);
+      idx++;
+    }
+    setModalEditSlots(newSlots);
+  };
+
   // ── Modal video handlers ───────────────────────────────────────────────────
 
-  const addModalVideoFiles = (files: File[], startIdx = -1) => {
+  const addModalVideoFiles = async (files: File[], startIdx = -1) => {
     const newFiles = [...modalVideoFiles];
     const newUrls  = [...modalVideoPreviewUrls];
+    const hadFirst = newFiles[0] !== null;
     let idx = startIdx >= 0 ? startIdx : 0;
     for (const file of files) {
       while (idx < 3 && newFiles[idx] !== null) idx++;
@@ -565,6 +733,15 @@ export default function ContentPage() {
     }
     setModalVideoFiles(newFiles);
     setModalVideoPreviewUrls(newUrls);
+    if (!hadFirst && newUrls[0]) {
+      const dataUrl = await extractVideoFrameModal(newUrls[0]);
+      if (dataUrl) {
+        setModalVideoCoverAutoDataUrl(dataUrl);
+        if (modalVideoCoverSource === null || modalVideoCoverSource === "auto") {
+          setModalVideoCoverDataUrl(dataUrl); setModalVideoCoverSource("auto");
+        }
+      }
+    }
   };
 
   const removeModalVideoFile = (idx: number) => {
@@ -572,37 +749,51 @@ export default function ContentPage() {
     const newUrls  = [...modalVideoPreviewUrls];
     if (newUrls[idx]) URL.revokeObjectURL(newUrls[idx]!);
     newFiles[idx] = null; newUrls[idx] = null;
-    setModalVideoFiles(newFiles);
-    setModalVideoPreviewUrls(newUrls);
+    setModalVideoFiles(newFiles); setModalVideoPreviewUrls(newUrls);
+    if (idx === 0) {
+      setModalVideoCoverAutoDataUrl(null);
+      if (modalVideoCoverSource === "auto") { setModalVideoCoverDataUrl(null); setModalVideoCoverSource(null); }
+    }
   };
 
-  const editModalImage = async () => {
-    if (!expanded || !modalEditInstruction.trim()) return;
-    const currentBase64 = expanded.image_base64;
-    if (!currentBase64) { alert("Сначала добавьте изображение для редактирования"); return; }
-    setEditingModalImg(true);
+  const generateModalVideoCover = async () => {
+    if (!modalVideoCoverPrompt.trim()) return;
+    setModalLoadingVideoCover(true);
     try {
-      const { data } = await api.post(`/post-creator/${businessId}/edit-image`, {
-        base_image: { data: currentBase64, mime: "image/jpeg" },
-        reference_images: [],
-        instruction_ru: modalEditInstruction,
-      });
-      const taskId = data.task_id;
-      for (let i = 0; i < 60; i++) {
-        await new Promise(r => setTimeout(r, 5000));
-        const { data: res } = await api.get(`/post-creator/${businessId}/image-task/${taskId}`);
-        if (res.status === "done") {
-          const b64 = res.image_base64;
-          await api.patch(`/content/slot/${expanded.id}`, { image_base64: b64 });
-          setSlots(prev => prev.map(s => s.id === expanded.id ? { ...s, image_base64: b64 } : s));
-          setExpanded(prev => prev ? { ...prev, image_base64: b64 } : null);
-          setModalEditInstruction("");
-          break;
-        }
-        if (res.status === "error") { alert("Ошибка редактирования: " + res.error); break; }
+      let b64: string;
+      if (modalVideoCoverAutoDataUrl) {
+        const baseData = modalVideoCoverAutoDataUrl.split(",")[1];
+        const refs = modalVideoCoverRefPhoto ? [modalVideoCoverRefPhoto] : [];
+        const { data: taskData } = await api.post(`/post-creator/${businessId}/edit-image`, {
+          base_image: { data: baseData, mime: "image/jpeg" },
+          reference_images: refs.length > 0 ? refs : undefined,
+          instruction_ru: modalVideoCoverPrompt.trim(),
+        });
+        b64 = await pollModalImageTask(taskData.task_id);
+      } else {
+        const { data: taskData } = await api.post(`/post-creator/${businessId}/generate-image`, {
+          prompt_ru: modalVideoCoverPrompt.trim(), aspect_ratio: "16:9",
+        });
+        b64 = await pollModalImageTask(taskData.task_id);
       }
-    } catch (e: any) { alert(e?.response?.data?.detail || "Ошибка редактирования"); }
-    finally { setEditingModalImg(false); }
+      setModalVideoCoverDataUrl(`data:image/png;base64,${b64}`);
+      setModalVideoCoverSource("ai"); setModalShowVideoCoverPrompt(false);
+    } catch (e: any) {
+      alert("Ошибка генерации обложки: " + (e?.message || "попробуйте ещё раз"));
+    } finally { setModalLoadingVideoCover(false); }
+  };
+
+  const onModalVideoCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    const { data, mime } = await readFileAsBase64Modal(f);
+    setModalVideoCoverDataUrl(`data:${mime};base64,${data}`);
+    setModalVideoCoverSource("upload"); e.target.value = "";
+  };
+
+  const onModalVideoCoverRefPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    const slot = await readFileAsBase64Modal(f);
+    setModalVideoCoverRefPhoto(slot); e.target.value = "";
   };
 
   const navCal = (dir: -1 | 1) => {
@@ -644,6 +835,8 @@ export default function ContentPage() {
 
   const generatingCount = slots.filter(s => s.status === "planned" || s.status === "idea_ready").length;
   const modalUploadFilled = modalUploadSlots.filter((s): s is ModalUploadSlot => s !== null);
+  const modalEditFilled   = modalEditSlots.filter((s): s is ModalUploadSlot => s !== null);
+  const modalAiImageB64   = modalCurrentImageIdx >= 0 ? modalImageHistory[modalCurrentImageIdx] : "";
 
   const stats = {
     total:      slots.length,
@@ -1037,7 +1230,8 @@ export default function ContentPage() {
         const st = STATUS_CONFIG[expanded.status] || STATUS_CONFIG.planned;
         const hasImage = !!(expanded.image_base64 || expanded.image_url) ||
                           modalUploadFilled.length > 0 ||
-                          modalVideoFiles.some(Boolean);
+                          modalVideoFiles.some(Boolean) ||
+                          modalAiImageSaved;
         const hasText  = !!modalText.trim();
         const allInfoDone = !expanded.needs_info_for || infoAnswers.every(a => a?.trim());
         const canApprove  = hasText && hasImage && allInfoDone;
@@ -1050,7 +1244,7 @@ export default function ContentPage() {
           resize: "vertical" as const, boxSizing: "border-box" as const, background: "#fff",
         };
         const imgBtn = (active: boolean): React.CSSProperties => ({
-          flex: 1, padding: "9px 0", border: `1.5px solid ${active ? "#533AB7" : "#E0DED8"}`,
+          padding: "9px 14px", border: `1.5px solid ${active ? "#533AB7" : "#E0DED8"}`,
           borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 500,
           background: active ? "#EEEDFE" : "#fff", color: active ? "#533AB7" : "#555",
         });
@@ -1199,26 +1393,113 @@ export default function ContentPage() {
                       style={imgBtn(modalImageMode === "video")}>🎬 Загрузить видео</button>
                   </div>
 
-                  {/* Подблок: генерация */}
+                  {/* ── Генерация (3 попытки + история + 3 инлайн правки) ── */}
                   {modalImageMode === "generate" && (
                     <div style={{ background: "#F8F7F4", borderRadius: 12, padding: 14, marginBottom: 12 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 8 }}>Промт для генерации</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "#555" }}>Промт для генерации</div>
+                        {modalImageGenCount > 0 && (
+                          <span style={{ fontSize: 11, color: modalImageGenCount >= 3 ? "#DC2626" : "#0F6E56",
+                            background: (modalImageGenCount >= 3 ? "#DC2626" : "#0F6E56") + "15",
+                            border: `1px solid ${(modalImageGenCount >= 3 ? "#DC2626" : "#0F6E56")}30`,
+                            borderRadius: 12, padding: "2px 8px", fontWeight: 600 }}>
+                            Генераций: {modalImageGenCount}/3
+                          </span>
+                        )}
+                      </div>
                       <textarea value={modalGenPrompt} onChange={e => setModalGenPrompt(e.target.value)}
                         placeholder="Опишите желаемое изображение на русском или английском..."
                         style={{ ...inp13, minHeight: 80 }}
                         onFocus={e => (e.target.style.borderColor = "#533AB7")}
                         onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
                       <p style={{ margin: "6px 0 12px", fontSize: 11, color: "#aaa" }}>Можно писать на русском — модель понимает оба языка</p>
-                      <button onClick={() => generateImage(expanded, modalGenPrompt || undefined)}
-                        disabled={generatingImg === expanded.id}
-                        style={{ padding: "9px 20px", background: generatingImg === expanded.id ? "#ccc" : "#533AB7",
+                      <button onClick={generateImageModal}
+                        disabled={editingModalImg || !modalGenPrompt.trim() || modalImageGenCount >= 3}
+                        style={{ padding: "9px 20px",
+                          background: editingModalImg || !modalGenPrompt.trim() || modalImageGenCount >= 3 ? "#ccc" : "#533AB7",
                           color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
-                        {generatingImg === expanded.id ? "Генерирую..." : imgSrc ? "🔄 Перегенерировать" : "✨ Сгенерировать"}
+                        {editingModalImg ? "Генерирую..." : modalAiImageB64 ? "🔄 Перегенерировать" : "✨ Сгенерировать"}
                       </button>
+                      {modalImageGenCount >= 3 && <div style={{ marginTop: 6, fontSize: 12, color: "#DC2626" }}>Достигнут лимит генераций (3).</div>}
+
+                      {/* Результат + история + инлайн правки */}
+                      {(editingModalImg && !modalAiImageB64) && (
+                        <div style={{ marginTop: 16, padding: 20, background: "#fff", borderRadius: 12, textAlign: "center", color: "#888" }}>⏳ Генерирую изображение...</div>
+                      )}
+                      {modalAiImageB64 && (
+                        <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #E8E6E0" }}>
+                          {modalImageHistory.length > 1 && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                              <button onClick={() => { setModalCurrentImageIdx(i => Math.max(0, i - 1)); setModalAiImageSaved(false); }} disabled={modalCurrentImageIdx <= 0}
+                                style={{ padding: "4px 12px", border: "1px solid #E0DED8", borderRadius: 8, background: "#fff",
+                                  cursor: modalCurrentImageIdx <= 0 ? "not-allowed" : "pointer", fontSize: 12, color: modalCurrentImageIdx <= 0 ? "#ccc" : "#555" }}>← Пред.</button>
+                              <span style={{ fontSize: 12, color: "#888" }}>Версия {modalCurrentImageIdx + 1} из {modalImageHistory.length}</span>
+                              <button onClick={() => { setModalCurrentImageIdx(i => Math.min(modalImageHistory.length - 1, i + 1)); setModalAiImageSaved(false); }} disabled={modalCurrentImageIdx >= modalImageHistory.length - 1}
+                                style={{ padding: "4px 12px", border: "1px solid #E0DED8", borderRadius: 8, background: "#fff",
+                                  cursor: modalCurrentImageIdx >= modalImageHistory.length - 1 ? "not-allowed" : "pointer", fontSize: 12, color: modalCurrentImageIdx >= modalImageHistory.length - 1 ? "#ccc" : "#555" }}>След. →</button>
+                            </div>
+                          )}
+                          <img src={`data:image/png;base64,${modalAiImageB64}`} alt="generated"
+                            style={{ width: "100%", height: "auto", borderRadius: 12, border: "1px solid #EAE8E2", display: "block" }} />
+
+                          {/* Сохранить AI-изображение */}
+                          <div style={{ marginTop: 10 }}>
+                            {modalAiImageSaved ? (
+                              <div style={{ padding: "8px 16px", background: "#E1F5EE", borderRadius: 10, fontSize: 13, color: "#0F6E56", fontWeight: 600 }}>
+                                ✓ Изображение сохранено в пост
+                              </div>
+                            ) : (
+                              <button onClick={saveModalAiImage} disabled={modalSaving}
+                                style={{ padding: "8px 18px", background: "#533AB7", color: "#fff", border: "none",
+                                  borderRadius: 10, cursor: modalSaving ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600, opacity: modalSaving ? 0.7 : 1 }}>
+                                {modalSaving ? "Сохраняю..." : "💾 Использовать это изображение"}
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Инлайн правки */}
+                          <div style={{ marginTop: 14 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a" }}>Редактировать результат</div>
+                              {modalInlineEditCount > 0 && (
+                                <span style={{ fontSize: 11, color: modalInlineEditCount >= 3 ? "#DC2626" : "#0F6E56",
+                                  background: (modalInlineEditCount >= 3 ? "#DC2626" : "#0F6E56") + "15",
+                                  border: `1px solid ${(modalInlineEditCount >= 3 ? "#DC2626" : "#0F6E56")}30`,
+                                  borderRadius: 12, padding: "2px 8px", fontWeight: 600 }}>Правок: {modalInlineEditCount}/3</span>
+                              )}
+                            </div>
+                            {!modalShowInlineEdit && modalInlineEditCount < 3 && (
+                              <button onClick={() => setModalShowInlineEdit(true)}
+                                style={{ padding: "7px 16px", background: "none", border: "1.5px solid #533AB7",
+                                  borderRadius: 10, color: "#533AB7", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✏️ Внести правки</button>
+                            )}
+                            {modalShowInlineEdit && (
+                              <>
+                                <textarea value={modalInlineEditInstruction} onChange={e => setModalInlineEditInstruction(e.target.value)}
+                                  placeholder="Например: измени фон на белый, добавь тёплые цвета..."
+                                  style={{ ...inp13, minHeight: 70 }}
+                                  onFocus={e => (e.target.style.borderColor = "#533AB7")}
+                                  onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
+                                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                                  <button onClick={editImageModalInline}
+                                    disabled={!modalInlineEditInstruction.trim() || editingModalImg || modalInlineEditCount >= 3}
+                                    style={{ padding: "7px 14px", background: (!modalInlineEditInstruction.trim() || editingModalImg || modalInlineEditCount >= 3) ? "#ccc" : "#533AB7",
+                                      color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                                    {editingModalImg ? "Обновляю..." : "Применить"}
+                                  </button>
+                                  <button onClick={() => { setModalShowInlineEdit(false); setModalInlineEditInstruction(""); }}
+                                    style={{ padding: "7px 12px", background: "none", border: "1px solid #E0DED8", borderRadius: 8, cursor: "pointer", fontSize: 12, color: "#666" }}>Отмена</button>
+                                </div>
+                              </>
+                            )}
+                            {modalInlineEditCount >= 3 && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 6 }}>Достигнут лимит правок (3).</div>}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Подблок: загрузка фото (10 слотов, 5×2) */}
+                  {/* ── Загрузка фото (10 слотов, 5×2) ── */}
                   {modalImageMode === "upload" && (
                     <div
                       style={{ background: "#F8F7F4", borderRadius: 12, padding: 14, marginBottom: 12 }}
@@ -1231,15 +1512,10 @@ export default function ContentPage() {
                     >
                       <p style={{ fontSize: 13, color: "#888", margin: "0 0 12px" }}>
                         Нажмите на ячейку, чтобы добавить фото (можно выбрать сразу несколько). Или перетащите прямо из папки.
-                        {modalUploadFilled.length > 1 && <span style={{ color: "#533AB7", fontWeight: 600 }}> Загружено {modalUploadFilled.length} фото — будет опубликовано как альбом.</span>}
+                        {modalUploadFilled.length > 1 && <span style={{ color: "#533AB7", fontWeight: 600 }}> Загружено {modalUploadFilled.length} — будет альбом.</span>}
                       </p>
-                      <ModalUploadGrid
-                        slots={modalUploadSlots}
-                        onSlotClick={onModalSlotClick}
-                        onRemove={removeModalUploadSlot}
-                        onReorder={reorderModalUploadSlots}
-                        onFileDrop={onModalFileDrop}
-                      />
+                      <ModalUploadGrid slots={modalUploadSlots} onSlotClick={onModalSlotClick}
+                        onRemove={removeModalUploadSlot} onReorder={reorderModalUploadSlots} onFileDrop={onModalFileDrop} />
                       <input ref={modalSlotInputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onModalSlotFileChange} />
                       <div style={{ marginTop: 8, fontSize: 12, color: "#aaa" }}>Можно добавить до 10 изображений</div>
                       {modalUploadFilled.length > 0 && (
@@ -1248,31 +1524,128 @@ export default function ContentPage() {
                     </div>
                   )}
 
-                  {/* Подблок: редактирование */}
+                  {/* ── Редактирование (10 слотов + инструкция + результат с 3 инлайн правками) ── */}
                   {modalImageMode === "edit" && (
-                    <div style={{ background: "#F8F7F4", borderRadius: 12, padding: 14, marginBottom: 12 }}>
-                      {!expanded.image_base64 && (
-                        <div style={{ fontSize: 13, color: "#EA580C", marginBottom: 10 }}>
-                          ⚠ Сначала добавьте изображение (загрузите или сгенерируйте)
+                    <div
+                      style={{ background: "#F8F7F4", borderRadius: 12, padding: 14, marginBottom: 12 }}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => {
+                        e.preventDefault();
+                        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
+                        if (files.length) onModalEditFileDrop(0, files);
+                      }}
+                    >
+                      <p style={{ fontSize: 13, color: "#888", margin: "0 0 12px" }}>
+                        Загрузите до 10 фото — первое будет основным, остальные — референсы для ИИ. Нажмите на ячейку или перетащите из папки.
+                      </p>
+                      <ModalUploadGrid slots={modalEditSlots} onSlotClick={onModalEditSlotClick}
+                        onRemove={removeModalEditSlot} onReorder={reorderModalEditSlots} onFileDrop={onModalEditFileDrop} />
+                      <input ref={modalEditSlotInputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onModalEditSlotFileChange} />
+                      {modalEditFilled.length > 1 && (
+                        <div style={{ marginTop: 6, fontSize: 12, color: "#533AB7", fontWeight: 600 }}>
+                          Первое фото — основное, {modalEditFilled.length - 1} {modalEditFilled.length === 2 ? "остальное" : "остальных"} — референс{modalEditFilled.length === 2 ? "" : "ы"} для ИИ
                         </div>
                       )}
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 8 }}>Инструкция по редактированию</div>
+                      <div style={{ marginTop: 14, fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 6 }}>Инструкция по редактированию</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                        {modalEditAttemptCount > 0 && (
+                          <span style={{ fontSize: 11, color: modalEditAttemptCount >= 3 ? "#DC2626" : "#0F6E56",
+                            background: (modalEditAttemptCount >= 3 ? "#DC2626" : "#0F6E56") + "15",
+                            border: `1px solid ${(modalEditAttemptCount >= 3 ? "#DC2626" : "#0F6E56")}30`,
+                            borderRadius: 12, padding: "2px 8px", fontWeight: 600 }}>Правок: {modalEditAttemptCount}/3</span>
+                        )}
+                      </div>
                       <textarea value={modalEditInstruction} onChange={e => setModalEditInstruction(e.target.value)}
-                        placeholder="Что изменить в изображении? Например: сделать фон белым, добавить логотип..."
+                        placeholder="Например: замени фон на белый, добавь тёплые цвета, сохрани общую композицию..."
                         style={{ ...inp13, minHeight: 70 }}
                         onFocus={e => (e.target.style.borderColor = "#533AB7")}
                         onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
-                      <button onClick={editModalImage}
-                        disabled={editingModalImg || !expanded.image_base64 || !modalEditInstruction.trim()}
+                      <button onClick={editImageFromModalSlots}
+                        disabled={editingModalImg || !modalEditInstruction.trim() || modalEditFilled.length === 0 || modalEditAttemptCount >= 3}
                         style={{ marginTop: 10, padding: "9px 20px",
-                          background: editingModalImg || !expanded.image_base64 ? "#ccc" : "#533AB7",
+                          background: editingModalImg || !modalEditInstruction.trim() || modalEditFilled.length === 0 || modalEditAttemptCount >= 3 ? "#ccc" : "#533AB7",
                           color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
-                        {editingModalImg ? "Редактирую..." : "🖌 Редактировать"}
+                        {editingModalImg ? "Редактирую..." : "🖌 Редактировать фото"}
                       </button>
+                      {modalEditAttemptCount >= 3 && <div style={{ marginTop: 6, fontSize: 12, color: "#DC2626" }}>Достигнут лимит правок (3).</div>}
+
+                      {/* Результат редактирования + инлайн правки */}
+                      {(editingModalImg && !modalAiImageB64) && (
+                        <div style={{ marginTop: 16, padding: 20, background: "#fff", borderRadius: 12, textAlign: "center", color: "#888" }}>⏳ Обрабатываю изображение...</div>
+                      )}
+                      {modalAiImageB64 && (
+                        <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #E8E6E0" }}>
+                          {modalImageHistory.length > 1 && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                              <button onClick={() => { setModalCurrentImageIdx(i => Math.max(0, i - 1)); setModalAiImageSaved(false); }} disabled={modalCurrentImageIdx <= 0}
+                                style={{ padding: "4px 12px", border: "1px solid #E0DED8", borderRadius: 8, background: "#fff",
+                                  cursor: modalCurrentImageIdx <= 0 ? "not-allowed" : "pointer", fontSize: 12, color: modalCurrentImageIdx <= 0 ? "#ccc" : "#555" }}>← Пред.</button>
+                              <span style={{ fontSize: 12, color: "#888" }}>Версия {modalCurrentImageIdx + 1} из {modalImageHistory.length}</span>
+                              <button onClick={() => { setModalCurrentImageIdx(i => Math.min(modalImageHistory.length - 1, i + 1)); setModalAiImageSaved(false); }} disabled={modalCurrentImageIdx >= modalImageHistory.length - 1}
+                                style={{ padding: "4px 12px", border: "1px solid #E0DED8", borderRadius: 8, background: "#fff",
+                                  cursor: modalCurrentImageIdx >= modalImageHistory.length - 1 ? "not-allowed" : "pointer", fontSize: 12, color: modalCurrentImageIdx >= modalImageHistory.length - 1 ? "#ccc" : "#555" }}>След. →</button>
+                            </div>
+                          )}
+                          <img src={`data:image/png;base64,${modalAiImageB64}`} alt="edited"
+                            style={{ width: "100%", height: "auto", borderRadius: 12, border: "1px solid #EAE8E2", display: "block" }} />
+
+                          {/* Сохранить AI-изображение */}
+                          <div style={{ marginTop: 10 }}>
+                            {modalAiImageSaved ? (
+                              <div style={{ padding: "8px 16px", background: "#E1F5EE", borderRadius: 10, fontSize: 13, color: "#0F6E56", fontWeight: 600 }}>
+                                ✓ Изображение сохранено в пост
+                              </div>
+                            ) : (
+                              <button onClick={saveModalAiImage} disabled={modalSaving}
+                                style={{ padding: "8px 18px", background: "#533AB7", color: "#fff", border: "none",
+                                  borderRadius: 10, cursor: modalSaving ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600, opacity: modalSaving ? 0.7 : 1 }}>
+                                {modalSaving ? "Сохраняю..." : "💾 Использовать это изображение"}
+                              </button>
+                            )}
+                          </div>
+
+                          <div style={{ marginTop: 14 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a" }}>Редактировать результат</div>
+                              {modalInlineEditCount > 0 && (
+                                <span style={{ fontSize: 11, color: modalInlineEditCount >= 3 ? "#DC2626" : "#0F6E56",
+                                  background: (modalInlineEditCount >= 3 ? "#DC2626" : "#0F6E56") + "15",
+                                  border: `1px solid ${(modalInlineEditCount >= 3 ? "#DC2626" : "#0F6E56")}30`,
+                                  borderRadius: 12, padding: "2px 8px", fontWeight: 600 }}>Правок: {modalInlineEditCount}/3</span>
+                              )}
+                            </div>
+                            {!modalShowInlineEdit && modalInlineEditCount < 3 && (
+                              <button onClick={() => setModalShowInlineEdit(true)}
+                                style={{ padding: "7px 16px", background: "none", border: "1.5px solid #533AB7",
+                                  borderRadius: 10, color: "#533AB7", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✏️ Внести правки</button>
+                            )}
+                            {modalShowInlineEdit && (
+                              <>
+                                <textarea value={modalInlineEditInstruction} onChange={e => setModalInlineEditInstruction(e.target.value)}
+                                  placeholder="Например: измени фон на белый, добавь тёплые цвета..."
+                                  style={{ ...inp13, minHeight: 70 }}
+                                  onFocus={e => (e.target.style.borderColor = "#533AB7")}
+                                  onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
+                                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                                  <button onClick={editImageModalInline}
+                                    disabled={!modalInlineEditInstruction.trim() || editingModalImg || modalInlineEditCount >= 3}
+                                    style={{ padding: "7px 14px", background: (!modalInlineEditInstruction.trim() || editingModalImg || modalInlineEditCount >= 3) ? "#ccc" : "#533AB7",
+                                      color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                                    {editingModalImg ? "Обновляю..." : "Применить"}
+                                  </button>
+                                  <button onClick={() => { setModalShowInlineEdit(false); setModalInlineEditInstruction(""); }}
+                                    style={{ padding: "7px 12px", background: "none", border: "1px solid #E0DED8", borderRadius: 8, cursor: "pointer", fontSize: 12, color: "#666" }}>Отмена</button>
+                                </div>
+                              </>
+                            )}
+                            {modalInlineEditCount >= 3 && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 6 }}>Достигнут лимит правок (3).</div>}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Подблок: загрузка видео (3 плитки) */}
+                  {/* ── Загрузка видео (3 плитки + обложка) ── */}
                   {modalImageMode === "video" && (
                     <div
                       style={{ background: "#F8F7F4", borderRadius: 12, padding: 14, marginBottom: 12 }}
@@ -1283,13 +1656,10 @@ export default function ContentPage() {
                         if (files.length) addModalVideoFiles(files);
                       }}
                     >
-                      <p style={{ fontSize: 13, color: "#888", margin: "0 0 12px" }}>
-                        Нажмите на ячейку или перетащите видео из папки / рабочего стола. Можно добавить до 3 видео.
-                      </p>
+                      <p style={{ fontSize: 13, color: "#888", margin: "0 0 12px" }}>Нажмите на ячейку или перетащите видео из папки. Можно добавить до 3 видео.</p>
                       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                         {modalVideoFiles.map((file, idx) => (
-                          <div
-                            key={idx}
+                          <div key={idx}
                             onClick={() => { if (!file) { modalVideoActiveRef.current = idx; modalVideoInputRef.current?.click(); } }}
                             onDragOver={e => e.preventDefault()}
                             onDrop={e => {
@@ -1297,15 +1667,11 @@ export default function ContentPage() {
                               const dropped = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("video/"));
                               if (dropped.length) addModalVideoFiles(dropped, idx);
                             }}
-                            style={{
-                              width: 180, height: 120, borderRadius: 12,
+                            style={{ width: 180, height: 120, borderRadius: 12,
                               border: file ? "1.5px solid #E0DED8" : "2px dashed #C0BDB6",
-                              background: file ? "#000" : "rgba(0,0,0,0.04)",
-                              cursor: file ? "default" : "pointer",
+                              background: file ? "#000" : "rgba(0,0,0,0.04)", cursor: file ? "default" : "pointer",
                               position: "relative", overflow: "hidden",
-                              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                            }}
-                          >
+                              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                             {file && modalVideoPreviewUrls[idx] ? (
                               <>
                                 <video src={modalVideoPreviewUrls[idx]!} muted preload="metadata"
@@ -1322,13 +1688,10 @@ export default function ContentPage() {
                                 <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "4px 8px",
                                   background: "linear-gradient(transparent, rgba(0,0,0,0.6))", fontSize: 10,
                                   color: "rgba(255,255,255,0.9)", fontWeight: 600, overflow: "hidden",
-                                  textOverflow: "ellipsis", whiteSpace: "nowrap", pointerEvents: "none" }}>
-                                  {file.name}
-                                </div>
+                                  textOverflow: "ellipsis", whiteSpace: "nowrap", pointerEvents: "none" }}>{file.name}</div>
                               </>
                             ) : (
-                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center",
-                                gap: 6, color: "#C0BDB6", userSelect: "none" }}>
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, color: "#C0BDB6", userSelect: "none" }}>
                                 <span style={{ fontSize: 30 }}>🎬</span>
                                 <span style={{ fontSize: 11, fontWeight: 600 }}>+ Добавить видео</span>
                               </div>
@@ -1340,18 +1703,110 @@ export default function ContentPage() {
                         onChange={e => {
                           const files = Array.from(e.target.files || []).filter(f => f.type.startsWith("video/"));
                           if (files.length) addModalVideoFiles(files, modalVideoActiveRef.current);
-                          modalVideoActiveRef.current = -1;
-                          e.target.value = "";
+                          modalVideoActiveRef.current = -1; e.target.value = "";
                         }} />
-                      <div style={{ marginTop: 8, fontSize: 12, color: "#aaa" }}>Поддерживаются форматы MP4, MOV, AVI, WebM и др.</div>
+                      <div style={{ marginTop: 8, fontSize: 12, color: "#aaa" }}>Поддерживаются MP4, MOV, AVI, WebM и др.</div>
+
+                      {/* ── Обложка для видео ── */}
+                      {modalVideoFiles.some(Boolean) && (
+                        <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #E8E6E0" }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", marginBottom: 12 }}>Обложка для видео</div>
+                          <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+                            {/* Превью обложки */}
+                            <div style={{ flexShrink: 0 }}>
+                              {modalVideoCoverDataUrl ? (
+                                <div style={{ position: "relative", width: 176, height: 99, borderRadius: 10, overflow: "hidden", border: "1.5px solid #E0DED8" }}>
+                                  <img src={modalVideoCoverDataUrl} alt="cover"
+                                    style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", background: "#000" }} />
+                                  <div style={{ position: "absolute", top: 5, left: 5,
+                                    background: modalVideoCoverSource === "ai" ? "#533AB7" : modalVideoCoverSource === "upload" ? "#4680C2" : "#0F6E56",
+                                    color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 6, padding: "2px 7px" }}>
+                                    {modalVideoCoverSource === "ai" ? "ИИ" : modalVideoCoverSource === "upload" ? "Загружено" : "Авто"}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={{ width: 176, height: 99, borderRadius: 10, border: "2px dashed #C0BDB6",
+                                  background: "rgba(0,0,0,0.03)", display: "flex", alignItems: "center",
+                                  justifyContent: "center", fontSize: 12, color: "#C0BDB6", fontWeight: 600 }}>Нет обложки</div>
+                              )}
+                            </div>
+                            {/* Кнопки */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 4 }}>
+                              <button onClick={() => modalVideoCoverInputRef.current?.click()}
+                                style={{ padding: "7px 14px", background: "none", border: "1px solid #E0DED8", borderRadius: 8,
+                                  cursor: "pointer", fontSize: 12, color: "#555", display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+                                📷 Загрузить обложку
+                              </button>
+                              <button onClick={() => setModalShowVideoCoverPrompt(v => !v)}
+                                style={{ padding: "7px 14px",
+                                  background: modalShowVideoCoverPrompt ? "#EEE5FE" : "none",
+                                  border: `1px solid ${modalShowVideoCoverPrompt ? "#533AB7" : "#E0DED8"}`,
+                                  borderRadius: 8, cursor: "pointer", fontSize: 12,
+                                  color: modalShowVideoCoverPrompt ? "#533AB7" : "#555",
+                                  display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+                                🤖 Сгенерировать в ИИ
+                              </button>
+                              {(modalVideoCoverSource === "upload" || modalVideoCoverSource === "ai") && modalVideoCoverAutoDataUrl && (
+                                <button onClick={() => { setModalVideoCoverDataUrl(modalVideoCoverAutoDataUrl); setModalVideoCoverSource("auto"); }}
+                                  style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "#533AB7", textDecoration: "underline", padding: 0, textAlign: "left", fontWeight: 600 }}>
+                                  ← Вернуть автоматическую обложку
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Промт ИИ-обложки */}
+                          {modalShowVideoCoverPrompt && (
+                            <div style={{ marginTop: 14 }}>
+                              <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>
+                                {modalVideoCoverAutoDataUrl ? "ИИ видит первый кадр видео как базу. Опишите что изменить:" : "Опишите обложку:"}
+                              </div>
+                              <div style={{ position: "relative" }}>
+                                <textarea value={modalVideoCoverPrompt} onChange={e => setModalVideoCoverPrompt(e.target.value)}
+                                  placeholder="Например: добавь текст с названием бренда, сделай яркий фон, сохрани композицию..."
+                                  style={{ ...inp13, minHeight: 70 }}
+                                  onFocus={e => (e.target.style.borderColor = "#533AB7")}
+                                  onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
+                                <button onClick={() => modalVideoCoverRefInputRef.current?.click()}
+                                  title="Прикрепить референс фото"
+                                  style={{ position: "absolute", bottom: 10, right: 10,
+                                    background: modalVideoCoverRefPhoto ? "#EEE5FE" : "rgba(255,255,255,0.9)",
+                                    border: `1px solid ${modalVideoCoverRefPhoto ? "#533AB7" : "#E0DED8"}`,
+                                    borderRadius: 7, cursor: "pointer", fontSize: 14,
+                                    color: modalVideoCoverRefPhoto ? "#533AB7" : "#aaa", padding: "3px 7px" }}>📎</button>
+                              </div>
+                              {modalVideoCoverRefPhoto && (
+                                <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 8, padding: "5px 10px", background: "#F8F7F4", borderRadius: 8 }}>
+                                  <img src={`data:${modalVideoCoverRefPhoto.mime};base64,${modalVideoCoverRefPhoto.data}`} alt="ref"
+                                    style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover", border: "1.5px solid #E0DED8", display: "block" }} />
+                                  <span style={{ fontSize: 11, color: "#666", fontWeight: 600 }}>Референс для ИИ</span>
+                                  <button onClick={() => setModalVideoCoverRefPhoto(null)}
+                                    style={{ background: "none", border: "none", cursor: "pointer", color: "#aaa", fontSize: 14, padding: 0 }}>✕</button>
+                                </div>
+                              )}
+                              <div style={{ marginTop: 10 }}>
+                                <button onClick={generateModalVideoCover}
+                                  disabled={!modalVideoCoverPrompt.trim() || modalLoadingVideoCover}
+                                  style={{ padding: "7px 14px",
+                                    background: !modalVideoCoverPrompt.trim() || modalLoadingVideoCover ? "#ccc" : "#533AB7",
+                                    color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                                  {modalLoadingVideoCover ? "Генерирую..." : "Сгенерировать обложку"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          <input ref={modalVideoCoverInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={onModalVideoCoverUpload} />
+                          <input ref={modalVideoCoverRefInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={onModalVideoCoverRefPhoto} />
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Превью сохранённого изображения (когда нет активного upload/video) */}
-                  {(modalImageMode === null || modalImageMode === "generate" || modalImageMode === "edit") && (
+                  {/* ── Превью сохранённого изображения ── */}
+                  {(modalImageMode === null) && (
                     imgSrc ? (
                       <img src={imgSrc} alt="preview"
-                        style={{ width: "100%", maxHeight: 320, objectFit: "cover", borderRadius: 12 }} />
+                        style={{ width: "100%", height: "auto", objectFit: "contain", borderRadius: 12, display: "block", background: "#F8F7F4" }} />
                     ) : (
                       <div style={{ background: "#F8F7F4", borderRadius: 12, padding: "40px 16px",
                         display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
@@ -1361,12 +1816,12 @@ export default function ContentPage() {
                       </div>
                     )
                   )}
-                  {/* Показываем сохранённое изображение в режимах upload/video если новых файлов ещё нет */}
-                  {(modalImageMode === "upload" || modalImageMode === "video") && imgSrc && modalUploadFilled.length === 0 && !modalVideoFiles.some(Boolean) && (
+                  {/* Существующее изображение видно в режимах upload/edit/video если новых файлов нет */}
+                  {(modalImageMode === "upload" || modalImageMode === "edit" || modalImageMode === "video") && imgSrc && modalUploadFilled.length === 0 && !modalAiImageB64 && !modalVideoFiles.some(Boolean) && (
                     <div style={{ marginTop: 12 }}>
                       <div style={{ fontSize: 12, color: "#888", marginBottom: 6 }}>Текущее изображение:</div>
                       <img src={imgSrc} alt="current"
-                        style={{ width: "100%", maxHeight: 200, objectFit: "cover", borderRadius: 12 }} />
+                        style={{ width: "100%", height: "auto", objectFit: "contain", borderRadius: 12, display: "block", background: "#F8F7F4" }} />
                     </div>
                   )}
                 </div>
