@@ -247,3 +247,51 @@ async def _generate_post_text_with_info(slot, profile: dict, answers: list[dict]
         log.error("[Claude _generate_post_text_with_info] failed, falling back to GPT: %s", e)
     raw = _gpt_sync(messages, 2000).replace("```json", "").replace("```", "").strip()
     return json.loads(raw)
+
+
+async def _regenerate_info_questions(slot, profile: dict) -> list[str]:
+    idea = slot.idea or {}
+    idea_text = idea.get("idea", "")
+    rubric_name = slot.rubric.get("name", "") if slot.rubric else ""
+    niche = profile.get("niche", "")
+    biz_name = profile.get("name", "")
+
+    prompt = f"""Ты SMM-стратег. Составь список запросов к владельцу бизнеса для подготовки поста.
+
+ПОСТ:
+- Идея: {idea_text}
+- Рубрика: {rubric_name}
+- Платформа: {slot.platform}
+
+БИЗНЕС: {biz_name}, ниша: {niche}
+
+СТРОГИЕ ПРАВИЛА:
+1. Максимум 3 запроса — только самое необходимое для этого конкретного поста
+2. Повелительное наклонение, глагол в начале: "Напиши...", "Укажи...", "Пришли фото...", "Дай...", "Перечисли..."
+3. ЗАПРЕЩЕНО дублировать — если два запроса касаются одного (товар + его характеристика) → объедини в ОДИН
+4. Для фото/видео: начинай с "Пришли фото ..." или "Загрузи видео ..."
+5. Каждый запрос даёт ПРИНЦИПИАЛЬНО разную информацию
+6. НЕ используй вопросительную форму ("Есть ли...", "Какой...", "Что такое...")
+
+ПРИМЕР ПЛОХОГО (дублирование):
+- "Какой товар самый острый из ассортимента?"
+- "Как называется этот товар и каков уровень остроты?"
+→ ЭТО ОДИН ЗАПРОС
+
+ПРИМЕР ХОРОШЕГО:
+- "Напиши название самого острого товара и его уровень остроты по шкале"
+- "Пришли фото этого товара в высоком качестве"
+
+Верни JSON-массив строк (без markdown, без пояснений):
+["запрос 1", "запрос 2"]"""
+
+    messages = [{"role": "user", "content": prompt}]
+    try:
+        cl = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        resp = cl.messages.create(model=MODEL, max_tokens=600, messages=messages)
+        raw = resp.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+        return json.loads(raw)
+    except Exception as e:
+        log.error("[Claude _regenerate_info_questions] failed, falling back to GPT: %s", e)
+    raw = _gpt_sync(messages, 600).replace("```json", "").replace("```", "").strip()
+    return json.loads(raw)

@@ -268,9 +268,10 @@ export default function ContentPage() {
   const [approvingId, setApprovingId]   = useState<string | null>(null);
 
   // Category-2 info provision state
-  const [infoAnswers, setInfoAnswers]       = useState<string[]>([]);
+  const [infoAnswers, setInfoAnswers]             = useState<string[]>([]);
   const [infoAnsweredFlags, setInfoAnsweredFlags] = useState<boolean[]>([]);
-  const [providingInfo, setProvidingInfo]   = useState(false);
+  const [providingInfo, setProvidingInfo]         = useState(false);
+  const [regeneratingQuestions, setRegeneratingQuestions] = useState(false);
 
   // Modal image section state
   const [modalImageMode, setModalImageMode] = useState<"generate" | "upload" | "edit" | "video" | null>(null);
@@ -461,6 +462,20 @@ export default function ContentPage() {
     } catch (e: any) {
       alert(e?.response?.data?.detail || "Ошибка генерации поста");
     } finally { setProvidingInfo(false); }
+  };
+
+  const regenerateQuestions = async (slot: Slot) => {
+    setRegeneratingQuestions(true);
+    try {
+      const { data } = await api.post(`/content/slot/${slot.id}/regenerate-questions`);
+      const newQs: string[] = data.needs_info_for || [];
+      setSlots(prev => prev.map(s => s.id === slot.id ? { ...s, needs_info_for: newQs } : s));
+      setExpanded(prev => prev?.id === slot.id ? { ...prev, needs_info_for: newQs } : prev);
+      setInfoAnswers(newQs.map(() => ""));
+      setInfoAnsweredFlags(newQs.map(() => false));
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || "Ошибка обновления вопросов");
+    } finally { setRegeneratingQuestions(false); }
   };
 
   // Calendar helpers
@@ -1347,8 +1362,19 @@ export default function ContentPage() {
                   return (
                     <div style={{ background: "#FFF8ED", borderRadius: 12, padding: "16px 18px",
                       marginBottom: 16, border: "1px solid #FFD699" }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: "#7C4400", marginBottom: 4 }}>
-                        📋 Нужна информация для генерации поста
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#7C4400" }}>
+                          📋 Нужна информация для генерации поста
+                        </div>
+                        <button onClick={() => regenerateQuestions(expanded)}
+                          disabled={regeneratingQuestions}
+                          title="Перегенерировать вопросы с учётом новых правил"
+                          style={{ padding: "4px 10px", fontSize: 12, fontWeight: 600,
+                            background: "none", border: "1px solid #FFB347", borderRadius: 8,
+                            color: "#7C4400", cursor: regeneratingQuestions ? "not-allowed" : "pointer",
+                            opacity: regeneratingQuestions ? 0.6 : 1 }}>
+                          {regeneratingQuestions ? "Обновляю..." : "↻ Обновить"}
+                        </button>
                       </div>
                       {anyVisible && (
                         <div style={{ fontSize: 13, color: "#8B5500", marginBottom: 14, lineHeight: 1.5 }}>

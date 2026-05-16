@@ -383,6 +383,31 @@ async def request_info_for_slot(
     return {"status": "updated", "needs_info_for": body.items}
 
 
+@router.post("/slot/{slot_id}/regenerate-questions")
+async def regenerate_questions(
+    slot_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(ContentSlot).where(ContentSlot.id == slot_id))
+    slot = result.scalar_one_or_none()
+    if not slot:
+        raise HTTPException(404, "Slot not found")
+    biz_result = await db.execute(select(Business).where(Business.id == slot.business_id))
+    business = biz_result.scalar_one_or_none()
+    if not business:
+        raise HTTPException(404, "Business not found")
+
+    from app.workers.content_tasks import _regenerate_info_questions
+    try:
+        questions = await _regenerate_info_questions(slot, business.profile)
+        slot.needs_info_for = questions
+        await db.commit()
+        return {"needs_info_for": questions}
+    except Exception as e:
+        raise HTTPException(500, f"Ошибка: {str(e)}")
+
+
 @router.post("/slot/{slot_id}/generate-carousel")
 async def generate_carousel(
     slot_id: str,
