@@ -1285,6 +1285,10 @@ export default function ContentPage() {
         const allInfoDone = !expanded.needs_info_for ||
           (expanded.needs_info_for || []).every((q, i) => isMediaQuestion(q) || infoAnsweredFlags[i]);
         const canApprove  = hasText && hasImage && allInfoDone;
+        // Динамический статус-бейдж в шапке модала
+        const displaySt = (expanded.status === "content_ready" || expanded.status === "published")
+          ? st
+          : canApprove ? STATUS_CONFIG.pending_approval : st;
         const imgSrc = expanded.image_base64
           ? `data:image/png;base64,${expanded.image_base64}`
           : expanded.image_url || null;
@@ -1352,7 +1356,7 @@ export default function ContentPage() {
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                     <span style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 20,
-                      color: st.color, background: st.bg }}>{st.label}</span>
+                      color: displaySt.color, background: displaySt.bg }}>{displaySt.label}</span>
                     <button onClick={closeModal}
                       style={{ width: 32, height: 32, borderRadius: "50%", border: "1px solid #E0DED8",
                         background: "#fff", cursor: "pointer", fontSize: 16, color: "#888",
@@ -1988,18 +1992,20 @@ export default function ContentPage() {
                   {modalSaving ? "Сохраняю..." : "💾 Сохранить текст"}
                 </button>
 
-                <button
-                  onClick={() => approveSlot(expanded)}
-                  disabled={!canApprove || approvingId === expanded.id}
-                  title={!canApprove ? "Добавьте текст и изображение, ответьте на все вопросы" : ""}
-                  style={{ padding: "10px 18px",
-                    background: !canApprove || approvingId === expanded.id ? "#ccc" : "#0F6E56",
-                    color: "#fff", border: "none", borderRadius: 10,
-                    cursor: !canApprove ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600 }}>
-                  {approvingId === expanded.id ? "..." : "✓ Согласовать"}
-                </button>
+                {expanded.status !== "content_ready" && expanded.status !== "published" && (
+                  <button
+                    onClick={() => approveSlot(expanded)}
+                    disabled={!canApprove || approvingId === expanded.id}
+                    title={!canApprove ? "Добавьте текст и изображение, ответьте на все вопросы" : ""}
+                    style={{ padding: "10px 18px",
+                      background: !canApprove || approvingId === expanded.id ? "#ccc" : "#0F6E56",
+                      color: "#fff", border: "none", borderRadius: 10,
+                      cursor: !canApprove ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600 }}>
+                    {approvingId === expanded.id ? "..." : "✓ Согласовать"}
+                  </button>
+                )}
 
-                {expanded.status === "content_ready" && (
+                {(expanded.status === "content_ready" || expanded.status === "pending_approval") && (
                   <button onClick={publishModal}
                     style={{ padding: "10px 18px", background: "#185FA5", color: "#fff",
                       border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
