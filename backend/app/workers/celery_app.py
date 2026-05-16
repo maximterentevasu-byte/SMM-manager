@@ -16,6 +16,7 @@ celery_app = Celery(
     ]
 )
 
+
 celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",
@@ -38,10 +39,15 @@ celery_app.conf.update(
             "task": "app.workers.analytics_tasks.collect_all_analytics_task",
             "schedule": crontab(hour=6, minute=0, day_of_week=1),
         },
-        # Уведомления в TG за 2 дня до публикации — ежедневно в 10:00 МСК
+        # Уведомления в TG за 3 дня до публикации — с 10:00 МСК, каждые 3 часа
         "notify-pending-posts": {
             "task": "app.workers.notification_tasks.notify_pending_posts",
-            "schedule": crontab(hour=10, minute=0),
+            "schedule": crontab(hour="10,13,16,19,22", minute=0),
+        },
+        # Опрос Telegram на наличие ответов от владельца — каждую минуту
+        "check-telegram-replies": {
+            "task": "app.workers.notification_tasks.check_telegram_replies",
+            "schedule": 60.0,
         },
     }
 )

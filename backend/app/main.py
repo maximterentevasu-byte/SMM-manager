@@ -18,6 +18,7 @@ _MIGRATIONS = [
     # Новые значения enum (PostgreSQL 12+: может выполняться внутри транзакции)
     "ALTER TYPE planstatus ADD VALUE IF NOT EXISTS 'pending_approval'",
     "ALTER TYPE planstatus ADD VALUE IF NOT EXISTS 'needs_info'",
+    "ALTER TABLE platform_connections ADD COLUMN IF NOT EXISTS tg_update_offset INTEGER",
 ]
 
 

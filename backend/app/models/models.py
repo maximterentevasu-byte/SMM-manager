@@ -96,6 +96,9 @@ class PlatformConnection(Base):
     # Telegram chat ID администратора бизнеса (для уведомлений)
     admin_chat_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
+    # Offset для getUpdates (чтобы не перечитывать старые апдейты)
+    tg_update_offset: Mapped[Optional[int]] = mapped_column(nullable=True)
+
     business: Mapped["Business"] = relationship(back_populates="platform_connections")
 
 
@@ -132,6 +135,18 @@ class ContentSlot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     business: Mapped["Business"] = relationship(back_populates="content_slots")
+
+
+class SlotNotification(Base):
+    """Трекинг уведомлений о постах в Telegram: message_id → slot_id для обработки ответов."""
+    __tablename__ = "slot_notifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    slot_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("content_slots.id", ondelete="CASCADE"), index=True)
+    connection_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("platform_connections.id", ondelete="CASCADE"))
+    tg_message_id: Mapped[int] = mapped_column()
+    admin_chat_id: Mapped[str] = mapped_column(String(255))
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class TGWeeklyStats(Base):
