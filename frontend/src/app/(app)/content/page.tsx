@@ -5,14 +5,16 @@ import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  content_ready:     { label: "Готов",              color: "#0F6E56", bg: "#E1F5EE" },
-  published:         { label: "Опубликован",        color: "#185FA5", bg: "#E6F1FB" },
-  planned:           { label: "Идея",               color: "#5F5E5A", bg: "#F1EFE8" },
-  idea_ready:        { label: "Идея готова",        color: "#854F0B", bg: "#FAEEDA" },
-  pending_approval:  { label: "Ждёт согласования",  color: "#7C4400", bg: "#FFF3CD" },
-  needs_info:        { label: "Нужна информация",   color: "#8B3200", bg: "#FFE5CC" },
-  failed:            { label: "Ошибка",             color: "#A32D2D", bg: "#FCEBEB" },
+  content_ready:     { label: "Готово",              color: "#0F6E56", bg: "#E1F5EE" },
+  published:         { label: "Опубликовано",        color: "#185FA5", bg: "#E6F1FB" },
+  planned:           { label: "Нужна информация",    color: "#8B3200", bg: "#FFE5CC" },
+  idea_ready:        { label: "Нужна информация",    color: "#8B3200", bg: "#FFE5CC" },
+  pending_approval:  { label: "Согласование",        color: "#7C4400", bg: "#FFF3CD" },
+  needs_info:        { label: "Нужна информация",    color: "#8B3200", bg: "#FFE5CC" },
+  failed:            { label: "Нужна информация",    color: "#8B3200", bg: "#FFE5CC" },
 };
+
+const NEEDS_INFO_STATUSES = ["planned", "idea_ready", "needs_info", "failed"];
 
 const PLATFORM_ICON: Record<string, string> = { telegram: "✈", vk: "ВК", ok: "ОК" };
 const PLATFORM_COLORS: Record<string, { bg: string; border: string }> = {
@@ -860,8 +862,10 @@ export default function ContentPage() {
 
   const applyFilters = (list: Slot[]) =>
     list.filter(s => {
-      const statusOk = filter === "all" || s.status === filter;
-      const platOk   = platformFilter === "all" || s.platform === platformFilter;
+      const statusOk = filter === "all"
+        || (filter === "needs_info_group" && NEEDS_INFO_STATUSES.includes(s.status))
+        || s.status === filter;
+      const platOk = platformFilter === "all" || s.platform === platformFilter;
       return statusOk && platOk;
     });
 
@@ -944,14 +948,20 @@ export default function ContentPage() {
 
         {/* ── Filters + view toggle ── */}
         <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap", alignItems: "center" }}>
-          {["all", "pending_approval", "needs_info", "content_ready", "published", "idea_ready", "failed"].map(s => (
-            <button key={s} onClick={() => setFilter(s)}
+          {([
+            { key: "all",               label: "Все" },
+            { key: "needs_info_group",  label: "Нужна информация" },
+            { key: "pending_approval",  label: "Согласование" },
+            { key: "content_ready",     label: "Готово" },
+            { key: "published",         label: "Опубликовано" },
+          ] as const).map(({ key, label }) => (
+            <button key={key} onClick={() => setFilter(key)}
               style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid",
                 cursor: "pointer", fontSize: 13, fontWeight: 500,
-                borderColor: filter === s ? "#1a1a1a" : "#E0DED8",
-                background:  filter === s ? "#1a1a1a" : "#fff",
-                color:       filter === s ? "#fff"    : "#555" }}>
-              {s === "all" ? "Все" : STATUS_CONFIG[s]?.label}
+                borderColor: filter === key ? "#1a1a1a" : "#E0DED8",
+                background:  filter === key ? "#1a1a1a" : "#fff",
+                color:       filter === key ? "#fff"    : "#555" }}>
+              {label}
             </button>
           ))}
           <div style={{ width: 1, background: "#E0DED8", margin: "0 4px" }} />

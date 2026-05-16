@@ -179,27 +179,33 @@ async def _generate_post_text(slot, profile: dict) -> dict:
 async def _generate_image_prompt(slot, profile: dict) -> str:
     idea = slot.idea
     visual_concept = idea.get("visual_concept", "")
-    niche = profile.get("niche", "restaurant")
+    niche = profile.get("niche", "")
+    brand_voice = profile.get("brand_voice", "")
+    biz_name = profile.get("name", "")
+    usp = profile.get("usp", "")
+    audience = profile.get("audience", {}).get("primary", profile.get("audience_primary", ""))
 
-    img_prompt_content = f"""Write a detailed DALL-E 3 image generation prompt for a social media post.
+    img_prompt_content = f"""Write a detailed image generation prompt for a social media post visual.
 
-Business niche: {niche}
-Post topic: {idea.get('idea', '')}
+Business: "{biz_name}"
+Niche: {niche}
+Brand voice: {brand_voice}
+USP: {usp}
+Target audience: {audience}
+Post idea: {idea.get('idea', '')}
 Visual concept: {visual_concept}
 
-STRICT RULES — follow every one:
-- Style: professional commercial food photography, shot on Canon 5D Mark IV, 85mm f/1.8 lens
-- Lighting: warm soft natural light from the side, gentle shadows, golden hour mood
-- Composition: close-up hero shot OR flat lay, rule of thirds, shallow depth of field with creamy bokeh
-- Colors: rich warm palette — deep burgundy, cream, terracotta, golden brown — appetizing and cinematic
-- Texture: visible steam, melted cheese pull, glistening sauce, fresh herbs scattered, rustic wooden or marble surface
-- Atmosphere: authentic Italian trattoria feel, linen napkins, aged wood, warm candlelight ambiance
+RULES:
+- Style, mood, colors and atmosphere MUST match the actual niche ({niche}) — do NOT apply food/restaurant style if this is not a food business
+- Professional commercial photography style appropriate specifically for {niche}
+- Choose lighting, colors, textures and setting that fit this exact business type
+- Composition: close-up hero shot OR lifestyle scene, rule of thirds, shallow depth of field
 - ABSOLUTELY NO text, letters, words, signs, labels, or numbers anywhere in the scene
 - ABSOLUTELY NO watermarks, logos, UI elements, borders, or overlays
-- The image must look indistinguishable from a real Michelin-star restaurant photograph
-- Every element should be photorealistic, tactile, and crave-inducing
+- Photorealistic, high quality, optimized for social media engagement
+- 100-130 words, start directly with the scene description
 
-Return ONLY the image prompt in English, 100-130 words. Start directly with the scene description. No preamble."""
+Return ONLY the English image prompt. No preamble, no explanation."""
 
     messages = [{"role": "user", "content": img_prompt_content}]
     try:
