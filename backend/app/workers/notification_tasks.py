@@ -19,7 +19,7 @@ from app.workers.db import get_worker_db
 from app.models.models import (
     ContentSlot, PlatformConnection, SlotNotification, PlanStatus, Platform, Business
 )
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, delete
 
 import logging
 log = logging.getLogger(__name__)
@@ -94,7 +94,7 @@ async def _notify():
                 )
             )
         )
-        slots = result.scalars().all()
+        slots = [s for s in result.scalars().all() if s.needs_info_for]
         if not slots:
             return
 
@@ -265,6 +265,10 @@ async def _check_replies():
                         continue
 
                     await _process_reply(session, bot_token, message, slot, db)
+                    # Удаляем запись уведомления — повторный ответ не вызовет двойную обработку
+                    await db.execute(
+                        delete(SlotNotification).where(SlotNotification.slot_id == notif.slot_id)
+                    )
 
                 # Сохраняем новый offset
                 connection.tg_update_offset = new_offset
@@ -348,8 +352,18 @@ async def _process_reply(
     if not updated:
         return
 
-    # Снимаем questions с слота
-    slot.needs_info_for = None
+    # Снимаем вопросы: если фото не пришло — оставляем медиа-вопросы
+    questions = slot.needs_info_for or []
+    has_media_attachment = bool(photos or video or document)
+    if has_media_attachment:
+        slot.needs_info_for = None
+    else:
+        remaining = [q for q in questions if _is_media_question(q)]
+        slot.needs_info_for = remaining if remaining else None
+
+    # Переводим в согласование если пост полностью готов
+    if slot.post_text and slot.image_base64:
+        slot.status = PlanStatus.pending_approval
 
     await db.commit()
 
