@@ -8,6 +8,10 @@ __pycache__/
 .venv/
 venv/
 
+# Celery Beat — бинарный файл состояния, не должен быть в репо
+celerybeat-schedule
+celerybeat.pid
+
 # Node.js
 node_modules/
 .next/
