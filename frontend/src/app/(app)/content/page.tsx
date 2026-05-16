@@ -464,7 +464,7 @@ export default function ContentPage() {
       const updates = {
         post_text: data.post_text,
         image_prompt: data.image_prompt,
-        status: "pending_approval",
+        status: "needs_info",
         needs_info_for: null,
       };
       setSlots(prev => prev.map(s => s.id === slot.id ? { ...s, ...updates } : s));

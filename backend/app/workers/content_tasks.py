@@ -177,35 +177,46 @@ async def _generate_post_text(slot, profile: dict) -> dict:
 
 
 async def _generate_image_prompt(slot, profile: dict) -> str:
-    idea = slot.idea
+    idea = slot.idea or {}
+    post_text = slot.post_text or ""
     visual_concept = idea.get("visual_concept", "")
     niche = profile.get("niche", "")
     brand_voice = profile.get("brand_voice", "")
     biz_name = profile.get("name", "")
     usp = profile.get("usp", "")
     audience = profile.get("audience", {}).get("primary", profile.get("audience_primary", ""))
+    address = profile.get("address", "")
 
-    img_prompt_content = f"""Write a detailed image generation prompt for a social media post visual.
+    content_source = post_text if post_text.strip() else (idea.get("idea", "") + ". " + visual_concept).strip()
 
-Business: "{biz_name}"
-Niche: {niche}
-Brand voice: {brand_voice}
-USP: {usp}
-Target audience: {audience}
-Post idea: {idea.get('idea', '')}
-Visual concept: {visual_concept}
+    img_prompt_content = f"""Create a professional image generation prompt for a social media post.
 
-RULES:
-- Style, mood, colors and atmosphere MUST match the actual niche ({niche}) — do NOT apply food/restaurant style if this is not a food business
-- Professional commercial photography style appropriate specifically for {niche}
-- Choose lighting, colors, textures and setting that fit this exact business type
+POST TEXT (primary basis for the visual):
+{content_source}
+
+BUSINESS CONTEXT:
+- Business: "{biz_name}"
+- Niche: {niche}
+- Brand voice: {brand_voice}
+- USP: {usp}
+- Target audience: {audience}
+{f"- Location: {address}" if address else ""}
+
+VISUAL REQUIREMENTS:
+- The image MUST visually represent what the post text is about, not the brand in general
+- Style, lighting, colors and atmosphere MUST match the actual niche ({niche}) precisely — never borrow food/café/restaurant aesthetics unless this IS a food business
+- Professional commercial photography appropriate for {niche}
 - Composition: close-up hero shot OR lifestyle scene, rule of thirds, shallow depth of field
-- ABSOLUTELY NO text, letters, words, signs, labels, or numbers anywhere in the scene
-- ABSOLUTELY NO watermarks, logos, UI elements, borders, or overlays
-- Photorealistic, high quality, optimized for social media engagement
-- 100-130 words, start directly with the scene description
 
-Return ONLY the English image prompt. No preamble, no explanation."""
+ABSOLUTE TEXT PROHIBITION — this is critical:
+- ZERO letters, words, digits, numbers anywhere in the image
+- ZERO signs, labels, price tags, banners, captions, titles
+- ZERO speech bubbles, thought bubbles, arrows with text
+- ZERO watermarks, logos, icons, UI elements, overlays of any kind
+- ZERO infographic elements, charts, callouts
+- The scene must be pure photography with no graphic design elements whatsoever
+
+Output: 100-130 words. Start directly with the scene description. English only. No preamble."""
 
     messages = [{"role": "user", "content": img_prompt_content}]
     try:

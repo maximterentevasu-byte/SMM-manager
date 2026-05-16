@@ -352,7 +352,7 @@ async def provide_info_for_slot(
         slot.post_text = post_data["text"]
         slot.hashtags = post_data.get("hashtags", [])
         slot.image_prompt = await _generate_image_prompt(slot, business.profile)
-        slot.status = PlanStatus.pending_approval
+        slot.status = PlanStatus.needs_info
         slot.needs_info_for = None
         await db.commit()
         return {
