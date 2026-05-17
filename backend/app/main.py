@@ -67,15 +67,15 @@ async def health():
     return {"status": "ok"}
 
 
-@app.post("/api/debug/trigger-notifications")
+@app.api_route("/api/debug/trigger-notifications", methods=["GET", "POST"])
 async def debug_trigger_notifications():
-    """Ручной запуск уведомлений (для тестирования)."""
+    """Ручной запуск уведомлений needs_info (для тестирования)."""
     from app.workers.notification_tasks import notify_pending_posts
     notify_pending_posts.delay()
     return {"status": "triggered", "message": "Задача уведомлений поставлена в очередь Celery"}
 
 
-@app.post("/api/debug/trigger-replies-check")
+@app.api_route("/api/debug/trigger-replies-check", methods=["GET", "POST"])
 async def debug_trigger_replies_check():
     """Ручной запуск опроса Telegram на ответы."""
     from app.workers.notification_tasks import check_telegram_replies
@@ -83,7 +83,7 @@ async def debug_trigger_replies_check():
     return {"status": "triggered", "message": "Задача проверки ответов поставлена в очередь Celery"}
 
 
-@app.post("/api/debug/trigger-approvals")
+@app.api_route("/api/debug/trigger-approvals", methods=["GET", "POST"])
 async def debug_trigger_approvals():
     """Ручной запуск уведомлений о согласовании (для тестирования)."""
     from app.workers.notification_tasks import notify_pending_approvals
@@ -103,11 +103,18 @@ async def debug_notifications_status():
         deadline = now + timedelta(days=3)
 
         slots_result = await db.execute(text(
-            "SELECT id, platform, scheduled_at, status FROM content_slots "
+            "SELECT id, platform, scheduled_at, status, needs_info_for FROM content_slots "
             "WHERE status = 'needs_info' AND scheduled_at >= :now AND scheduled_at <= :deadline "
             "ORDER BY scheduled_at"
         ), {"now": now, "deadline": deadline})
         slots = [dict(r._mapping) for r in slots_result]
+
+        approval_result = await db.execute(text(
+            "SELECT id, platform, scheduled_at, status, tg_approval_rejected FROM content_slots "
+            "WHERE status = 'pending_approval' AND scheduled_at >= :now AND scheduled_at <= :deadline "
+            "ORDER BY scheduled_at"
+        ), {"now": now, "deadline": deadline})
+        approval_slots = [dict(r._mapping) for r in approval_result]
 
         conns_result = await db.execute(text(
             "SELECT id, platform, admin_chat_id, tg_update_offset FROM platform_connections "
@@ -115,10 +122,9 @@ async def debug_notifications_status():
         ))
         conns = [dict(r._mapping) for r in conns_result]
 
-        # Проверяем существование таблицы slot_notifications
         try:
             notifs_result = await db.execute(text(
-                "SELECT slot_id, tg_message_id, sent_at FROM slot_notifications "
+                "SELECT slot_id, tg_message_id, notification_type, sent_at FROM slot_notifications "
                 "ORDER BY sent_at DESC LIMIT 10"
             ))
             notifs = [dict(r._mapping) for r in notifs_result]
@@ -131,13 +137,19 @@ async def debug_notifications_status():
         "now_utc": now.isoformat(),
         "now_msk": (now + timedelta(hours=3)).isoformat(),
         "needs_info_slots_in_3_days": len(slots),
-        "slots": [{"id": str(s["id"]), "platform": s["platform"],
-                   "scheduled_at": str(s["scheduled_at"])} for s in slots],
+        "needs_info_slots": [{"id": str(s["id"]), "platform": s["platform"],
+                              "scheduled_at": str(s["scheduled_at"]),
+                              "has_questions": bool(s["needs_info_for"])} for s in slots],
+        "pending_approval_slots_in_3_days": len(approval_slots),
+        "pending_approval_slots": [{"id": str(s["id"]), "platform": s["platform"],
+                                    "scheduled_at": str(s["scheduled_at"]),
+                                    "tg_approval_rejected": bool(s.get("tg_approval_rejected"))} for s in approval_slots],
         "telegram_connections_with_admin_chat": len([c for c in conns if c["admin_chat_id"]]),
         "connections": [{"id": str(c["id"]), "has_admin_chat": bool(c["admin_chat_id"]),
                          "tg_update_offset": c["tg_update_offset"]} for c in conns],
         "slot_notifications_table_exists": table_exists,
-        "recent_notifications_sent": len(notifs),
+        "recent_notifications": [{"slot_id": str(n["slot_id"]), "type": n.get("notification_type", "?"),
+                                   "sent_at": str(n["sent_at"])} for n in notifs],
     }
 
 
