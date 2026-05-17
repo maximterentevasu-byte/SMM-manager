@@ -1216,45 +1216,43 @@ export default function ContentPage() {
                         onDragLeave={() => setDragOverKey(null)}
                         onDrop={e => { e.preventDefault(); setDragOverKey(null); if (draggingId) moveSlot(draggingId, day); setDraggingId(null); }}
                       >
-                        <div style={{ marginBottom: 6, display: "flex", justifyContent: "center" }}>
+                        <div style={{ marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <button
+                            title="Добавить событие"
+                            onClick={e => { e.stopPropagation(); }}
+                            style={{ width: 15, height: 15, borderRadius: "50%", border: "none",
+                              background: "#FF2D78", display: "flex", alignItems: "center",
+                              justifyContent: "center", cursor: "pointer", padding: 0,
+                              opacity: 0.7, transition: "opacity .15s", flexShrink: 0 }}
+                            onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+                            onMouseLeave={e => (e.currentTarget.style.opacity = "0.7")}
+                          >
+                            <svg width="15" height="15" viewBox="0 0 15 15" style={{ display: "block" }}>
+                              <line x1="3" y1="7.5" x2="12" y2="7.5" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round"/>
+                              <line x1="7.5" y1="3" x2="7.5" y2="12" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round"/>
+                            </svg>
+                          </button>
+
                           <span style={{ width: 26, height: 26, borderRadius: "50%", display: "flex",
                             alignItems: "center", justifyContent: "center",
                             fontSize: 12, fontWeight: isToday ? 700 : 400,
                             background: isToday ? "#533AB7" : "transparent",
                             color: isToday ? "#fff" : inCurrentMonth ? (di >= 5 ? "#aaa" : "#444") : "#ccc",
                           }}>{day.getDate()}</span>
-                        </div>
 
-                        <div style={{ position: "absolute", bottom: 6, left: "50%",
-                          transform: "translateX(-50%)", display: "flex", gap: 6, zIndex: 2 }}>
-                          <button
-                            title="Добавить событие"
-                            onClick={e => { e.stopPropagation(); }}
-                            style={{ width: 10, height: 10, borderRadius: "50%", border: "none",
-                              background: "#FF2D78", display: "flex", alignItems: "center",
-                              justifyContent: "center", cursor: "pointer", padding: 0,
-                              opacity: 0.5, transition: "opacity .15s", flexShrink: 0 }}
-                            onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
-                            onMouseLeave={e => (e.currentTarget.style.opacity = "0.5")}
-                          >
-                            <svg width="10" height="10" viewBox="0 0 10 10" style={{ display: "block" }}>
-                              <line x1="2" y1="5" x2="8" y2="5" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5" strokeLinecap="round"/>
-                              <line x1="5" y1="2" x2="5" y2="8" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5" strokeLinecap="round"/>
-                            </svg>
-                          </button>
                           <button
                             title="Быстрый пост"
                             onClick={e => { e.stopPropagation(); }}
-                            style={{ width: 10, height: 10, borderRadius: "50%", border: "none",
+                            style={{ width: 15, height: 15, borderRadius: "50%", border: "none",
                               background: "#3B82F6", display: "flex", alignItems: "center",
                               justifyContent: "center", cursor: "pointer", padding: 0,
-                              opacity: 0.5, transition: "opacity .15s", flexShrink: 0 }}
+                              opacity: 0.7, transition: "opacity .15s", flexShrink: 0 }}
                             onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
-                            onMouseLeave={e => (e.currentTarget.style.opacity = "0.5")}
+                            onMouseLeave={e => (e.currentTarget.style.opacity = "0.7")}
                           >
-                            <svg width="10" height="10" viewBox="0 0 10 10" style={{ display: "block" }}>
-                              <line x1="2" y1="5" x2="8" y2="5" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5" strokeLinecap="round"/>
-                              <line x1="5" y1="2" x2="5" y2="8" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5" strokeLinecap="round"/>
+                            <svg width="15" height="15" viewBox="0 0 15 15" style={{ display: "block" }}>
+                              <line x1="3" y1="7.5" x2="12" y2="7.5" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round"/>
+                              <line x1="7.5" y1="3" x2="7.5" y2="12" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round"/>
                             </svg>
                           </button>
                         </div>
