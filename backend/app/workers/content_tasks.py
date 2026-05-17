@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.workers.celery_app import celery_app
 from app.workers.db import get_worker_db
@@ -31,11 +31,15 @@ def _gpt_sync(messages: list, max_tokens: int) -> str:
 
 
 @celery_app.task(name="app.workers.content_tasks.generate_content_plan_task")
-def generate_content_plan_task(business_id: str, year: int, month: int):
-    asyncio.run(_generate_plan(business_id, year, month))
+def generate_content_plan_task(business_id: str, year: int = None, month: int = None):
+    asyncio.run(_generate_plan(business_id))
 
 
-async def _generate_plan(business_id: str, year: int, month: int):
+async def _generate_plan(business_id: str):
+    start_date = (datetime.utcnow() + timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
     async with get_worker_db() as db:
         result = await db.execute(select(Business).where(Business.id == business_id))
         business = result.scalar_one_or_none()
@@ -44,7 +48,7 @@ async def _generate_plan(business_id: str, year: int, month: int):
             print(f"✗ Бизнес {business_id} не найден или нет стратегии")
             return
 
-        slots_meta = build_content_plan(business.strategy, business.profile, year, month)
+        slots_meta = build_content_plan(business.strategy, business.profile, start_date=start_date)
         print(f"→ Создано {len(slots_meta)} слотов для {business.name}")
 
         try:

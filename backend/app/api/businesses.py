@@ -13,6 +13,11 @@ class RefineStrategyRequest(BaseModel):
     message: str
 
 
+class UpdatePostsPerWeekRequest(BaseModel):
+    platform: str
+    posts_per_week: int
+
+
 @router.get("/")
 async def get_my_businesses(
     current_user: User = Depends(get_current_user),
@@ -53,6 +58,28 @@ async def get_strategy(
         "strategy": business.strategy,
         "ready": business.strategy is not None
     }
+
+
+@router.patch("/{business_id}/posts-per-week")
+async def update_posts_per_week(
+    business_id: str,
+    body: UpdatePostsPerWeekRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Business).where(Business.id == business_id, Business.user_id == current_user.id)
+    )
+    business = result.scalar_one_or_none()
+    if not business or not business.strategy:
+        raise HTTPException(404, "Бизнес или стратегия не найдены")
+    posts = max(1, min(14, body.posts_per_week))
+    business.strategy = [
+        {**ps, "posts_per_week": posts} if ps.get("platform") == body.platform else ps
+        for ps in business.strategy
+    ]
+    await db.commit()
+    return {"status": "updated", "platform": body.platform, "posts_per_week": posts}
 
 
 @router.get("/{business_id}/profile")

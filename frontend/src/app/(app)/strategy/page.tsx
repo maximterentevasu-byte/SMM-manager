@@ -28,6 +28,8 @@ export default function StrategyPage() {
   const [activePlatform, setActivePlatform] = useState(0);
   const [expandedRubric, setExpandedRubric] = useState<number | null>(null);
   const [loadingStrategy, setLoadingStrategy] = useState(true);
+  const [editingPostsPerWeek, setEditingPostsPerWeek] = useState<Record<string, number>>({});
+  const [savingPostsPerWeek, setSavingPostsPerWeek] = useState<string | null>(null);
 
   const [profile, setProfile] = useState<Record<string, any>>({});
   const [loadingProfile, setLoadingProfile] = useState(false);
@@ -47,10 +49,31 @@ export default function StrategyPage() {
   useEffect(() => {
     if (!businessId) { router.push("/login"); return; }
     api.get(`/businesses/${businessId}/strategy`)
-      .then(({ data }) => setStrategy(data.strategy))
+      .then(({ data }) => {
+        setStrategy(data.strategy);
+        if (data.strategy) {
+          const init: Record<string, number> = {};
+          data.strategy.forEach((ps: PlatformStrategy) => { init[ps.platform] = ps.posts_per_week; });
+          setEditingPostsPerWeek(init);
+        }
+      })
       .catch(() => setStrategy(null))
       .finally(() => setLoadingStrategy(false));
   }, [businessId, router]);
+
+  const savePostsPerWeek = async (platform: string) => {
+    const val = editingPostsPerWeek[platform];
+    if (!val) return;
+    setSavingPostsPerWeek(platform);
+    try {
+      await api.patch(`/businesses/${businessId}/posts-per-week`, { platform, posts_per_week: val });
+      setStrategy(prev => prev ? prev.map(ps =>
+        ps.platform === platform ? { ...ps, posts_per_week: val } : ps
+      ) : prev);
+      localStorage.setItem("strategyUpdatedAt", String(Date.now()));
+    } catch { alert("Ошибка сохранения"); }
+    finally { setSavingPostsPerWeek(null); }
+  };
 
   useEffect(() => {
     if (tab === "profile" && Object.keys(profile).length === 0) {
@@ -196,7 +219,6 @@ export default function StrategyPage() {
                         {[
                           { label: "Цель", value: ps.goal },
                           { label: "Тональность", value: ps.tone },
-                          { label: "Постов в неделю", value: String(ps.posts_per_week) },
                         ].map((item) => (
                           <div key={item.label} style={{ background: "#fff", border: "1px solid #EAE8E2",
                             borderRadius: 12, padding: "14px 16px" }}>
@@ -204,6 +226,53 @@ export default function StrategyPage() {
                             <div style={{ fontSize: 13, color: "#1a1a1a", lineHeight: 1.4 }}>{item.value}</div>
                           </div>
                         ))}
+
+                        {/* Постов в неделю — редактируемая карточка */}
+                        <div style={{ background: "#fff", border: "1px solid #EAE8E2",
+                          borderRadius: 12, padding: "14px 16px" }}>
+                          <div style={{ fontSize: 11, color: "#999", fontWeight: 500, marginBottom: 6 }}>
+                            Постов в неделю
+                          </div>
+                          <div style={{ fontSize: 10, color: "#888", marginBottom: 8, lineHeight: 1.4 }}>
+                            ИИ рекомендует: <b style={{ color: "#533AB7" }}>{ps.posts_per_week}</b>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 4,
+                              border: "1px solid #E0DED8", borderRadius: 8, overflow: "hidden" }}>
+                              <button
+                                onClick={() => setEditingPostsPerWeek(prev => ({
+                                  ...prev, [ps.platform]: Math.max(1, (prev[ps.platform] ?? ps.posts_per_week) - 1)
+                                }))}
+                                style={{ width: 28, height: 28, border: "none", background: "#F1EFE8",
+                                  cursor: "pointer", fontSize: 16, color: "#444", display: "flex",
+                                  alignItems: "center", justifyContent: "center" }}>−</button>
+                              <span style={{ minWidth: 24, textAlign: "center", fontSize: 15,
+                                fontWeight: 700, color: "#1a1a1a" }}>
+                                {editingPostsPerWeek[ps.platform] ?? ps.posts_per_week}
+                              </span>
+                              <button
+                                onClick={() => setEditingPostsPerWeek(prev => ({
+                                  ...prev, [ps.platform]: Math.min(14, (prev[ps.platform] ?? ps.posts_per_week) + 1)
+                                }))}
+                                style={{ width: 28, height: 28, border: "none", background: "#F1EFE8",
+                                  cursor: "pointer", fontSize: 16, color: "#444", display: "flex",
+                                  alignItems: "center", justifyContent: "center" }}>+</button>
+                            </div>
+                            {(editingPostsPerWeek[ps.platform] ?? ps.posts_per_week) !== ps.posts_per_week && (
+                              <button
+                                onClick={() => savePostsPerWeek(ps.platform)}
+                                disabled={savingPostsPerWeek === ps.platform}
+                                style={{ padding: "5px 12px", background: "#533AB7", color: "#fff",
+                                  border: "none", borderRadius: 7, cursor: "pointer", fontSize: 12,
+                                  fontWeight: 600 }}>
+                                {savingPostsPerWeek === ps.platform ? "..." : "Сохранить"}
+                              </button>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 10, color: "#bbb", marginTop: 6 }}>
+                            Контент-план: 5 недель · {(editingPostsPerWeek[ps.platform] ?? ps.posts_per_week) * 5} постов
+                          </div>
+                        </div>
                       </div>
 
                       {/* Content mix */}

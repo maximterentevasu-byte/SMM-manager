@@ -2,8 +2,7 @@ import logging
 import anthropic
 import json
 import uuid
-from datetime import datetime
-from calendar import monthrange
+from datetime import datetime, timedelta
 from openai import OpenAI as _OpenAI
 
 from app.config import settings
@@ -21,29 +20,76 @@ RU_HOLIDAYS = {
     "11-04": "День народного единства",
 }
 
-
-def get_post_days(year: int, month: int, posts_per_week: int) -> list:
-    _, days_in_month = monthrange(year, month)
-    all_days = [datetime(year, month, d) for d in range(1, days_in_month + 1)]
-    selected = []
-    week_days = []
-
-    for day in all_days:
-        week_days.append(day)
-        if day.weekday() == 6 or day == all_days[-1]:
-            if week_days:
-                step = max(1, len(week_days) // max(posts_per_week, 1))
-                for i in range(min(posts_per_week, len(week_days))):
-                    idx = min(i * step, len(week_days) - 1)
-                    selected.append(week_days[idx])
-            week_days = []
-
-    return selected
+PLAN_WEEKS = 5
 
 
-def build_content_plan(strategy: list, business_profile: dict, year: int, month: int) -> list:
+def get_plan_days(start_date: datetime, posts_per_week: int, weeks: int = PLAN_WEEKS) -> list[datetime]:
+    """
+    Возвращает РОВНО weeks * posts_per_week дат публикаций.
+    Период: [start_date, start_date + weeks*7) — ровно weeks полных недель.
+    Неполные первая/последняя недели (Пн–Вс) получают постов пропорционально;
+    последний кусок берёт оставшийся остаток, чтобы сумма была точной.
+    """
+    start = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=weeks * 7)   # ровно 35 дней, не включительно
+    total_posts = posts_per_week * weeks       # целевой итог (напр. 25)
+
+    # Разбиваем период на куски по неделям Пн–Вс
+    chunks: list[tuple[datetime, datetime, int]] = []  # (chunk_start, chunk_end, days)
+    cur = start
+    while cur < end:
+        dow = cur.weekday()                                  # 0=Пн, 6=Вс
+        week_sun = cur + timedelta(days=(6 - dow))
+        chunk_end = min(week_sun, end - timedelta(days=1))
+        days_in_chunk = (chunk_end - cur).days + 1
+        chunks.append((cur, chunk_end, days_in_chunk))
+        cur = chunk_end + timedelta(days=1)
+
+    # Распределяем total_posts по кускам пропорционально
+    # Последний кусок берёт остаток, чтобы суммарно вышло ровно total_posts
+    remaining = total_posts
+    posts_per_chunk: list[int] = []
+    for i, (_, _, d) in enumerate(chunks):
+        if i == len(chunks) - 1:
+            n = remaining                             # остаток → точная сумма
+        else:
+            n = round(posts_per_week * d / 7)
+        posts_per_chunk.append(n)
+        remaining -= n
+
+    # Генерируем даты равномерно внутри каждого куска
+    result: list[datetime] = []
+    for (cs, _, d), n in zip(chunks, posts_per_chunk):
+        n = max(0, min(n, d))
+        if n == 0:
+            continue
+        available = [cs + timedelta(days=i) for i in range(d)]
+        if n >= d:
+            selected = available
+        elif n == 1:
+            selected = [available[d // 2]]
+        else:
+            step = d / n
+            selected = [available[int(i * step)] for i in range(n)]
+        result.extend(selected)
+
+    return result
+
+
+def build_content_plan(
+    strategy: list,
+    business_profile: dict,
+    start_date: datetime | None = None,
+    # backward-compat параметры (игнорируются)
+    year: int | None = None,
+    month: int | None = None,
+) -> list:
+    if start_date is None:
+        start_date = (datetime.utcnow() + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+
     slots = []
-    holidays = {k: v for k, v in RU_HOLIDAYS.items() if k.startswith(f"{month:02d}-")}
 
     for platform_strategy in strategy:
         platform = platform_strategy["platform"]
@@ -54,7 +100,7 @@ def build_content_plan(strategy: list, business_profile: dict, year: int, month:
         if not rubrics:
             continue
 
-        post_days = get_post_days(year, month, posts_per_week)
+        post_days = get_plan_days(start_date, posts_per_week)
         rubric_idx = 0
         last_type = None
 
@@ -76,7 +122,7 @@ def build_content_plan(strategy: list, business_profile: dict, year: int, month:
                 "platform": platform,
                 "scheduled_at": scheduled_at.isoformat(),
                 "rubric": rubric,
-                "holiday": holidays.get(date_key),
+                "holiday": RU_HOLIDAYS.get(date_key),
                 "status": "planned",
             }
             slots.append(slot)
