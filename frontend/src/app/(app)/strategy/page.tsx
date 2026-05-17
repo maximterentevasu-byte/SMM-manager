@@ -19,7 +19,7 @@ type ChatMessage = { role: "user" | "ai"; text: string };
 
 const PLATFORM_LABEL: Record<string, string> = { telegram: "✈ Telegram", vk: "ВК ВКонтакте", ok: "О Одноклассники" };
 const MIX_LABELS: Record<string, string> = { sales: "Продажи", educational: "Обучение", entertainment: "Развлечение", ugc_triggers: "UGC" };
-const MIX_COLORS: Record<string, string> = { sales: "#0F6E56", educational: "#185FA5", entertainment: "#533AB7", ugc_triggers: "#854F0B" };
+const MIX_COLORS: Record<string, string> = { sales: "#00B5A6", educational: "#185FA5", entertainment: "#3478F6", ugc_triggers: "#854F0B" };
 
 export default function StrategyPage() {
   const router = useRouter();
@@ -148,25 +148,25 @@ export default function StrategyPage() {
   };
 
   const inp: React.CSSProperties = {
-    width: "100%", padding: "9px 13px", border: "1px solid #E0DED8", borderRadius: 10,
-    fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box", background: "#fff",
+    width: "100%", padding: "9px 13px", border: "1px solid #E5E7EB", borderRadius: 10,
+    fontSize: 14, fontFamily: "'Inter', sans-serif", outline: "none", boxSizing: "border-box", background: "#fff",
   };
-  const lbl: React.CSSProperties = { fontSize: 13, fontWeight: 500, color: "#444", display: "block", marginBottom: 5 };
-  const hint: React.CSSProperties = { fontSize: 12, color: "#999", marginTop: 4 };
+  const lbl: React.CSSProperties = { fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 5 };
+  const hint: React.CSSProperties = { fontSize: 12, color: "#9CA3AF", marginTop: 4 };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F8F7F4", fontFamily: "'Segoe UI', sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#F5F7FA", fontFamily: "'Inter', sans-serif" }}>
       {/* Header */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #EAE8E2", padding: "0 2rem" }}>
+      <div style={{ background: "#fff", borderBottom: "1px solid #E5E7EB", padding: "0 2rem" }}>
         <div style={{ maxWidth: 900, margin: "0 auto", height: 64, display: "flex", alignItems: "center", gap: 24 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Стратегия и онбординг</h1>
+          <h1 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 20, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Стратегия и онбординг</h1>
           <div style={{ display: "flex", gap: 4 }}>
             {(["strategy", "profile"] as const).map((t) => (
               <button key={t} onClick={() => setTab(t)}
                 style={{ padding: "7px 18px", borderRadius: 20, border: "1px solid",
                   cursor: "pointer", fontSize: 13, fontWeight: tab === t ? 600 : 400,
-                  borderColor: tab === t ? "#1a1a1a" : "#E0DED8",
-                  background: tab === t ? "#1a1a1a" : "#fff",
+                  borderColor: tab === t ? "#0D1B2A" : "#E0DED8",
+                  background: tab === t ? "#0D1B2A" : "#fff",
                   color: tab === t ? "#fff" : "#666" }}>
                 {t === "strategy" ? "🎯 Стратегия" : "📋 Профиль бизнеса"}
               </button>
@@ -185,7 +185,7 @@ export default function StrategyPage() {
             )}
 
             {!loadingStrategy && !strategy && (
-              <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
+              <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16,
                 padding: "3rem", textAlign: "center" }}>
                 <div style={{ fontSize: 48, marginBottom: 12 }}>⏳</div>
                 <p style={{ color: "#888", margin: 0 }}>Стратегия ещё не сгенерирована.</p>
@@ -200,8 +200,8 @@ export default function StrategyPage() {
                     <button key={ps.platform} onClick={() => { setActivePlatform(i); setExpandedRubric(null); }}
                       style={{ padding: "8px 18px", borderRadius: 20, border: "1px solid",
                         cursor: "pointer", fontSize: 13, fontWeight: activePlatform === i ? 600 : 400,
-                        borderColor: activePlatform === i ? "#1a1a1a" : "#E0DED8",
-                        background: activePlatform === i ? "#1a1a1a" : "#fff",
+                        borderColor: activePlatform === i ? "#0D1B2A" : "#E0DED8",
+                        background: activePlatform === i ? "#0D1B2A" : "#fff",
                         color: activePlatform === i ? "#fff" : "#666" }}>
                       {PLATFORM_LABEL[ps.platform] || ps.platform}
                     </button>
@@ -220,21 +220,21 @@ export default function StrategyPage() {
                           { label: "Цель", value: ps.goal },
                           { label: "Тональность", value: ps.tone },
                         ].map((item) => (
-                          <div key={item.label} style={{ background: "#fff", border: "1px solid #EAE8E2",
+                          <div key={item.label} style={{ background: "#fff", border: "1px solid #E5E7EB",
                             borderRadius: 12, padding: "14px 16px" }}>
                             <div style={{ fontSize: 11, color: "#999", fontWeight: 500, marginBottom: 4 }}>{item.label}</div>
-                            <div style={{ fontSize: 13, color: "#1a1a1a", lineHeight: 1.4 }}>{item.value}</div>
+                            <div style={{ fontSize: 13, color: "#0D1B2A", lineHeight: 1.4 }}>{item.value}</div>
                           </div>
                         ))}
 
                         {/* Постов в неделю — редактируемая карточка */}
-                        <div style={{ background: "#fff", border: "1px solid #EAE8E2",
+                        <div style={{ background: "#fff", border: "1px solid #E5E7EB",
                           borderRadius: 12, padding: "14px 16px" }}>
                           <div style={{ fontSize: 11, color: "#999", fontWeight: 500, marginBottom: 6 }}>
                             Постов в неделю
                           </div>
                           <div style={{ fontSize: 10, color: "#888", marginBottom: 8, lineHeight: 1.4 }}>
-                            ИИ рекомендует: <b style={{ color: "#533AB7" }}>{ps.posts_per_week}</b>
+                            ИИ рекомендует: <b style={{ color: "#3478F6" }}>{ps.posts_per_week}</b>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 4,
@@ -247,7 +247,7 @@ export default function StrategyPage() {
                                   cursor: "pointer", fontSize: 16, color: "#444", display: "flex",
                                   alignItems: "center", justifyContent: "center" }}>−</button>
                               <span style={{ minWidth: 24, textAlign: "center", fontSize: 15,
-                                fontWeight: 700, color: "#1a1a1a" }}>
+                                fontWeight: 700, color: "#0D1B2A" }}>
                                 {editingPostsPerWeek[ps.platform] ?? ps.posts_per_week}
                               </span>
                               <button
@@ -262,7 +262,7 @@ export default function StrategyPage() {
                               <button
                                 onClick={() => savePostsPerWeek(ps.platform)}
                                 disabled={savingPostsPerWeek === ps.platform}
-                                style={{ padding: "5px 12px", background: "#533AB7", color: "#fff",
+                                style={{ padding: "5px 12px", background: "#3478F6", color: "#fff",
                                   border: "none", borderRadius: 7, cursor: "pointer", fontSize: 12,
                                   fontWeight: 600 }}>
                                 {savingPostsPerWeek === ps.platform ? "..." : "Сохранить"}
@@ -276,7 +276,7 @@ export default function StrategyPage() {
                       </div>
 
                       {/* Content mix */}
-                      <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, padding: "16px 20px" }}>
+                      <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: "16px 20px" }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: "#888", marginBottom: 12 }}>МИКС КОНТЕНТА</div>
                         <div style={{ display: "flex", gap: 0, borderRadius: 8, overflow: "hidden", height: 12, marginBottom: 12 }}>
                           {Object.entries(ps.content_mix || {}).map(([key, val]) => (
@@ -295,7 +295,7 @@ export default function StrategyPage() {
 
                       {/* Content pillars */}
                       {ps.content_pillars?.length > 0 && (
-                        <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, padding: "16px 20px" }}>
+                        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: "16px 20px" }}>
                           <div style={{ fontSize: 12, fontWeight: 600, color: "#888", marginBottom: 10 }}>КОНТЕНТНЫЕ СТОЛПЫ</div>
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                             {ps.content_pillars.map((p) => (
@@ -307,8 +307,8 @@ export default function StrategyPage() {
                       )}
 
                       {/* Rubrics */}
-                      <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, overflow: "hidden" }}>
-                        <div style={{ padding: "14px 20px", borderBottom: "1px solid #EAE8E2" }}>
+                      <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, overflow: "hidden" }}>
+                        <div style={{ padding: "14px 20px", borderBottom: "1px solid #E5E7EB" }}>
                           <div style={{ fontSize: 12, fontWeight: 600, color: "#888" }}>РУБРИКИ ({ps.rubrics?.length || 0})</div>
                         </div>
                         {(ps.rubrics || []).map((r, i) => (
@@ -318,7 +318,7 @@ export default function StrategyPage() {
                                 gap: 12, cursor: "pointer", userSelect: "none" }}>
                               <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px",
                                 borderRadius: 6, background: "#F1EFE8", color: "#555" }}>{r.type || "?"}</span>
-                              <span style={{ fontSize: 14, fontWeight: 500, color: "#1a1a1a", flex: 1 }}>{r.name}</span>
+                              <span style={{ fontSize: 14, fontWeight: 500, color: "#0D1B2A", flex: 1 }}>{r.name}</span>
                               <span style={{ fontSize: 12, color: "#999" }}>{r.frequency}</span>
                               <span style={{ fontSize: 12, color: "#bbb" }}>{expandedRubric === i ? "▲" : "▼"}</span>
                             </div>
@@ -351,9 +351,9 @@ export default function StrategyPage() {
             )}
 
             {/* Chat */}
-            <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16, overflow: "hidden" }}>
-              <div style={{ padding: "14px 20px", borderBottom: "1px solid #EAE8E2" }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "#1a1a1a" }}>🤖 Уточнить стратегию</div>
+            <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16, overflow: "hidden" }}>
+              <div style={{ padding: "14px 20px", borderBottom: "1px solid #E5E7EB" }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#0D1B2A" }}>🤖 Уточнить стратегию</div>
                 <div style={{ fontSize: 12, color: "#999", marginTop: 2 }}>
                   Напиши что хочешь изменить — AI обновит стратегию
                 </div>
@@ -367,7 +367,7 @@ export default function StrategyPage() {
                       <div style={{
                         maxWidth: "75%", padding: "10px 14px", borderRadius: 12,
                         fontSize: 13, lineHeight: 1.5,
-                        background: m.role === "user" ? "#1a1a1a" : "#F1EFE8",
+                        background: m.role === "user" ? "#0D1B2A" : "#F1EFE8",
                         color: m.role === "user" ? "#fff" : "#333",
                       }}>{m.text}</div>
                     </div>
@@ -388,7 +388,7 @@ export default function StrategyPage() {
                   placeholder="Хочу больше продающих постов / убери развлекательные рубрики / ..."
                   style={{ ...inp, flex: 1 }} />
                 <button onClick={sendChat} disabled={chatLoading || !chatInput.trim()}
-                  style={{ padding: "9px 20px", background: chatLoading || !chatInput.trim() ? "#ccc" : "#1a1a1a",
+                  style={{ padding: "9px 20px", background: chatLoading || !chatInput.trim() ? "#ccc" : "#0D1B2A",
                     color: "#fff", border: "none", borderRadius: 10,
                     cursor: chatLoading || !chatInput.trim() ? "not-allowed" : "pointer",
                     fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}>
@@ -406,10 +406,10 @@ export default function StrategyPage() {
               <div style={{ textAlign: "center", padding: "3rem", color: "#888" }}>Загружаем профиль...</div>
             ) : (
               <>
-                <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16, padding: "20px 24px",
+                <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16, padding: "20px 24px",
                   display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: "#1a1a1a" }}>Профиль бизнеса</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: "#0D1B2A" }}>Профиль бизнеса</div>
                     <div style={{ fontSize: 13, color: "#888", marginTop: 2 }}>
                       Измени данные и сохрани — AI будет писать посты точнее
                     </div>
@@ -436,7 +436,7 @@ export default function StrategyPage() {
                   { key: "contact_info", label: "Контакты (телефон, сайт, бот)", type: "input", placeholder: "+7 999 123-45-67, pickme.ru" },
                   { key: "geo", label: "Город / район", type: "input", placeholder: "Москва, Марьино" },
                 ].map(({ key, label, type, placeholder }) => (
-                  <div key={key} style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 12, padding: "16px 20px" }}>
+                  <div key={key} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: "16px 20px" }}>
                     <label style={lbl}>{label}</label>
                     {type === "textarea" ? (
                       <textarea value={profile[key] || ""} onChange={(e) => setProfile({ ...profile, [key]: e.target.value })}
@@ -451,14 +451,14 @@ export default function StrategyPage() {
 
 
                 {profileSaved && (
-                  <div style={{ padding: "12px 16px", background: "#E1F5EE", borderRadius: 10,
-                    fontSize: 13, color: "#0F6E56", fontWeight: 500 }}>
+                  <div style={{ padding: "12px 16px", background: "#E0F7F5", borderRadius: 10,
+                    fontSize: 13, color: "#00B5A6", fontWeight: 500 }}>
                     ✓ Профиль сохранён
                   </div>
                 )}
 
                 <button onClick={saveProfile} disabled={savingProfile}
-                  style={{ padding: "13px", background: savingProfile ? "#888" : "#1a1a1a", color: "#fff",
+                  style={{ padding: "13px", background: savingProfile ? "#888" : "#0D1B2A", color: "#fff",
                     border: "none", borderRadius: 12, cursor: "pointer", fontSize: 15, fontWeight: 600 }}>
                   {savingProfile ? "Сохраняю..." : "Сохранить профиль"}
                 </button>

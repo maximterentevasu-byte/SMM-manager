@@ -12,7 +12,12 @@
       "Bash(docker compose *)",
       "Bash(python -c ' *)",
       "Bash(python -c \"import os; os.environ['GEMINI_API_KEY']='test'; from google import genai; print\\('google-genai OK'\\)\")",
-      "PowerShell(cd \"c:\\\\Users\\\\admin\\\\Desktop\\\\smm-platform\"; git add frontend/src/app/\\(app\\)/post-creator/page.tsx backend/app/api/post_creator.py; git status)"
+      "PowerShell(cd \"c:\\\\Users\\\\admin\\\\Desktop\\\\smm-platform\"; git add frontend/src/app/\\(app\\)/post-creator/page.tsx backend/app/api/post_creator.py; git status)",
+      "Bash(python -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(python -c \"import pdfplumber; print\\('ok'\\)\")",
+      "Bash(C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python314\\\\python.exe -m pip install pdfplumber)",
+      "PowerShell(python -m pip install pdfplumber 2>&1)",
+      "PowerShell(& \"C:\\\\Users\\\\admin\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe\" -m pip install pdfplumber 2>&1)"
     ]
   }
 }

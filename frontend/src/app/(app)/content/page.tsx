@@ -5,13 +5,13 @@ import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  content_ready:     { label: "Готово",              color: "#0F6E56", bg: "#E1F5EE" },
-  published:         { label: "Опубликовано",        color: "#185FA5", bg: "#E6F1FB" },
-  planned:           { label: "Нужна информация",    color: "#8B3200", bg: "#FFE5CC" },
-  idea_ready:        { label: "Нужна информация",    color: "#8B3200", bg: "#FFE5CC" },
-  pending_approval:  { label: "Согласование",        color: "#7C4400", bg: "#FFF3CD" },
-  needs_info:        { label: "Нужна информация",    color: "#8B3200", bg: "#FFE5CC" },
-  failed:            { label: "Нужна информация",    color: "#8B3200", bg: "#FFE5CC" },
+  content_ready:     { label: "Готово",              color: "#00B5A6", bg: "#E0F7F5" },
+  published:         { label: "Опубликовано",        color: "#3478F6", bg: "#EAF4FF" },
+  planned:           { label: "Нужна информация",    color: "#B45309", bg: "#FEF3C7" },
+  idea_ready:        { label: "Нужна информация",    color: "#B45309", bg: "#FEF3C7" },
+  pending_approval:  { label: "Согласование",        color: "#B45309", bg: "#FEF3C7" },
+  needs_info:        { label: "Нужна информация",    color: "#B45309", bg: "#FEF3C7" },
+  failed:            { label: "Ошибка",              color: "#DC2626", bg: "#FEF2F2" },
 };
 
 const NEEDS_INFO_STATUSES = ["planned", "idea_ready", "needs_info", "failed"];
@@ -184,7 +184,7 @@ function SlideToConfirm({ label, onConfirm, color = "#DC2626" }: {
   return (
     <div ref={trackRef} style={{ position: "relative", height: 44, borderRadius: 22,
       background: done ? `${color}22` : "#F1EFE8",
-      border: `1.5px solid ${done ? color : "#E0DED8"}`,
+      border: `1.5px solid ${done ? color : "#E5E7EB"}`,
       overflow: "hidden", userSelect: "none", cursor: "default" }}>
       <div style={{ position: "absolute", left: 0, top: 0, bottom: 0,
         width: `${progress}%`, background: `${color}20`,
@@ -228,7 +228,7 @@ function EvPlatformPicker({ platforms, selected, onChange }: {
           return (
             <button key={p.platform} type="button" onClick={() => toggle(p.platform)}
               style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px",
-                borderRadius: 20, border: `1.5px solid ${on ? cfg.color : "#E0DED8"}`,
+                borderRadius: 20, border: `1.5px solid ${on ? cfg.color : "#E5E7EB"}`,
                 background: on ? cfg.bg : "#fff", cursor: "pointer",
                 fontSize: 12, color: on ? cfg.color : "#888", fontWeight: on ? 600 : 400,
                 transition: "all .15s" }}>
@@ -275,7 +275,7 @@ function ModalUploadGrid({ slots, onSlotClick, onRemove, onReorder, onFileDrop }
           style={{
             position: "relative", aspectRatio: "1",
             background: slot ? "transparent" : "rgba(0,0,0,0.04)",
-            border: dragOver === idx ? "2px solid #533AB7" : slot ? "1.5px solid #E0DED8" : "2px dashed #C0BDB6",
+            border: dragOver === idx ? "2px solid #3478F6" : slot ? "1.5px solid #E5E7EB" : "2px dashed #C0BDB6",
             borderRadius: 10, overflow: "hidden",
             cursor: slot ? "grab" : "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
@@ -317,7 +317,7 @@ function ModalUploadCarousel({ slots, carouselIdx, setCarouselIdx }: {
       <div style={{ position: "relative", display: "block" }}>
         <img src={`data:${current.mime};base64,${current.data}`} alt="preview-current"
           style={{ width: "100%", height: "auto", maxHeight: "55vh", objectFit: "contain",
-            borderRadius: 12, border: "1px solid #EAE8E2", display: "block", background: "#F8F7F4" }} />
+            borderRadius: 12, border: "1px solid #E5E7EB", display: "block", background: "#F5F7FA" }} />
         {filled.length > 1 && (
           <>
             <button onClick={() => setCarouselIdx(Math.max(0, safeIdx - 1))} disabled={safeIdx === 0}
@@ -343,7 +343,7 @@ function ModalUploadCarousel({ slots, carouselIdx, setCarouselIdx }: {
             <img key={i} src={`data:${s.mime};base64,${s.data}`} alt={`thumb-${i}`}
               onClick={() => setCarouselIdx(i)}
               style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6, flexShrink: 0,
-                cursor: "pointer", border: i === safeIdx ? "2px solid #1a1a1a" : "2px solid transparent",
+                cursor: "pointer", border: i === safeIdx ? "2px solid #0D1B2A" : "2px solid transparent",
                 opacity: i === safeIdx ? 1 : 0.6 }} />
           ))}
         </div>
@@ -1124,19 +1124,19 @@ export default function ContentPage() {
   );
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F8F7F4", fontFamily: "'Segoe UI', sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#F5F7FA", fontFamily: "'Inter', sans-serif" }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
 
       {/* ── Header ── */}
       <div style={{ background: "#fff", borderBottom: "1px solid #E8E6E0", padding: "0 2rem" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", alignItems: "center",
           justifyContent: "space-between", height: 64 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Контент-план</h1>
+          <h1 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 20, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Контент-план</h1>
           <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
             {strategyUpdated && (
               <button onClick={reloadPlan} disabled={reloading}
                 style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 18px",
-                  background: "#533AB7", color: "#fff", border: "none", borderRadius: 20,
+                  background: "#3478F6", color: "#fff", border: "none", borderRadius: 20,
                   cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
                 <span style={{ fontSize: 16 }}>🔄</span>
                 {reloading ? "Обновляю..." : "Обновить план под новую стратегию"}
@@ -1146,9 +1146,9 @@ export default function ContentPage() {
               {generatingCount > 0 && (
                 <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ width: 12, height: 12, border: "2px solid #bbb",
-                    borderTopColor: "#533AB7", borderRadius: "50%",
+                    borderTopColor: "#3478F6", borderRadius: "50%",
                     animation: "spin 1s linear infinite", display: "inline-block" }} />
-                  Генерируется: <strong style={{ color: "#533AB7" }}>{generatingCount}</strong>
+                  Генерируется: <strong style={{ color: "#3478F6" }}>{generatingCount}</strong>
                 </span>
               )}
               {stats.needsInfo > 0 && (
@@ -1157,8 +1157,8 @@ export default function ContentPage() {
               {stats.pending > 0 && (
                 <span>На согласовании: <strong style={{ color: "#7C4400" }}>{stats.pending}</strong></span>
               )}
-              <span>Готово: <strong style={{ color: "#0F6E56" }}>{stats.ready}</strong></span>
-              <span>Опубликовано: <strong style={{ color: "#185FA5" }}>{stats.published}</strong></span>
+              <span>Готово: <strong style={{ color: "#00B5A6" }}>{stats.ready}</strong></span>
+              <span>Опубликовано: <strong style={{ color: "#3478F6" }}>{stats.published}</strong></span>
               <span>Всего: <strong>{stats.total}</strong></span>
             </div>
           </div>
@@ -1179,20 +1179,20 @@ export default function ContentPage() {
             <button key={key} onClick={() => setFilter(key)}
               style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid",
                 cursor: "pointer", fontSize: 13, fontWeight: 500,
-                borderColor: filter === key ? "#1a1a1a" : "#E0DED8",
-                background:  filter === key ? "#1a1a1a" : "#fff",
+                borderColor: filter === key ? "#0D1B2A" : "#E5E7EB",
+                background:  filter === key ? "#0D1B2A" : "#fff",
                 color:       filter === key ? "#fff"    : "#555" }}>
               {label}
             </button>
           ))}
-          <div style={{ width: 1, background: "#E0DED8", margin: "0 4px" }} />
+          <div style={{ width: 1, background: "#E5E7EB", margin: "0 4px" }} />
           {["all", "telegram", "vk"].map(p => (
             <button key={p} onClick={() => setPlatformFilter(p)}
               style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid",
                 cursor: "pointer", fontSize: 13, fontWeight: 500,
-                borderColor: platformFilter === p ? "#533AB7" : "#E0DED8",
+                borderColor: platformFilter === p ? "#3478F6" : "#E5E7EB",
                 background:  platformFilter === p ? "#EEEDFE" : "#fff",
-                color:       platformFilter === p ? "#533AB7" : "#555" }}>
+                color:       platformFilter === p ? "#3478F6" : "#555" }}>
               {p === "all" ? "Все площадки" : p === "telegram" ? "✈ Telegram" : "ВК"}
             </button>
           ))}
@@ -1205,7 +1205,7 @@ export default function ContentPage() {
                 style={{ padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer",
                   fontSize: 13, fontWeight: 500,
                   background: viewMode === mode ? "#fff" : "transparent",
-                  color:      viewMode === mode ? "#1a1a1a" : "#777",
+                  color:      viewMode === mode ? "#0D1B2A" : "#777",
                   boxShadow:  viewMode === mode ? "0 1px 3px rgba(0,0,0,.12)" : "none",
                   transition: "all .15s" }}>
                 {mode === "list" ? "≡ Список" : "⊞ Календарь"}
@@ -1229,8 +1229,8 @@ export default function ContentPage() {
                 <div key={slot.id} style={{
                   background: isEvent ? "#FFF0F5" : "#fff",
                   borderRadius: 14,
-                  border: isEvent ? "1.5px solid #F4A7C3" : "1px solid #EAE8E2",
-                  borderLeft: isEvent ? "4px solid #E91E8C" : "1px solid #EAE8E2",
+                  border: isEvent ? "1.5px solid #F4A7C3" : "1px solid #E5E7EB",
+                  borderLeft: isEvent ? "4px solid #E91E8C" : "1px solid #E5E7EB",
                   overflow: "hidden",
                 }}>
 
@@ -1278,7 +1278,7 @@ export default function ContentPage() {
                           <div style={{ fontSize: 10, fontWeight: 700, color: "#888",
                             textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Идея</div>
                           {slot.idea.idea && (
-                            <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a1a", lineHeight: 1.4 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "#0D1B2A", lineHeight: 1.4 }}>
                               {slot.idea.idea}
                             </div>
                           )}
@@ -1321,7 +1321,7 @@ export default function ContentPage() {
                       ) : isGenerating ? (
                         <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#888" }}>
                           <div style={{ width: 14, height: 14, border: "2px solid #bbb",
-                            borderTopColor: "#533AB7", borderRadius: "50%",
+                            borderTopColor: "#3478F6", borderRadius: "50%",
                             animation: "spin 1s linear infinite", flexShrink: 0 }} />
                           <span style={{ fontSize: 12 }}>Генерирую текст поста...</span>
                         </div>
@@ -1331,7 +1331,7 @@ export default function ContentPage() {
                       <div>
                         <button onClick={() => openSlot(slot)}
                           style={{ padding: "6px 14px", background: "#F1EFE8", color: "#444",
-                            border: "1px solid #E0DED8", borderRadius: 8, cursor: "pointer",
+                            border: "1px solid #E5E7EB", borderRadius: 8, cursor: "pointer",
                             fontSize: 12, fontWeight: 500 }}>
                           ✏️ Редактировать
                         </button>
@@ -1345,10 +1345,10 @@ export default function ContentPage() {
                         <img src={imgSrc!} alt="preview"
                           onClick={() => openSlot(slot)}
                           style={{ width: 106, height: 106, objectFit: "cover",
-                            borderRadius: 10, cursor: "pointer", border: "1px solid #EAE8E2" }} />
+                            borderRadius: 10, cursor: "pointer", border: "1px solid #E5E7EB" }} />
                       ) : (
                         <div onClick={() => openSlot(slot)}
-                          style={{ width: 106, height: 106, borderRadius: 10, border: "2px dashed #E0DED8",
+                          style={{ width: 106, height: 106, borderRadius: 10, border: "2px dashed #E5E7EB",
                             display: "flex", flexDirection: "column", alignItems: "center",
                             justifyContent: "center", gap: 4, cursor: "pointer", background: "#FAFAF8" }}>
                           <span style={{ fontSize: 20, opacity: 0.35 }}>🖼</span>
@@ -1375,16 +1375,16 @@ export default function ContentPage() {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
               <button onClick={() => navCal(-1)}
-                style={{ padding: "7px 14px", background: "#fff", border: "1px solid #E0DED8",
+                style={{ padding: "7px 14px", background: "#fff", border: "1px solid #E5E7EB",
                   borderRadius: 8, cursor: "pointer", fontSize: 16, color: "#444" }}>←</button>
-              <span style={{ fontSize: 16, fontWeight: 700, color: "#1a1a1a", minWidth: 220, textAlign: "center" }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: "#0D1B2A", minWidth: 220, textAlign: "center" }}>
                 {calTitle}
               </span>
               <button onClick={() => navCal(1)}
-                style={{ padding: "7px 14px", background: "#fff", border: "1px solid #E0DED8",
+                style={{ padding: "7px 14px", background: "#fff", border: "1px solid #E5E7EB",
                   borderRadius: 8, cursor: "pointer", fontSize: 16, color: "#444" }}>→</button>
               <button onClick={() => setCalDate(new Date())}
-                style={{ padding: "7px 14px", background: "#F1EFE8", border: "1px solid #E0DED8",
+                style={{ padding: "7px 14px", background: "#F1EFE8", border: "1px solid #E5E7EB",
                   borderRadius: 8, cursor: "pointer", fontSize: 13, color: "#555" }}>Сегодня</button>
               <div style={{ flex: 1 }} />
               <div style={{ display: "flex", background: "#F1EFE8", borderRadius: 10, padding: 3, gap: 2 }}>
@@ -1393,7 +1393,7 @@ export default function ContentPage() {
                     style={{ padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer",
                       fontSize: 13, fontWeight: 500,
                       background: calMode === m ? "#fff" : "transparent",
-                      color:      calMode === m ? "#1a1a1a" : "#777",
+                      color:      calMode === m ? "#0D1B2A" : "#777",
                       boxShadow:  calMode === m ? "0 1px 3px rgba(0,0,0,.12)" : "none" }}>
                     {m === "month" ? "Месяц" : "Неделя"}
                   </button>
@@ -1401,18 +1401,18 @@ export default function ContentPage() {
               </div>
             </div>
 
-            <div style={{ background: "#fff", border: "1px solid #E0DED8", borderRadius: 14, overflow: "hidden" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: "1px solid #E0DED8" }}>
+            <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 14, overflow: "hidden" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: "1px solid #E5E7EB" }}>
                 {DAYS_SHORT.map((d, i) => (
                   <div key={d} style={{ padding: "10px 12px", fontSize: 12, fontWeight: 600,
                     color: i >= 5 ? "#888" : "#555", textAlign: "center",
-                    borderRight: i < 6 ? "1px solid #E0DED8" : "none" }}>{d}</div>
+                    borderRight: i < 6 ? "1px solid #E5E7EB" : "none" }}>{d}</div>
                 ))}
               </div>
 
               {calWeeks.map((week, wi) => (
                 <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)",
-                  borderBottom: wi < calWeeks.length - 1 ? "1px solid #E0DED8" : "none" }}>
+                  borderBottom: wi < calWeeks.length - 1 ? "1px solid #E5E7EB" : "none" }}>
                   {week.map((day, di) => {
                     const key = dayKey(day);
                     const inCurrentMonth = calMode === "week" || day.getMonth() === calDate.getMonth();
@@ -1424,7 +1424,7 @@ export default function ContentPage() {
                       <div key={key} style={{
                         minHeight: calMode === "month" ? 110 : 180,
                         padding: "8px 8px 6px",
-                        borderRight: di < 6 ? "1px solid #E0DED8" : "none",
+                        borderRight: di < 6 ? "1px solid #E5E7EB" : "none",
                         background: isDragTarget ? "#F0EDFE" : inCurrentMonth ? "#fff" : "#F9F8F6",
                         transition: "background .1s", position: "relative", minWidth: 0, overflow: "hidden",
                       }}
@@ -1452,7 +1452,7 @@ export default function ContentPage() {
                           <span style={{ width: 30, height: 30, borderRadius: "50%", display: "flex",
                             alignItems: "center", justifyContent: "center",
                             fontSize: 14, fontWeight: isToday ? 700 : 400,
-                            background: isToday ? "#533AB7" : "transparent",
+                            background: isToday ? "#3478F6" : "transparent",
                             color: isToday ? "#fff" : inCurrentMonth ? (di >= 5 ? "#aaa" : "#444") : "#ccc",
                           }}>{day.getDate()}</span>
 
@@ -1583,14 +1583,14 @@ export default function ContentPage() {
           ? `data:image/png;base64,${expanded.image_base64}`
           : expanded.image_url || null;
         const inp13: React.CSSProperties = {
-          width: "100%", padding: "9px 12px", border: "1.5px solid #E0DED8",
+          width: "100%", padding: "9px 12px", border: "1.5px solid #E5E7EB",
           borderRadius: 10, fontSize: 13, fontFamily: "inherit", outline: "none",
           resize: "vertical" as const, boxSizing: "border-box" as const, background: "#fff",
         };
         const imgBtn = (active: boolean): React.CSSProperties => ({
-          padding: "9px 14px", border: `1.5px solid ${active ? "#533AB7" : "#E0DED8"}`,
+          padding: "9px 14px", border: `1.5px solid ${active ? "#3478F6" : "#E5E7EB"}`,
           borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 500,
-          background: active ? "#EEEDFE" : "#fff", color: active ? "#533AB7" : "#555",
+          background: active ? "#EEEDFE" : "#fff", color: active ? "#3478F6" : "#555",
         });
 
         return (
@@ -1611,16 +1611,16 @@ export default function ContentPage() {
                     {PLATFORM_ICON[expanded.platform]}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", marginBottom: 4 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#0D1B2A", marginBottom: 4 }}>
                       {expanded.rubric_name}
                     </div>
                     {editingDate ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <input type="datetime-local" value={modalDate} onChange={e => setModalDate(e.target.value)}
-                          style={{ padding: "4px 8px", border: "1.5px solid #533AB7", borderRadius: 8,
+                          style={{ padding: "4px 8px", border: "1.5px solid #3478F6", borderRadius: 8,
                             fontSize: 13, fontFamily: "inherit", outline: "none" }} />
                         <button onClick={saveModalDate} disabled={savingDate}
-                          style={{ padding: "4px 12px", background: "#533AB7", color: "#fff",
+                          style={{ padding: "4px 12px", background: "#3478F6", color: "#fff",
                             border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
                           {savingDate ? "..." : "Сохранить"}
                         </button>
@@ -1648,7 +1648,7 @@ export default function ContentPage() {
                     <span style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 20,
                       color: displaySt.color, background: displaySt.bg }}>{displaySt.label}</span>
                     <button onClick={closeModal}
-                      style={{ width: 32, height: 32, borderRadius: "50%", border: "1px solid #E0DED8",
+                      style={{ width: 32, height: 32, borderRadius: "50%", border: "1px solid #E5E7EB",
                         background: "#fff", cursor: "pointer", fontSize: 16, color: "#888",
                         display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
                   </div>
@@ -1660,7 +1660,7 @@ export default function ContentPage() {
 
                 {/* 1. Идея поста — всегда сверху */}
                 {expanded.idea && (
-                  <div style={{ background: "#F8F7F4", borderRadius: 12, padding: "12px 16px", marginBottom: 16 }}>
+                  <div style={{ background: "#F5F7FA", borderRadius: 12, padding: "12px 16px", marginBottom: 16 }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: "#999", marginBottom: 6,
                       textTransform: "uppercase", letterSpacing: .5 }}>Идея поста</div>
                     <div style={{ fontSize: 14, color: "#333", lineHeight: 1.6 }}>{expanded.idea.idea}</div>
@@ -1744,7 +1744,7 @@ export default function ContentPage() {
                                     placeholder="Ваш ответ..."
                                     style={{ ...inp13 }}
                                     onFocus={e => (e.target.style.borderColor = "#EA580C")}
-                                    onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
+                                    onBlur={e => (e.target.style.borderColor = "#E5E7EB")} />
                                   <div style={{ marginTop: 6 }}>
                                     <button
                                       onClick={() => {
@@ -1759,7 +1759,7 @@ export default function ContentPage() {
                                       style={{ padding: "7px 18px", fontSize: 13, fontWeight: 600,
                                         border: "none", borderRadius: 8,
                                         cursor: infoAnswers[i]?.trim() ? "pointer" : "not-allowed",
-                                        background: infoAnswers[i]?.trim() ? "#EA580C" : "#E0DED8",
+                                        background: infoAnswers[i]?.trim() ? "#EA580C" : "#E5E7EB",
                                         color: infoAnswers[i]?.trim() ? "#fff" : "#999" }}>
                                       Ответить
                                     </button>
@@ -1780,11 +1780,11 @@ export default function ContentPage() {
                     textTransform: "uppercase", letterSpacing: .5 }}>Текст поста</div>
                   <textarea value={modalText} onChange={e => setModalText(e.target.value)}
                     style={{ width: "100%", minHeight: 280, padding: "12px 14px", fontSize: 14,
-                      lineHeight: 1.75, border: "1.5px solid #E0DED8", borderRadius: 10,
+                      lineHeight: 1.75, border: "1.5px solid #E5E7EB", borderRadius: 10,
                       resize: "vertical", fontFamily: "inherit", outline: "none",
                       boxSizing: "border-box", color: "#2a2a2a", background: "#FAFAF8" }}
-                    onFocus={e => (e.target.style.borderColor = "#533AB7")}
-                    onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
+                    onFocus={e => (e.target.style.borderColor = "#3478F6")}
+                    onBlur={e => (e.target.style.borderColor = "#E5E7EB")} />
                 </div>
 
                 {/* 4. Изображение / Видео */}
@@ -1806,13 +1806,13 @@ export default function ContentPage() {
 
                   {/* ── Генерация (3 попытки + история + 3 инлайн правки) ── */}
                   {modalImageMode === "generate" && (
-                    <div style={{ background: "#F8F7F4", borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                    <div style={{ background: "#F5F7FA", borderRadius: 12, padding: 14, marginBottom: 12 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: "#555" }}>Промт для генерации</div>
                         {modalImageGenCount > 0 && (
-                          <span style={{ fontSize: 11, color: modalImageGenCount >= 3 ? "#DC2626" : "#0F6E56",
-                            background: (modalImageGenCount >= 3 ? "#DC2626" : "#0F6E56") + "15",
-                            border: `1px solid ${(modalImageGenCount >= 3 ? "#DC2626" : "#0F6E56")}30`,
+                          <span style={{ fontSize: 11, color: modalImageGenCount >= 3 ? "#DC2626" : "#00B5A6",
+                            background: (modalImageGenCount >= 3 ? "#DC2626" : "#00B5A6") + "15",
+                            border: `1px solid ${(modalImageGenCount >= 3 ? "#DC2626" : "#00B5A6")}30`,
                             borderRadius: 12, padding: "2px 8px", fontWeight: 600 }}>
                             Генераций: {modalImageGenCount}/3
                           </span>
@@ -1821,13 +1821,13 @@ export default function ContentPage() {
                       <textarea value={modalGenPrompt} onChange={e => setModalGenPrompt(e.target.value)}
                         placeholder="Опишите желаемое изображение на русском или английском..."
                         style={{ ...inp13, minHeight: 80 }}
-                        onFocus={e => (e.target.style.borderColor = "#533AB7")}
-                        onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
+                        onFocus={e => (e.target.style.borderColor = "#3478F6")}
+                        onBlur={e => (e.target.style.borderColor = "#E5E7EB")} />
                       <p style={{ margin: "6px 0 12px", fontSize: 11, color: "#aaa" }}>Можно писать на русском — модель понимает оба языка</p>
                       <button onClick={generateImageModal}
                         disabled={editingModalImg || !modalGenPrompt.trim() || modalImageGenCount >= 3}
                         style={{ padding: "9px 20px",
-                          background: editingModalImg || !modalGenPrompt.trim() || modalImageGenCount >= 3 ? "#ccc" : "#533AB7",
+                          background: editingModalImg || !modalGenPrompt.trim() || modalImageGenCount >= 3 ? "#ccc" : "#3478F6",
                           color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
                         {editingModalImg ? "Генерирую..." : modalAiImageB64 ? "🔄 Перегенерировать" : "✨ Сгенерировать"}
                       </button>
@@ -1842,26 +1842,26 @@ export default function ContentPage() {
                           {modalImageHistory.length > 1 && (
                             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                               <button onClick={() => { setModalCurrentImageIdx(i => Math.max(0, i - 1)); setModalAiImageSaved(false); }} disabled={modalCurrentImageIdx <= 0}
-                                style={{ padding: "4px 12px", border: "1px solid #E0DED8", borderRadius: 8, background: "#fff",
+                                style={{ padding: "4px 12px", border: "1px solid #E5E7EB", borderRadius: 8, background: "#fff",
                                   cursor: modalCurrentImageIdx <= 0 ? "not-allowed" : "pointer", fontSize: 12, color: modalCurrentImageIdx <= 0 ? "#ccc" : "#555" }}>← Пред.</button>
                               <span style={{ fontSize: 12, color: "#888" }}>Версия {modalCurrentImageIdx + 1} из {modalImageHistory.length}</span>
                               <button onClick={() => { setModalCurrentImageIdx(i => Math.min(modalImageHistory.length - 1, i + 1)); setModalAiImageSaved(false); }} disabled={modalCurrentImageIdx >= modalImageHistory.length - 1}
-                                style={{ padding: "4px 12px", border: "1px solid #E0DED8", borderRadius: 8, background: "#fff",
+                                style={{ padding: "4px 12px", border: "1px solid #E5E7EB", borderRadius: 8, background: "#fff",
                                   cursor: modalCurrentImageIdx >= modalImageHistory.length - 1 ? "not-allowed" : "pointer", fontSize: 12, color: modalCurrentImageIdx >= modalImageHistory.length - 1 ? "#ccc" : "#555" }}>След. →</button>
                             </div>
                           )}
                           <img src={`data:image/png;base64,${modalAiImageB64}`} alt="generated"
-                            style={{ width: "100%", height: "auto", borderRadius: 12, border: "1px solid #EAE8E2", display: "block" }} />
+                            style={{ width: "100%", height: "auto", borderRadius: 12, border: "1px solid #E5E7EB", display: "block" }} />
 
                           {/* Сохранить AI-изображение */}
                           <div style={{ marginTop: 10 }}>
                             {modalAiImageSaved ? (
-                              <div style={{ padding: "8px 16px", background: "#E1F5EE", borderRadius: 10, fontSize: 13, color: "#0F6E56", fontWeight: 600 }}>
+                              <div style={{ padding: "8px 16px", background: "#E0F7F5", borderRadius: 10, fontSize: 13, color: "#00B5A6", fontWeight: 600 }}>
                                 ✓ Изображение сохранено в пост
                               </div>
                             ) : (
                               <button onClick={saveModalAiImage} disabled={modalSaving}
-                                style={{ padding: "8px 18px", background: "#533AB7", color: "#fff", border: "none",
+                                style={{ padding: "8px 18px", background: "#3478F6", color: "#fff", border: "none",
                                   borderRadius: 10, cursor: modalSaving ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600, opacity: modalSaving ? 0.7 : 1 }}>
                                 {modalSaving ? "Сохраняю..." : "💾 Использовать это изображение"}
                               </button>
@@ -1871,35 +1871,35 @@ export default function ContentPage() {
                           {/* Инлайн правки */}
                           <div style={{ marginTop: 14 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a" }}>Редактировать результат</div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: "#0D1B2A" }}>Редактировать результат</div>
                               {modalInlineEditCount > 0 && (
-                                <span style={{ fontSize: 11, color: modalInlineEditCount >= 3 ? "#DC2626" : "#0F6E56",
-                                  background: (modalInlineEditCount >= 3 ? "#DC2626" : "#0F6E56") + "15",
-                                  border: `1px solid ${(modalInlineEditCount >= 3 ? "#DC2626" : "#0F6E56")}30`,
+                                <span style={{ fontSize: 11, color: modalInlineEditCount >= 3 ? "#DC2626" : "#00B5A6",
+                                  background: (modalInlineEditCount >= 3 ? "#DC2626" : "#00B5A6") + "15",
+                                  border: `1px solid ${(modalInlineEditCount >= 3 ? "#DC2626" : "#00B5A6")}30`,
                                   borderRadius: 12, padding: "2px 8px", fontWeight: 600 }}>Правок: {modalInlineEditCount}/3</span>
                               )}
                             </div>
                             {!modalShowInlineEdit && modalInlineEditCount < 3 && (
                               <button onClick={() => setModalShowInlineEdit(true)}
-                                style={{ padding: "7px 16px", background: "none", border: "1.5px solid #533AB7",
-                                  borderRadius: 10, color: "#533AB7", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✏️ Внести правки</button>
+                                style={{ padding: "7px 16px", background: "none", border: "1.5px solid #3478F6",
+                                  borderRadius: 10, color: "#3478F6", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✏️ Внести правки</button>
                             )}
                             {modalShowInlineEdit && (
                               <>
                                 <textarea value={modalInlineEditInstruction} onChange={e => setModalInlineEditInstruction(e.target.value)}
                                   placeholder="Например: измени фон на белый, добавь тёплые цвета..."
                                   style={{ ...inp13, minHeight: 70 }}
-                                  onFocus={e => (e.target.style.borderColor = "#533AB7")}
-                                  onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
+                                  onFocus={e => (e.target.style.borderColor = "#3478F6")}
+                                  onBlur={e => (e.target.style.borderColor = "#E5E7EB")} />
                                 <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                                   <button onClick={editImageModalInline}
                                     disabled={!modalInlineEditInstruction.trim() || editingModalImg || modalInlineEditCount >= 3}
-                                    style={{ padding: "7px 14px", background: (!modalInlineEditInstruction.trim() || editingModalImg || modalInlineEditCount >= 3) ? "#ccc" : "#533AB7",
+                                    style={{ padding: "7px 14px", background: (!modalInlineEditInstruction.trim() || editingModalImg || modalInlineEditCount >= 3) ? "#ccc" : "#3478F6",
                                       color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
                                     {editingModalImg ? "Обновляю..." : "Применить"}
                                   </button>
                                   <button onClick={() => { setModalShowInlineEdit(false); setModalInlineEditInstruction(""); }}
-                                    style={{ padding: "7px 12px", background: "none", border: "1px solid #E0DED8", borderRadius: 8, cursor: "pointer", fontSize: 12, color: "#666" }}>Отмена</button>
+                                    style={{ padding: "7px 12px", background: "none", border: "1px solid #E5E7EB", borderRadius: 8, cursor: "pointer", fontSize: 12, color: "#666" }}>Отмена</button>
                                 </div>
                               </>
                             )}
@@ -1913,7 +1913,7 @@ export default function ContentPage() {
                   {/* ── Загрузка фото (10 слотов, 5×2) ── */}
                   {modalImageMode === "upload" && (
                     <div
-                      style={{ background: "#F8F7F4", borderRadius: 12, padding: 14, marginBottom: 12 }}
+                      style={{ background: "#F5F7FA", borderRadius: 12, padding: 14, marginBottom: 12 }}
                       onDragOver={e => e.preventDefault()}
                       onDrop={e => {
                         e.preventDefault();
@@ -1923,7 +1923,7 @@ export default function ContentPage() {
                     >
                       <p style={{ fontSize: 13, color: "#888", margin: "0 0 12px" }}>
                         Нажмите на ячейку, чтобы добавить фото (можно выбрать сразу несколько). Или перетащите прямо из папки.
-                        {modalUploadFilled.length > 1 && <span style={{ color: "#533AB7", fontWeight: 600 }}> Загружено {modalUploadFilled.length} — будет альбом.</span>}
+                        {modalUploadFilled.length > 1 && <span style={{ color: "#3478F6", fontWeight: 600 }}> Загружено {modalUploadFilled.length} — будет альбом.</span>}
                       </p>
                       <ModalUploadGrid slots={modalUploadSlots} onSlotClick={onModalSlotClick}
                         onRemove={removeModalUploadSlot} onReorder={reorderModalUploadSlots} onFileDrop={onModalFileDrop} />
@@ -1938,7 +1938,7 @@ export default function ContentPage() {
                   {/* ── Редактирование (10 слотов + инструкция + результат с 3 инлайн правками) ── */}
                   {modalImageMode === "edit" && (
                     <div
-                      style={{ background: "#F8F7F4", borderRadius: 12, padding: 14, marginBottom: 12 }}
+                      style={{ background: "#F5F7FA", borderRadius: 12, padding: 14, marginBottom: 12 }}
                       onDragOver={e => e.preventDefault()}
                       onDrop={e => {
                         e.preventDefault();
@@ -1953,28 +1953,28 @@ export default function ContentPage() {
                         onRemove={removeModalEditSlot} onReorder={reorderModalEditSlots} onFileDrop={onModalEditFileDrop} />
                       <input ref={modalEditSlotInputRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onModalEditSlotFileChange} />
                       {modalEditFilled.length > 1 && (
-                        <div style={{ marginTop: 6, fontSize: 12, color: "#533AB7", fontWeight: 600 }}>
+                        <div style={{ marginTop: 6, fontSize: 12, color: "#3478F6", fontWeight: 600 }}>
                           Первое фото — основное, {modalEditFilled.length - 1} {modalEditFilled.length === 2 ? "остальное" : "остальных"} — референс{modalEditFilled.length === 2 ? "" : "ы"} для ИИ
                         </div>
                       )}
                       <div style={{ marginTop: 14, fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 6 }}>Инструкция по редактированию</div>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                         {modalEditAttemptCount > 0 && (
-                          <span style={{ fontSize: 11, color: modalEditAttemptCount >= 3 ? "#DC2626" : "#0F6E56",
-                            background: (modalEditAttemptCount >= 3 ? "#DC2626" : "#0F6E56") + "15",
-                            border: `1px solid ${(modalEditAttemptCount >= 3 ? "#DC2626" : "#0F6E56")}30`,
+                          <span style={{ fontSize: 11, color: modalEditAttemptCount >= 3 ? "#DC2626" : "#00B5A6",
+                            background: (modalEditAttemptCount >= 3 ? "#DC2626" : "#00B5A6") + "15",
+                            border: `1px solid ${(modalEditAttemptCount >= 3 ? "#DC2626" : "#00B5A6")}30`,
                             borderRadius: 12, padding: "2px 8px", fontWeight: 600 }}>Правок: {modalEditAttemptCount}/3</span>
                         )}
                       </div>
                       <textarea value={modalEditInstruction} onChange={e => setModalEditInstruction(e.target.value)}
                         placeholder="Например: замени фон на белый, добавь тёплые цвета, сохрани общую композицию..."
                         style={{ ...inp13, minHeight: 70 }}
-                        onFocus={e => (e.target.style.borderColor = "#533AB7")}
-                        onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
+                        onFocus={e => (e.target.style.borderColor = "#3478F6")}
+                        onBlur={e => (e.target.style.borderColor = "#E5E7EB")} />
                       <button onClick={editImageFromModalSlots}
                         disabled={editingModalImg || !modalEditInstruction.trim() || modalEditFilled.length === 0 || modalEditAttemptCount >= 3}
                         style={{ marginTop: 10, padding: "9px 20px",
-                          background: editingModalImg || !modalEditInstruction.trim() || modalEditFilled.length === 0 || modalEditAttemptCount >= 3 ? "#ccc" : "#533AB7",
+                          background: editingModalImg || !modalEditInstruction.trim() || modalEditFilled.length === 0 || modalEditAttemptCount >= 3 ? "#ccc" : "#3478F6",
                           color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
                         {editingModalImg ? "Редактирую..." : "🖌 Редактировать фото"}
                       </button>
@@ -1989,26 +1989,26 @@ export default function ContentPage() {
                           {modalImageHistory.length > 1 && (
                             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                               <button onClick={() => { setModalCurrentImageIdx(i => Math.max(0, i - 1)); setModalAiImageSaved(false); }} disabled={modalCurrentImageIdx <= 0}
-                                style={{ padding: "4px 12px", border: "1px solid #E0DED8", borderRadius: 8, background: "#fff",
+                                style={{ padding: "4px 12px", border: "1px solid #E5E7EB", borderRadius: 8, background: "#fff",
                                   cursor: modalCurrentImageIdx <= 0 ? "not-allowed" : "pointer", fontSize: 12, color: modalCurrentImageIdx <= 0 ? "#ccc" : "#555" }}>← Пред.</button>
                               <span style={{ fontSize: 12, color: "#888" }}>Версия {modalCurrentImageIdx + 1} из {modalImageHistory.length}</span>
                               <button onClick={() => { setModalCurrentImageIdx(i => Math.min(modalImageHistory.length - 1, i + 1)); setModalAiImageSaved(false); }} disabled={modalCurrentImageIdx >= modalImageHistory.length - 1}
-                                style={{ padding: "4px 12px", border: "1px solid #E0DED8", borderRadius: 8, background: "#fff",
+                                style={{ padding: "4px 12px", border: "1px solid #E5E7EB", borderRadius: 8, background: "#fff",
                                   cursor: modalCurrentImageIdx >= modalImageHistory.length - 1 ? "not-allowed" : "pointer", fontSize: 12, color: modalCurrentImageIdx >= modalImageHistory.length - 1 ? "#ccc" : "#555" }}>След. →</button>
                             </div>
                           )}
                           <img src={`data:image/png;base64,${modalAiImageB64}`} alt="edited"
-                            style={{ width: "100%", height: "auto", borderRadius: 12, border: "1px solid #EAE8E2", display: "block" }} />
+                            style={{ width: "100%", height: "auto", borderRadius: 12, border: "1px solid #E5E7EB", display: "block" }} />
 
                           {/* Сохранить AI-изображение */}
                           <div style={{ marginTop: 10 }}>
                             {modalAiImageSaved ? (
-                              <div style={{ padding: "8px 16px", background: "#E1F5EE", borderRadius: 10, fontSize: 13, color: "#0F6E56", fontWeight: 600 }}>
+                              <div style={{ padding: "8px 16px", background: "#E0F7F5", borderRadius: 10, fontSize: 13, color: "#00B5A6", fontWeight: 600 }}>
                                 ✓ Изображение сохранено в пост
                               </div>
                             ) : (
                               <button onClick={saveModalAiImage} disabled={modalSaving}
-                                style={{ padding: "8px 18px", background: "#533AB7", color: "#fff", border: "none",
+                                style={{ padding: "8px 18px", background: "#3478F6", color: "#fff", border: "none",
                                   borderRadius: 10, cursor: modalSaving ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600, opacity: modalSaving ? 0.7 : 1 }}>
                                 {modalSaving ? "Сохраняю..." : "💾 Использовать это изображение"}
                               </button>
@@ -2017,35 +2017,35 @@ export default function ContentPage() {
 
                           <div style={{ marginTop: 14 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a" }}>Редактировать результат</div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: "#0D1B2A" }}>Редактировать результат</div>
                               {modalInlineEditCount > 0 && (
-                                <span style={{ fontSize: 11, color: modalInlineEditCount >= 3 ? "#DC2626" : "#0F6E56",
-                                  background: (modalInlineEditCount >= 3 ? "#DC2626" : "#0F6E56") + "15",
-                                  border: `1px solid ${(modalInlineEditCount >= 3 ? "#DC2626" : "#0F6E56")}30`,
+                                <span style={{ fontSize: 11, color: modalInlineEditCount >= 3 ? "#DC2626" : "#00B5A6",
+                                  background: (modalInlineEditCount >= 3 ? "#DC2626" : "#00B5A6") + "15",
+                                  border: `1px solid ${(modalInlineEditCount >= 3 ? "#DC2626" : "#00B5A6")}30`,
                                   borderRadius: 12, padding: "2px 8px", fontWeight: 600 }}>Правок: {modalInlineEditCount}/3</span>
                               )}
                             </div>
                             {!modalShowInlineEdit && modalInlineEditCount < 3 && (
                               <button onClick={() => setModalShowInlineEdit(true)}
-                                style={{ padding: "7px 16px", background: "none", border: "1.5px solid #533AB7",
-                                  borderRadius: 10, color: "#533AB7", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✏️ Внести правки</button>
+                                style={{ padding: "7px 16px", background: "none", border: "1.5px solid #3478F6",
+                                  borderRadius: 10, color: "#3478F6", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>✏️ Внести правки</button>
                             )}
                             {modalShowInlineEdit && (
                               <>
                                 <textarea value={modalInlineEditInstruction} onChange={e => setModalInlineEditInstruction(e.target.value)}
                                   placeholder="Например: измени фон на белый, добавь тёплые цвета..."
                                   style={{ ...inp13, minHeight: 70 }}
-                                  onFocus={e => (e.target.style.borderColor = "#533AB7")}
-                                  onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
+                                  onFocus={e => (e.target.style.borderColor = "#3478F6")}
+                                  onBlur={e => (e.target.style.borderColor = "#E5E7EB")} />
                                 <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                                   <button onClick={editImageModalInline}
                                     disabled={!modalInlineEditInstruction.trim() || editingModalImg || modalInlineEditCount >= 3}
-                                    style={{ padding: "7px 14px", background: (!modalInlineEditInstruction.trim() || editingModalImg || modalInlineEditCount >= 3) ? "#ccc" : "#533AB7",
+                                    style={{ padding: "7px 14px", background: (!modalInlineEditInstruction.trim() || editingModalImg || modalInlineEditCount >= 3) ? "#ccc" : "#3478F6",
                                       color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
                                     {editingModalImg ? "Обновляю..." : "Применить"}
                                   </button>
                                   <button onClick={() => { setModalShowInlineEdit(false); setModalInlineEditInstruction(""); }}
-                                    style={{ padding: "7px 12px", background: "none", border: "1px solid #E0DED8", borderRadius: 8, cursor: "pointer", fontSize: 12, color: "#666" }}>Отмена</button>
+                                    style={{ padding: "7px 12px", background: "none", border: "1px solid #E5E7EB", borderRadius: 8, cursor: "pointer", fontSize: 12, color: "#666" }}>Отмена</button>
                                 </div>
                               </>
                             )}
@@ -2059,7 +2059,7 @@ export default function ContentPage() {
                   {/* ── Загрузка видео (3 плитки + обложка) ── */}
                   {modalImageMode === "video" && (
                     <div
-                      style={{ background: "#F8F7F4", borderRadius: 12, padding: 14, marginBottom: 12 }}
+                      style={{ background: "#F5F7FA", borderRadius: 12, padding: 14, marginBottom: 12 }}
                       onDragOver={e => e.preventDefault()}
                       onDrop={e => {
                         e.preventDefault();
@@ -2079,7 +2079,7 @@ export default function ContentPage() {
                               if (dropped.length) addModalVideoFiles(dropped, idx);
                             }}
                             style={{ width: 180, height: 120, borderRadius: 12,
-                              border: file ? "1.5px solid #E0DED8" : "2px dashed #C0BDB6",
+                              border: file ? "1.5px solid #E5E7EB" : "2px dashed #C0BDB6",
                               background: file ? "#000" : "rgba(0,0,0,0.04)", cursor: file ? "default" : "pointer",
                               position: "relative", overflow: "hidden",
                               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -2121,16 +2121,16 @@ export default function ContentPage() {
                       {/* ── Обложка для видео ── */}
                       {modalVideoFiles.some(Boolean) && (
                         <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #E8E6E0" }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", marginBottom: 12 }}>Обложка для видео</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "#0D1B2A", marginBottom: 12 }}>Обложка для видео</div>
                           <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
                             {/* Превью обложки */}
                             <div style={{ flexShrink: 0 }}>
                               {modalVideoCoverDataUrl ? (
-                                <div style={{ position: "relative", width: 176, height: 99, borderRadius: 10, overflow: "hidden", border: "1.5px solid #E0DED8" }}>
+                                <div style={{ position: "relative", width: 176, height: 99, borderRadius: 10, overflow: "hidden", border: "1.5px solid #E5E7EB" }}>
                                   <img src={modalVideoCoverDataUrl} alt="cover"
                                     style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", background: "#000" }} />
                                   <div style={{ position: "absolute", top: 5, left: 5,
-                                    background: modalVideoCoverSource === "ai" ? "#533AB7" : modalVideoCoverSource === "upload" ? "#4680C2" : "#0F6E56",
+                                    background: modalVideoCoverSource === "ai" ? "#3478F6" : modalVideoCoverSource === "upload" ? "#4680C2" : "#00B5A6",
                                     color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 6, padding: "2px 7px" }}>
                                     {modalVideoCoverSource === "ai" ? "ИИ" : modalVideoCoverSource === "upload" ? "Загружено" : "Авто"}
                                   </div>
@@ -2144,22 +2144,22 @@ export default function ContentPage() {
                             {/* Кнопки */}
                             <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 4 }}>
                               <button onClick={() => modalVideoCoverInputRef.current?.click()}
-                                style={{ padding: "7px 14px", background: "none", border: "1px solid #E0DED8", borderRadius: 8,
+                                style={{ padding: "7px 14px", background: "none", border: "1px solid #E5E7EB", borderRadius: 8,
                                   cursor: "pointer", fontSize: 12, color: "#555", display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
                                 📷 Загрузить обложку
                               </button>
                               <button onClick={() => setModalShowVideoCoverPrompt(v => !v)}
                                 style={{ padding: "7px 14px",
                                   background: modalShowVideoCoverPrompt ? "#EEE5FE" : "none",
-                                  border: `1px solid ${modalShowVideoCoverPrompt ? "#533AB7" : "#E0DED8"}`,
+                                  border: `1px solid ${modalShowVideoCoverPrompt ? "#3478F6" : "#E5E7EB"}`,
                                   borderRadius: 8, cursor: "pointer", fontSize: 12,
-                                  color: modalShowVideoCoverPrompt ? "#533AB7" : "#555",
+                                  color: modalShowVideoCoverPrompt ? "#3478F6" : "#555",
                                   display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
                                 🤖 Сгенерировать в ИИ
                               </button>
                               {(modalVideoCoverSource === "upload" || modalVideoCoverSource === "ai") && modalVideoCoverAutoDataUrl && (
                                 <button onClick={() => { setModalVideoCoverDataUrl(modalVideoCoverAutoDataUrl); setModalVideoCoverSource("auto"); }}
-                                  style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "#533AB7", textDecoration: "underline", padding: 0, textAlign: "left", fontWeight: 600 }}>
+                                  style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "#3478F6", textDecoration: "underline", padding: 0, textAlign: "left", fontWeight: 600 }}>
                                   ← Вернуть автоматическую обложку
                                 </button>
                               )}
@@ -2176,20 +2176,20 @@ export default function ContentPage() {
                                 <textarea value={modalVideoCoverPrompt} onChange={e => setModalVideoCoverPrompt(e.target.value)}
                                   placeholder="Например: добавь текст с названием бренда, сделай яркий фон, сохрани композицию..."
                                   style={{ ...inp13, minHeight: 70 }}
-                                  onFocus={e => (e.target.style.borderColor = "#533AB7")}
-                                  onBlur={e => (e.target.style.borderColor = "#E0DED8")} />
+                                  onFocus={e => (e.target.style.borderColor = "#3478F6")}
+                                  onBlur={e => (e.target.style.borderColor = "#E5E7EB")} />
                                 <button onClick={() => modalVideoCoverRefInputRef.current?.click()}
                                   title="Прикрепить референс фото"
                                   style={{ position: "absolute", bottom: 10, right: 10,
                                     background: modalVideoCoverRefPhoto ? "#EEE5FE" : "rgba(255,255,255,0.9)",
-                                    border: `1px solid ${modalVideoCoverRefPhoto ? "#533AB7" : "#E0DED8"}`,
+                                    border: `1px solid ${modalVideoCoverRefPhoto ? "#3478F6" : "#E5E7EB"}`,
                                     borderRadius: 7, cursor: "pointer", fontSize: 14,
-                                    color: modalVideoCoverRefPhoto ? "#533AB7" : "#aaa", padding: "3px 7px" }}>📎</button>
+                                    color: modalVideoCoverRefPhoto ? "#3478F6" : "#aaa", padding: "3px 7px" }}>📎</button>
                               </div>
                               {modalVideoCoverRefPhoto && (
-                                <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 8, padding: "5px 10px", background: "#F8F7F4", borderRadius: 8 }}>
+                                <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 8, padding: "5px 10px", background: "#F5F7FA", borderRadius: 8 }}>
                                   <img src={`data:${modalVideoCoverRefPhoto.mime};base64,${modalVideoCoverRefPhoto.data}`} alt="ref"
-                                    style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover", border: "1.5px solid #E0DED8", display: "block" }} />
+                                    style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover", border: "1.5px solid #E5E7EB", display: "block" }} />
                                   <span style={{ fontSize: 11, color: "#666", fontWeight: 600 }}>Референс для ИИ</span>
                                   <button onClick={() => setModalVideoCoverRefPhoto(null)}
                                     style={{ background: "none", border: "none", cursor: "pointer", color: "#aaa", fontSize: 14, padding: 0 }}>✕</button>
@@ -2199,7 +2199,7 @@ export default function ContentPage() {
                                 <button onClick={generateModalVideoCover}
                                   disabled={!modalVideoCoverPrompt.trim() || modalLoadingVideoCover}
                                   style={{ padding: "7px 14px",
-                                    background: !modalVideoCoverPrompt.trim() || modalLoadingVideoCover ? "#ccc" : "#533AB7",
+                                    background: !modalVideoCoverPrompt.trim() || modalLoadingVideoCover ? "#ccc" : "#3478F6",
                                     color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
                                   {modalLoadingVideoCover ? "Генерирую..." : "Сгенерировать обложку"}
                                 </button>
@@ -2217,11 +2217,11 @@ export default function ContentPage() {
                   {(modalImageMode === null) && (
                     imgSrc ? (
                       <img src={imgSrc} alt="preview"
-                        style={{ width: "100%", height: "auto", objectFit: "contain", borderRadius: 12, display: "block", background: "#F8F7F4" }} />
+                        style={{ width: "100%", height: "auto", objectFit: "contain", borderRadius: 12, display: "block", background: "#F5F7FA" }} />
                     ) : (
-                      <div style={{ background: "#F8F7F4", borderRadius: 12, padding: "40px 16px",
+                      <div style={{ background: "#F5F7FA", borderRadius: 12, padding: "40px 16px",
                         display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
-                        border: "2px dashed #E0DED8" }}>
+                        border: "2px dashed #E5E7EB" }}>
                         <span style={{ fontSize: 40 }}>🖼</span>
                         <span style={{ fontSize: 13, color: "#999" }}>Изображение не прикреплено</span>
                       </div>
@@ -2232,7 +2232,7 @@ export default function ContentPage() {
                     <div style={{ marginTop: 12 }}>
                       <div style={{ fontSize: 12, color: "#888", marginBottom: 6 }}>Текущее изображение:</div>
                       <img src={imgSrc} alt="current"
-                        style={{ width: "100%", height: "auto", objectFit: "contain", borderRadius: 12, display: "block", background: "#F8F7F4" }} />
+                        style={{ width: "100%", height: "auto", objectFit: "contain", borderRadius: 12, display: "block", background: "#F5F7FA" }} />
                     </div>
                   )}
                 </div>
@@ -2240,7 +2240,7 @@ export default function ContentPage() {
                 {/* 5. "Нужна доп. информация" expandable (для pending_approval) */}
                 {showNeedsInfo && (
                   <div style={{ background: "#fff", borderRadius: 12, padding: 14, marginBottom: 8,
-                    border: "1px solid #E0DED8" }}>
+                    border: "1px solid #E5E7EB" }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#333", marginBottom: 10 }}>
                       Что нужно предоставить?
                     </div>
@@ -2252,7 +2252,7 @@ export default function ContentPage() {
                           )}
                           style={{ padding: "6px 14px", borderRadius: 20, border: "1.5px solid",
                             cursor: "pointer", fontSize: 12,
-                            borderColor: selectedInfoItems.includes(item) ? "#EA580C" : "#E0DED8",
+                            borderColor: selectedInfoItems.includes(item) ? "#EA580C" : "#E5E7EB",
                             background: selectedInfoItems.includes(item) ? "#FFE5CC" : "#fff",
                             color: selectedInfoItems.includes(item) ? "#8B3200" : "#555" }}>
                           {item}
@@ -2277,7 +2277,7 @@ export default function ContentPage() {
                 display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
 
                 <button onClick={saveModal} disabled={modalSaving}
-                  style={{ padding: "10px 18px", background: "#1a1a1a", color: "#fff",
+                  style={{ padding: "10px 18px", background: "#0D1B2A", color: "#fff",
                     border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
                   {modalSaving ? "Сохраняю..." : "💾 Сохранить текст"}
                 </button>
@@ -2288,7 +2288,7 @@ export default function ContentPage() {
                     disabled={!canApprove || approvingId === expanded.id}
                     title={!canApprove ? "Добавьте текст и изображение, ответьте на все вопросы" : ""}
                     style={{ padding: "10px 18px",
-                      background: !canApprove || approvingId === expanded.id ? "#ccc" : "#0F6E56",
+                      background: !canApprove || approvingId === expanded.id ? "#ccc" : "#00B5A6",
                       color: "#fff", border: "none", borderRadius: 10,
                       cursor: !canApprove ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600 }}>
                     {approvingId === expanded.id ? "..." : "✓ Согласовать"}
@@ -2297,7 +2297,7 @@ export default function ContentPage() {
 
                 {expanded.status === "content_ready" && (
                   <button onClick={publishModal}
-                    style={{ padding: "10px 18px", background: "#185FA5", color: "#fff",
+                    style={{ padding: "10px 18px", background: "#3478F6", color: "#fff",
                       border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
                     ✈ Опубликовать
                   </button>
@@ -2347,7 +2347,7 @@ export default function ContentPage() {
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
               padding: "18px 24px", borderBottom: "1px solid #F2F0EC", background: "#fff", flexShrink: 0 }}>
-              <span style={{ fontWeight: 700, fontSize: 17, color: "#1a1a1a" }}>
+              <span style={{ fontWeight: 700, fontSize: 17, color: "#0D1B2A" }}>
                 {evEditingId ? "✏️ Редактировать событие" : "🎪 Создать событие"}
               </span>
               <button onClick={() => setEventModalOpen(false)}
@@ -2361,19 +2361,19 @@ export default function ContentPage() {
 
               {/* Block 1 */}
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <label style={{ fontWeight: 600, fontSize: 13, color: "#1a1a1a" }}>1. Наименование события</label>
+                <label style={{ fontWeight: 600, fontSize: 13, color: "#0D1B2A" }}>1. Наименование события</label>
                 <input value={evName} onChange={e => setEvName(e.target.value)}
                   placeholder="Например: Летняя акция -20%"
-                  style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #E0DED8",
+                  style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #E5E7EB",
                     fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
               </div>
 
               {/* Block 2 */}
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <label style={{ fontWeight: 600, fontSize: 13, color: "#1a1a1a" }}>2. Краткое описание</label>
+                <label style={{ fontWeight: 600, fontSize: 13, color: "#0D1B2A" }}>2. Краткое описание</label>
                 <textarea value={evDesc} onChange={e => setEvDesc(e.target.value)} rows={3}
                   placeholder="Опишите событие..."
-                  style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #E0DED8",
+                  style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #E5E7EB",
                     fontSize: 14, outline: "none", resize: "vertical", fontFamily: "inherit",
                     width: "100%", boxSizing: "border-box" }} />
                 <div style={{ fontSize: 12, color: "#888", background: "#FAFAF8",
@@ -2386,18 +2386,18 @@ export default function ContentPage() {
 
               {/* Block 3 */}
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <label style={{ fontWeight: 600, fontSize: 13, color: "#1a1a1a" }}>3. Даты события</label>
+                <label style={{ fontWeight: 600, fontSize: 13, color: "#0D1B2A" }}>3. Даты события</label>
                 <div style={{ display: "flex", gap: 12 }}>
                   <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
                     <span style={{ fontSize: 12, color: "#888" }}>Начало</span>
                     <input type="date" value={evStartDate} onChange={e => setEvStartDate(e.target.value)}
-                      style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E0DED8",
+                      style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E5E7EB",
                         fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
                   </div>
                   <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
                     <span style={{ fontSize: 12, color: "#888" }}>Окончание</span>
                     <input type="date" value={evEndDate} onChange={e => setEvEndDate(e.target.value)}
-                      style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E0DED8",
+                      style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E5E7EB",
                         fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
                   </div>
                 </div>
@@ -2409,13 +2409,13 @@ export default function ContentPage() {
                 <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
                   <input type="checkbox" checked={evHasStart} onChange={e => setEvHasStart(e.target.checked)}
                     style={{ width: 16, height: 16, accentColor: "#E91E8C", cursor: "pointer" }} />
-                  <span style={{ fontWeight: 600, fontSize: 13, color: "#1a1a1a" }}>4. Уведомление о старте мероприятия</span>
+                  <span style={{ fontWeight: 600, fontSize: 13, color: "#0D1B2A" }}>4. Уведомление о старте мероприятия</span>
                 </label>
                 {evHasStart && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginLeft: 26 }}>
                     <span style={{ fontSize: 12, color: "#888" }}>Дата и время публикации поста о старте</span>
                     <input type="datetime-local" value={evStartDT} onChange={e => setEvStartDT(e.target.value)}
-                      style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E0DED8",
+                      style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E5E7EB",
                         fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
                     {evAvailablePlatforms.length > 0 && (
                       <EvPlatformPicker
@@ -2434,13 +2434,13 @@ export default function ContentPage() {
                 <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
                   <input type="checkbox" checked={evHasEnd} onChange={e => setEvHasEnd(e.target.checked)}
                     style={{ width: 16, height: 16, accentColor: "#E91E8C", cursor: "pointer" }} />
-                  <span style={{ fontWeight: 600, fontSize: 13, color: "#1a1a1a" }}>5. Уведомление о завершении (итоги)</span>
+                  <span style={{ fontWeight: 600, fontSize: 13, color: "#0D1B2A" }}>5. Уведомление о завершении (итоги)</span>
                 </label>
                 {evHasEnd && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginLeft: 26 }}>
                     <span style={{ fontSize: 12, color: "#888" }}>Дата и время публикации итогового поста</span>
                     <input type="datetime-local" value={evEndDT} onChange={e => setEvEndDT(e.target.value)}
-                      style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E0DED8",
+                      style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E5E7EB",
                         fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
                     {evAvailablePlatforms.length > 0 && (
                       <EvPlatformPicker
@@ -2459,7 +2459,7 @@ export default function ContentPage() {
                 <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
                   <input type="checkbox" checked={evHasInter} onChange={e => setEvHasInter(e.target.checked)}
                     style={{ width: 16, height: 16, accentColor: "#E91E8C", cursor: "pointer" }} />
-                  <span style={{ fontWeight: 600, fontSize: 13, color: "#1a1a1a" }}>6. Промежуточные уведомления</span>
+                  <span style={{ fontWeight: 600, fontSize: 13, color: "#0D1B2A" }}>6. Промежуточные уведомления</span>
                 </label>
                 {evHasInter && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 10, marginLeft: 26 }}>
@@ -2476,14 +2476,14 @@ export default function ContentPage() {
                           });
                         }}
                         style={{ width: 64, padding: "6px 10px", borderRadius: 8,
-                          border: "1px solid #E0DED8", fontSize: 14, outline: "none" }} />
+                          border: "1px solid #E5E7EB", fontSize: 14, outline: "none" }} />
                     </div>
                     {evInterDTs.slice(0, evInterCount).map((dt, idx) => (
                       <div key={idx} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                         <span style={{ fontSize: 12, color: "#888" }}>Пост {idx + 1} — дата и время</span>
                         <input type="datetime-local" value={dt}
                           onChange={e => setEvInterDTs(arr => { const n=[...arr]; n[idx]=e.target.value; return n; })}
-                          style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E0DED8",
+                          style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E5E7EB",
                             fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
                       </div>
                     ))}
@@ -2550,7 +2550,7 @@ export default function ContentPage() {
                   {evSaving ? "Сохранение..." : evEditingId ? "💾 Сохранить изменения" : "✓ Создать событие"}
                 </button>
                 <button onClick={() => setEventModalOpen(false)}
-                  style={{ padding: "11px 20px", borderRadius: 12, border: "1px solid #E0DED8",
+                  style={{ padding: "11px 20px", borderRadius: 12, border: "1px solid #E5E7EB",
                     background: "#fff", color: "#555", fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
                   Отменить
                 </button>
@@ -2588,7 +2588,7 @@ export default function ContentPage() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
               padding: "14px 20px", borderBottom: "1px solid #F2F0EC", background: "#fff", flexShrink: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                <span style={{ fontWeight: 700, fontSize: 16, color: "#1a1a1a" }}>⚡ Быстрый пост</span>
+                <span style={{ fontWeight: 700, fontSize: 16, color: "#0D1B2A" }}>⚡ Быстрый пост</span>
                 {quickPostPlatforms.length > 0 && (
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     {quickPostPlatforms.map((p, i) => {
