@@ -44,6 +44,11 @@ celery_app.conf.update(
             "task": "app.workers.notification_tasks.notify_pending_posts",
             "schedule": crontab(hour="10,13,16,19,22", minute=0),
         },
+        # Согласование постов через TG — за 3 дня до публикации, каждые 3 часа
+        "notify-pending-approvals": {
+            "task": "app.workers.notification_tasks.notify_pending_approvals",
+            "schedule": crontab(hour="10,13,16,19,22", minute=0),
+        },
         # Опрос Telegram на наличие ответов от владельца — каждую минуту
         "check-telegram-replies": {
             "task": "app.workers.notification_tasks.check_telegram_replies",

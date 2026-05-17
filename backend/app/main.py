@@ -19,6 +19,8 @@ _MIGRATIONS = [
     "ALTER TYPE planstatus ADD VALUE IF NOT EXISTS 'pending_approval'",
     "ALTER TYPE planstatus ADD VALUE IF NOT EXISTS 'needs_info'",
     "ALTER TABLE platform_connections ADD COLUMN IF NOT EXISTS tg_update_offset INTEGER",
+    "ALTER TABLE content_slots ADD COLUMN IF NOT EXISTS tg_approval_rejected BOOLEAN DEFAULT FALSE",
+    "ALTER TABLE slot_notifications ADD COLUMN IF NOT EXISTS notification_type VARCHAR(50) DEFAULT 'needs_info'",
 ]
 
 
@@ -79,6 +81,14 @@ async def debug_trigger_replies_check():
     from app.workers.notification_tasks import check_telegram_replies
     check_telegram_replies.delay()
     return {"status": "triggered", "message": "Задача проверки ответов поставлена в очередь Celery"}
+
+
+@app.post("/api/debug/trigger-approvals")
+async def debug_trigger_approvals():
+    """Ручной запуск уведомлений о согласовании (для тестирования)."""
+    from app.workers.notification_tasks import notify_pending_approvals
+    notify_pending_approvals.delay()
+    return {"status": "triggered", "message": "Задача согласования поставлена в очередь Celery"}
 
 
 @app.get("/api/debug/notifications-status")

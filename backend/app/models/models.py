@@ -125,6 +125,7 @@ class ContentSlot(Base):
     image_base64: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     images: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)          # карусель (список base64)
     needs_info_for: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)  # список требуемых данных
+    tg_approval_rejected: Mapped[bool] = mapped_column(Boolean, default=False)  # отклонено через TG → только через платформу
 
     reach: Mapped[Optional[int]] = mapped_column(nullable=True)
     likes: Mapped[Optional[int]] = mapped_column(nullable=True)
@@ -146,6 +147,7 @@ class SlotNotification(Base):
     connection_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("platform_connections.id", ondelete="CASCADE"))
     tg_message_id: Mapped[int] = mapped_column()
     admin_chat_id: Mapped[str] = mapped_column(String(255))
+    notification_type: Mapped[str] = mapped_column(String(50), default="needs_info")
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

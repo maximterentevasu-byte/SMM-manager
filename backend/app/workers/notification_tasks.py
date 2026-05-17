@@ -10,6 +10,9 @@ Telegram-уведомления для владельцев бизнеса.
 """
 import asyncio
 import base64
+import io
+import json
+import uuid
 from datetime import datetime, timedelta
 
 import aiohttp
@@ -141,6 +144,7 @@ async def _notify():
                             and_(
                                 SlotNotification.slot_id == slot.id,
                                 SlotNotification.sent_at >= cutoff,
+                                SlotNotification.notification_type == "needs_info",
                             )
                         )
                     )
@@ -165,6 +169,7 @@ async def _notify():
                                 connection_id=connection.id,
                                 tg_message_id=msg_id,
                                 admin_chat_id=connection.admin_chat_id,
+                                notification_type="needs_info",
                             )
                             db.add(notif)
                             log.info("Уведомление отправлено: slot=%s msg_id=%d", str(slot.id)[:8], msg_id)
@@ -229,6 +234,12 @@ async def _check_replies():
                 for update in updates:
                     update_id = update["update_id"]
                     new_offset = max(new_offset, update_id + 1)
+
+                    # Нажатия inline-кнопок (согласование/отклонение)
+                    callback_query = update.get("callback_query")
+                    if callback_query:
+                        await _handle_callback(session, bot_token, callback_query, db)
+                        continue
 
                     message = update.get("message") or update.get("edited_message")
                     if not message:
@@ -412,3 +423,271 @@ async def _download_file_b64(
     except Exception as e:
         log.error("Ошибка скачивания файла TG: %s", e)
         return None
+
+
+# ── Задача 3: уведомления о согласовании (статус pending_approval) ────────────
+
+@celery_app.task(name="app.workers.notification_tasks.notify_pending_approvals")
+def notify_pending_approvals():
+    asyncio.run(_notify_approvals())
+
+
+async def _notify_approvals():
+    now_utc = datetime.utcnow()
+    now_msk = now_utc + MSK_OFFSET
+
+    async with get_worker_db() as db:
+        deadline = now_utc + timedelta(days=NOTIFY_DAYS_BEFORE)
+
+        result = await db.execute(
+            select(ContentSlot).where(
+                and_(
+                    ContentSlot.status == PlanStatus.pending_approval,
+                    ContentSlot.scheduled_at >= now_utc,
+                    ContentSlot.scheduled_at <= deadline,
+                )
+            )
+        )
+        slots = result.scalars().all()
+        if not slots:
+            return
+
+        by_business: dict[str, list[ContentSlot]] = {}
+        for slot in slots:
+            by_business.setdefault(str(slot.business_id), []).append(slot)
+
+        async with aiohttp.ClientSession() as session:
+            for business_id, biz_slots in by_business.items():
+                conn_result = await db.execute(
+                    select(PlatformConnection).where(
+                        and_(
+                            PlatformConnection.business_id == business_id,
+                            PlatformConnection.platform == Platform.telegram,
+                            PlatformConnection.is_active == True,
+                            PlatformConnection.admin_chat_id.isnot(None),
+                        )
+                    )
+                )
+                connection = conn_result.scalar_one_or_none()
+                if not connection or not connection.admin_chat_id:
+                    continue
+
+                from app.services.publishers import decrypt_token
+                try:
+                    bot_token = decrypt_token(connection.token_encrypted)
+                except Exception:
+                    continue
+
+                for slot in biz_slots:
+                    slot_msk = slot.scheduled_at + MSK_OFFSET
+                    first_notify = (slot_msk - timedelta(days=NOTIFY_DAYS_BEFORE)).replace(
+                        hour=NOTIFY_HOUR_MSK, minute=0, second=0, microsecond=0
+                    )
+                    if now_msk < first_notify:
+                        continue
+
+                    cutoff = now_utc - timedelta(hours=NOTIFY_INTERVAL_HOURS - 0.25)
+                    recent = await db.execute(
+                        select(SlotNotification).where(
+                            and_(
+                                SlotNotification.slot_id == slot.id,
+                                SlotNotification.sent_at >= cutoff,
+                                SlotNotification.notification_type == "approval",
+                            )
+                        )
+                    )
+                    if recent.scalar_one_or_none():
+                        continue
+
+                    rejected = bool(slot.tg_approval_rejected)
+                    try:
+                        msg_id = await _send_approval_message(
+                            session, bot_token, connection.admin_chat_id, slot, rejected
+                        )
+                        if msg_id:
+                            notif = SlotNotification(
+                                slot_id=slot.id,
+                                connection_id=connection.id,
+                                tg_message_id=msg_id,
+                                admin_chat_id=connection.admin_chat_id,
+                                notification_type="approval",
+                            )
+                            db.add(notif)
+                            log.info("Approval уведомление отправлено: slot=%s rejected=%s", str(slot.id)[:8], rejected)
+                    except Exception as e:
+                        log.error("Ошибка отправки approval уведомления: %s", e)
+
+                await db.commit()
+
+
+async def _send_approval_message(
+    session: aiohttp.ClientSession,
+    bot_token: str,
+    chat_id: str,
+    slot: ContentSlot,
+    rejected: bool,
+) -> int | None:
+    """Отправляет уведомление о согласовании. Если rejected=True — без кнопок."""
+    rubric = slot.rubric.get("name", "—") if slot.rubric else "—"
+    platform = _platform_label(slot.platform)
+    scheduled = slot.scheduled_at.strftime("%d.%m.%Y %H:%M")
+
+    if rejected:
+        text = (
+            f"⏰ <b>Пост ожидает согласования на платформе</b>\n\n"
+            f"📅 {scheduled}  ·  {platform}  ·  {rubric}\n\n"
+            f"Войдите в контент-план, отредактируйте и согласуйте пост."
+        )
+        markup = None
+    else:
+        post_text = slot.post_text or ""
+        hashtags = " ".join(slot.hashtags or [])
+        idea_text = (slot.idea or {}).get("idea", "")
+
+        parts = [
+            f"📋 <b>Требует согласования</b>",
+            f"",
+            f"📅 {scheduled}  ·  {platform}  ·  {rubric}",
+        ]
+        if idea_text:
+            parts += ["", f"💡 {idea_text}"]
+        if post_text:
+            parts += ["", "<b>Текст поста:</b>", post_text[:700]]
+        if hashtags:
+            parts.append(hashtags[:200])
+
+        text = "\n".join(parts)
+        markup = {
+            "inline_keyboard": [[
+                {"text": "✅ Согласовано", "callback_data": f"approve:{slot.id}"},
+                {"text": "❌ Не согласовано", "callback_data": f"reject:{slot.id}"},
+            ]]
+        }
+
+    try:
+        if slot.image_base64:
+            image_bytes = base64.b64decode(slot.image_base64)
+            form = aiohttp.FormData()
+            form.add_field("chat_id", str(chat_id))
+            form.add_field("caption", text[:1024])
+            form.add_field("parse_mode", "HTML")
+            if markup:
+                form.add_field("reply_markup", json.dumps(markup))
+            form.add_field(
+                "photo", io.BytesIO(image_bytes),
+                filename="post.jpg", content_type="image/jpeg",
+            )
+            resp = await session.post(
+                f"https://api.telegram.org/bot{bot_token}/sendPhoto", data=form
+            )
+        elif slot.image_url:
+            payload: dict = {
+                "chat_id": chat_id,
+                "photo": slot.image_url,
+                "caption": text[:1024],
+                "parse_mode": "HTML",
+            }
+            if markup:
+                payload["reply_markup"] = markup
+            resp = await session.post(
+                f"https://api.telegram.org/bot{bot_token}/sendPhoto", json=payload
+            )
+        else:
+            payload = {
+                "chat_id": chat_id,
+                "text": text[:4096],
+                "parse_mode": "HTML",
+            }
+            if markup:
+                payload["reply_markup"] = markup
+            resp = await session.post(
+                f"https://api.telegram.org/bot{bot_token}/sendMessage", json=payload
+            )
+
+        resp_data = await resp.json()
+        if resp_data.get("ok"):
+            return resp_data["result"]["message_id"]
+        log.warning("TG approval send error: %s", resp_data)
+        return None
+    except Exception as e:
+        log.error("_send_approval_message error: %s", e)
+        return None
+
+
+# ── Обработка нажатий inline-кнопок ──────────────────────────────────────────
+
+async def _handle_callback(
+    session: aiohttp.ClientSession,
+    bot_token: str,
+    callback_query: dict,
+    db,
+) -> None:
+    """Обрабатывает нажатие кнопок ✅ Согласовано / ❌ Не согласовано."""
+    callback_id = callback_query["id"]
+    data = callback_query.get("data", "")
+    msg = callback_query.get("message", {})
+    chat_id = str(msg.get("chat", {}).get("id", ""))
+    message_id = msg.get("message_id")
+
+    action, _, slot_id_str = data.partition(":")
+    if action not in ("approve", "reject") or not slot_id_str:
+        return
+
+    try:
+        slot_id = uuid.UUID(slot_id_str)
+    except ValueError:
+        return
+
+    slot_result = await db.execute(select(ContentSlot).where(ContentSlot.id == slot_id))
+    slot = slot_result.scalar_one_or_none()
+    if not slot:
+        await _answer_callback(session, bot_token, callback_id, "Пост не найден")
+        return
+
+    if action == "approve":
+        if slot.status == PlanStatus.pending_approval:
+            slot.status = PlanStatus.content_ready
+            await db.commit()
+            await _remove_inline_buttons(session, bot_token, chat_id, message_id)
+            await _answer_callback(session, bot_token, callback_id, "✅ Пост согласован и готов к публикации!")
+            log.info("Пост согласован через TG: slot=%s", str(slot_id)[:8])
+        else:
+            await _answer_callback(session, bot_token, callback_id, "Пост уже обработан")
+
+    elif action == "reject":
+        slot.tg_approval_rejected = True
+        await db.commit()
+        await _remove_inline_buttons(session, bot_token, chat_id, message_id)
+        await _answer_callback(
+            session, bot_token, callback_id,
+            "❌ Зафиксировано. Отредактируйте пост в контент-плане и согласуйте там."
+        )
+        log.info("Пост отклонён через TG: slot=%s", str(slot_id)[:8])
+
+
+async def _answer_callback(
+    session: aiohttp.ClientSession, bot_token: str, callback_id: str, text: str
+) -> None:
+    try:
+        await session.post(
+            f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery",
+            json={"callback_query_id": callback_id, "text": text, "show_alert": True},
+        )
+    except Exception as e:
+        log.error("answerCallbackQuery error: %s", e)
+
+
+async def _remove_inline_buttons(
+    session: aiohttp.ClientSession, bot_token: str, chat_id: str, message_id: int
+) -> None:
+    try:
+        await session.post(
+            f"https://api.telegram.org/bot{bot_token}/editMessageReplyMarkup",
+            json={
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "reply_markup": {"inline_keyboard": []},
+            },
+        )
+    except Exception as e:
+        log.error("editMessageReplyMarkup error: %s", e)
