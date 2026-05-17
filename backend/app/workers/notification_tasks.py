@@ -265,10 +265,6 @@ async def _check_replies():
                         continue
 
                     await _process_reply(session, bot_token, message, slot, db)
-                    # Удаляем запись уведомления — повторный ответ не вызовет двойную обработку
-                    await db.execute(
-                        delete(SlotNotification).where(SlotNotification.slot_id == notif.slot_id)
-                    )
 
                 # Сохраняем новый offset
                 connection.tg_update_offset = new_offset
@@ -368,10 +364,19 @@ async def _process_reply(
     await db.commit()
 
     # Отправляем подтверждение в чат
-    confirm_lines = ["✅ <b>Информация получена!</b>", ""] + confirm_parts + [
-        "",
-        "Откройте контент-план для финального согласования.",
-    ]
+    remaining = slot.needs_info_for or []
+    if remaining:
+        confirm_lines = (
+            ["✅ <b>Информация частично получена!</b>", ""]
+            + confirm_parts
+            + ["", "⚠️ <b>Для согласования поста ещё нужно:</b>"]
+            + [f"{i}. {item}" for i, item in enumerate(remaining, 1)]
+        )
+    else:
+        confirm_lines = ["✅ <b>Информация получена!</b>", ""] + confirm_parts + [
+            "",
+            "Откройте контент-план для финального согласования.",
+        ]
     try:
         await session.post(
             f"https://api.telegram.org/bot{bot_token}/sendMessage",
