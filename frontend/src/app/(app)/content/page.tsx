@@ -1216,20 +1216,20 @@ export default function ContentPage() {
                         onDragLeave={() => setDragOverKey(null)}
                         onDrop={e => { e.preventDefault(); setDragOverKey(null); if (draggingId) moveSlot(draggingId, day); setDraggingId(null); }}
                       >
-                        <div style={{ marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ marginBottom: 6, display: "flex", justifyContent: "space-evenly", alignItems: "center" }}>
                           <button
                             title="Добавить событие"
                             onClick={e => { e.stopPropagation(); }}
-                            style={{ width: 15, height: 15, borderRadius: "50%", border: "none",
+                            style={{ width: 11, height: 11, borderRadius: "50%", border: "none",
                               background: "#FF2D78", display: "flex", alignItems: "center",
                               justifyContent: "center", cursor: "pointer", padding: 0,
-                              opacity: 0.7, transition: "opacity .15s", flexShrink: 0 }}
+                              opacity: 0.3, transition: "opacity .15s", flexShrink: 0 }}
                             onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
-                            onMouseLeave={e => (e.currentTarget.style.opacity = "0.7")}
+                            onMouseLeave={e => (e.currentTarget.style.opacity = "0.3")}
                           >
-                            <svg width="15" height="15" viewBox="0 0 15 15" style={{ display: "block" }}>
-                              <line x1="3" y1="7.5" x2="12" y2="7.5" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round"/>
-                              <line x1="7.5" y1="3" x2="7.5" y2="12" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round"/>
+                            <svg width="11" height="11" viewBox="0 0 11 11" style={{ display: "block" }}>
+                              <line x1="2" y1="5.5" x2="9" y2="5.5" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round"/>
+                              <line x1="5.5" y1="2" x2="5.5" y2="9" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round"/>
                             </svg>
                           </button>
 
@@ -1243,16 +1243,16 @@ export default function ContentPage() {
                           <button
                             title="Быстрый пост"
                             onClick={e => { e.stopPropagation(); }}
-                            style={{ width: 15, height: 15, borderRadius: "50%", border: "none",
+                            style={{ width: 11, height: 11, borderRadius: "50%", border: "none",
                               background: "#3B82F6", display: "flex", alignItems: "center",
                               justifyContent: "center", cursor: "pointer", padding: 0,
-                              opacity: 0.7, transition: "opacity .15s", flexShrink: 0 }}
+                              opacity: 0.3, transition: "opacity .15s", flexShrink: 0 }}
                             onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
-                            onMouseLeave={e => (e.currentTarget.style.opacity = "0.7")}
+                            onMouseLeave={e => (e.currentTarget.style.opacity = "0.3")}
                           >
-                            <svg width="15" height="15" viewBox="0 0 15 15" style={{ display: "block" }}>
-                              <line x1="3" y1="7.5" x2="12" y2="7.5" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round"/>
-                              <line x1="7.5" y1="3" x2="7.5" y2="12" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round"/>
+                            <svg width="11" height="11" viewBox="0 0 11 11" style={{ display: "block" }}>
+                              <line x1="2" y1="5.5" x2="9" y2="5.5" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round"/>
+                              <line x1="5.5" y1="2" x2="5.5" y2="9" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round"/>
                             </svg>
                           </button>
                         </div>
