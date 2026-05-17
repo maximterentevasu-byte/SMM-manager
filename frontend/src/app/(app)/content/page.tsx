@@ -1216,13 +1216,41 @@ export default function ContentPage() {
                         onDragLeave={() => setDragOverKey(null)}
                         onDrop={e => { e.preventDefault(); setDragOverKey(null); if (draggingId) moveSlot(draggingId, day); setDraggingId(null); }}
                       >
-                        <div style={{ marginBottom: 6, display: "flex", justifyContent: "center" }}>
+                        <div style={{ marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <button
+                            title="Добавить событие"
+                            onClick={e => { e.stopPropagation(); /* TODO: добавить событие */ }}
+                            style={{ width: 20, height: 20, borderRadius: "50%", border: "none",
+                              background: "#FF2D78", color: "rgba(255,255,255,0)", display: "flex",
+                              alignItems: "center", justifyContent: "center", cursor: "pointer",
+                              fontSize: 14, fontWeight: 700, lineHeight: 1, padding: 0,
+                              opacity: 0.5, transition: "opacity .15s", flexShrink: 0 }}
+                            onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+                            onMouseLeave={e => (e.currentTarget.style.opacity = "0.5")}
+                          >
+                            <span style={{ color: "rgba(255,255,255,0.9)", fontSize: 14, lineHeight: 1 }}>+</span>
+                          </button>
+
                           <span style={{ width: 26, height: 26, borderRadius: "50%", display: "flex",
                             alignItems: "center", justifyContent: "center",
                             fontSize: 12, fontWeight: isToday ? 700 : 400,
                             background: isToday ? "#533AB7" : "transparent",
                             color: isToday ? "#fff" : inCurrentMonth ? (di >= 5 ? "#aaa" : "#444") : "#ccc",
                           }}>{day.getDate()}</span>
+
+                          <button
+                            title="Быстрый пост"
+                            onClick={e => { e.stopPropagation(); /* TODO: быстрый пост */ }}
+                            style={{ width: 20, height: 20, borderRadius: "50%", border: "none",
+                              background: "#3B82F6", color: "rgba(255,255,255,0)", display: "flex",
+                              alignItems: "center", justifyContent: "center", cursor: "pointer",
+                              fontSize: 14, fontWeight: 700, lineHeight: 1, padding: 0,
+                              opacity: 0.5, transition: "opacity .15s", flexShrink: 0 }}
+                            onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+                            onMouseLeave={e => (e.currentTarget.style.opacity = "0.5")}
+                          >
+                            <span style={{ color: "rgba(255,255,255,0.9)", fontSize: 14, lineHeight: 1 }}>+</span>
+                          </button>
                         </div>
 
                         {daySlots.map(slot => {
