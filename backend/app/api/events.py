@@ -21,11 +21,14 @@ class EventCreate(BaseModel):
     end_date: str
     has_start_notification: bool = False
     start_post_datetime: Optional[str] = None   # ISO datetime
+    start_platforms: Optional[list[str]] = None
     has_end_notification: bool = False
     end_post_datetime: Optional[str] = None
+    end_platforms: Optional[list[str]] = None
     has_intermediate: bool = False
     intermediate_count: Optional[int] = None
     intermediate_datetimes: Optional[list[str]] = None
+    intermediate_platforms: Optional[list[str]] = None
 
 
 def _parse_dt(s: Optional[str]) -> Optional[datetime]:
@@ -39,12 +42,26 @@ def _parse_dt(s: Optional[str]) -> Optional[datetime]:
     return None
 
 
+def _resolve_platforms(
+    requested: Optional[list[str]],
+    all_active: list[Platform],
+) -> list[Platform]:
+    """Возвращает платформы из requested (если заданы), иначе все активные."""
+    if requested:
+        valid = {p.value for p in Platform}
+        return [Platform(p) for p in requested if p in valid]
+    return all_active or [Platform.vk]
+
+
 async def _create_event_slots(
     db: AsyncSession,
     event: Event,
     business_id: uuid.UUID,
+    start_platforms: Optional[list[str]] = None,
+    end_platforms: Optional[list[str]] = None,
+    intermediate_platforms: Optional[list[str]] = None,
 ) -> None:
-    """Создаёт ContentSlot для каждого уведомления события на всех активных платформах."""
+    """Создаёт ContentSlot для каждого уведомления события."""
     conns_result = await db.execute(
         select(PlatformConnection).where(
             PlatformConnection.business_id == business_id,
@@ -52,7 +69,7 @@ async def _create_event_slots(
         )
     )
     connections = conns_result.scalars().all()
-    platforms = list({c.platform for c in connections}) or [Platform.vk]
+    all_active = list({c.platform for c in connections})
 
     def _make_slot(post_type: str, scheduled_at: datetime, platform: Platform) -> ContentSlot:
         label = {"start": "Старт", "end": "Итог"}.get(post_type) or post_type.replace("_", " ").capitalize()
@@ -74,18 +91,19 @@ async def _create_event_slots(
     slots: list[ContentSlot] = []
 
     if event.has_start_notification and event.start_post_datetime:
-        for p in platforms:
+        for p in _resolve_platforms(start_platforms, all_active):
             slots.append(_make_slot("start", event.start_post_datetime, p))
 
     if event.has_end_notification and event.end_post_datetime:
-        for p in platforms:
+        for p in _resolve_platforms(end_platforms, all_active):
             slots.append(_make_slot("end", event.end_post_datetime, p))
 
     if event.has_intermediate and event.intermediate_datetimes:
+        inter_plats = _resolve_platforms(intermediate_platforms, all_active)
         for i, dt_str in enumerate(event.intermediate_datetimes, 1):
             dt = _parse_dt(dt_str)
             if dt:
-                for p in platforms:
+                for p in inter_plats:
                     slots.append(_make_slot(f"intermediate_{i}", dt, p))
 
     for s in slots:
@@ -127,7 +145,12 @@ async def create_event(
     db.add(event)
     await db.flush()  # получаем event.id до создания слотов
 
-    await _create_event_slots(db, event, uuid.UUID(business_id))
+    await _create_event_slots(
+        db, event, uuid.UUID(business_id),
+        start_platforms=data.start_platforms,
+        end_platforms=data.end_platforms,
+        intermediate_platforms=data.intermediate_platforms,
+    )
     await db.commit()
     await db.refresh(event)
 

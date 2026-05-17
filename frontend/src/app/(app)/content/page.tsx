@@ -129,6 +129,44 @@ const extractVideoFrameModal = (objectUrl: string): Promise<string | null> =>
     video.onerror = () => resolve(null);
   });
 
+const PLATFORM_LABELS: Record<string, { label: string; color: string; bg: string }> = {
+  vk:       { label: "ВКонтакте", color: "#4680C2", bg: "#EBF2FB" },
+  telegram: { label: "Telegram",  color: "#2AABEE", bg: "#E3F4FF" },
+  ok:       { label: "Одноклассники", color: "#F57C00", bg: "#FFF3E0" },
+};
+
+function EvPlatformPicker({ platforms, selected, onChange }: {
+  platforms: Array<{ platform: string; page_name: string }>;
+  selected: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const toggle = (p: string) =>
+    onChange(selected.includes(p) ? selected.filter(x => x !== p) : [...selected, p]);
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>Каналы публикации</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {platforms.map(p => {
+          const cfg = PLATFORM_LABELS[p.platform] || { label: p.platform, color: "#888", bg: "#F1EFE8" };
+          const on = selected.includes(p.platform);
+          return (
+            <button key={p.platform} type="button" onClick={() => toggle(p.platform)}
+              style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px",
+                borderRadius: 20, border: `1.5px solid ${on ? cfg.color : "#E0DED8"}`,
+                background: on ? cfg.bg : "#fff", cursor: "pointer",
+                fontSize: 12, color: on ? cfg.color : "#888", fontWeight: on ? 600 : 400,
+                transition: "all .15s" }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%",
+                background: on ? cfg.color : "#ccc", display: "inline-block", flexShrink: 0 }} />
+              {p.page_name || cfg.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ModalUploadGrid({ slots, onSlotClick, onRemove, onReorder, onFileDrop }: {
   slots: Array<ModalUploadSlot | null>;
   onSlotClick: (idx: number) => void;
@@ -334,12 +372,16 @@ export default function ContentPage() {
   const [evEndDate, setEvEndDate] = useState("");
   const [evHasStart, setEvHasStart] = useState(false);
   const [evStartDT, setEvStartDT] = useState("");
+  const [evStartPlatforms, setEvStartPlatforms] = useState<string[]>([]);
   const [evHasEnd, setEvHasEnd] = useState(false);
   const [evEndDT, setEvEndDT] = useState("");
+  const [evEndPlatforms, setEvEndPlatforms] = useState<string[]>([]);
   const [evHasInter, setEvHasInter] = useState(false);
   const [evInterCount, setEvInterCount] = useState(1);
   const [evInterDTs, setEvInterDTs] = useState<string[]>([""]);
+  const [evInterPlatforms, setEvInterPlatforms] = useState<string[]>([]);
   const [evSaving, setEvSaving] = useState(false);
+  const [evAvailablePlatforms, setEvAvailablePlatforms] = useState<Array<{platform: string; page_name: string}>>([]);
 
   const modalSlotInputRef       = useRef<HTMLInputElement>(null);
   const modalVideoInputRef      = useRef<HTMLInputElement>(null);
@@ -357,6 +399,20 @@ export default function ContentPage() {
     try {
       const { data } = await api.get(`/events/${businessId}`);
       setCalEvents(data || []);
+    } catch {}
+  }, [businessId]);
+
+  const openEventModal = useCallback(async () => {
+    setEventModalOpen(true);
+    try {
+      const { data } = await api.get(`/platforms/list/${businessId}`);
+      const active = (data || []).filter((p: any) => p.is_active)
+        .map((p: any) => ({ platform: p.platform, page_name: p.page_name }));
+      setEvAvailablePlatforms(active);
+      const all = active.map((p: any) => p.platform);
+      setEvStartPlatforms(all);
+      setEvEndPlatforms(all);
+      setEvInterPlatforms(all);
     } catch {}
   }, [businessId]);
 
@@ -1036,18 +1092,31 @@ export default function ContentPage() {
               const st = STATUS_CONFIG[slot.status] || STATUS_CONFIG.planned;
               const date = new Date(slot.scheduled_at);
               const isGenerating = !slot.post_text && !slot.idea && slot.status !== "needs_info";
+              const isEvent = !!slot.event_id;
+              const hasImage = !!(slot.image_url || slot.image_base64);
+              const imgSrc = slot.image_url || (slot.image_base64 ? `data:image/png;base64,${slot.image_base64}` : null);
+              const platCfg = PLATFORM_COLORS[slot.platform] || { bg: "#F1EFE8", border: "#bbb" };
               return (
                 <div key={slot.id} style={{ background: "#fff", borderRadius: 14,
-                  border: "1px solid #EAE8E2", overflow: "hidden" }}>
+                  border: isEvent ? "1px solid #F4A7C3" : "1px solid #EAE8E2", overflow: "hidden" }}>
 
-                  {/* Header row */}
-                  <div style={{ padding: "12px 18px", display: "flex", alignItems: "center",
-                    gap: 10, borderBottom: "1px solid #F2F0EC" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "#fff",
-                      background: PLATFORM_COLORS[slot.platform]?.border || "#888",
-                      padding: "2px 8px", borderRadius: 6, letterSpacing: 0.3 }}>
-                      {PLATFORM_ICON[slot.platform] || slot.platform.toUpperCase()}
-                    </span>
+                  {/* Header */}
+                  <div style={{ padding: "11px 18px", display: "flex", alignItems: "center",
+                    gap: 8, borderBottom: "1px solid #F2F0EC",
+                    background: isEvent ? "#FFF0F5" : "transparent" }}>
+                    {/* Событие-бейдж или платформа */}
+                    {isEvent ? (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#fff",
+                        background: "#E91E8C", padding: "2px 9px", borderRadius: 6, letterSpacing: 0.3, flexShrink: 0 }}>
+                        Событие
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#fff",
+                        background: platCfg.border, padding: "2px 8px", borderRadius: 6,
+                        letterSpacing: 0.3, flexShrink: 0 }}>
+                        {PLATFORM_ICON[slot.platform] || slot.platform.toUpperCase()}
+                      </span>
+                    )}
                     <span style={{ fontSize: 13, color: "#555", fontWeight: 500, flex: 1,
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {slot.rubric_name}
@@ -1059,61 +1128,95 @@ export default function ContentPage() {
                       borderRadius: 20, color: st.color, background: st.bg, flexShrink: 0 }}>{st.label}</span>
                   </div>
 
-                  {/* Body */}
-                  <div style={{ padding: "14px 18px 16px" }}>
+                  {/* Body: two-column — content left, image right */}
+                  <div style={{ display: "flex", gap: 0 }}>
+                    <div style={{ flex: 1, padding: "14px 18px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
 
-                    {/* Идея и хук — всегда вверху */}
-                    {slot.idea && (
-                      <div style={{ marginBottom: 10 }}>
-                        {slot.idea.idea && (
-                          <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a1a", marginBottom: 2 }}>
-                            {slot.idea.idea}
-                          </div>
-                        )}
-                        {slot.idea.hook && (
-                          <div style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>
-                            {slot.idea.hook}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Список нужной информации (needs_info) */}
-                    {slot.needs_info_for && slot.needs_info_for.length > 0 && (
-                      <div style={{ marginBottom: 10, padding: "8px 12px", background: "#FFF8ED",
-                        borderRadius: 8, border: "1px solid #FFD699" }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: "#7C4400", marginBottom: 4 }}>
-                          📋 Требуется информация
+                      {/* Блок: Идея */}
+                      {slot.idea && (slot.idea.idea || slot.idea.hook) && (
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#888",
+                            textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Идея</div>
+                          {slot.idea.idea && (
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a1a", lineHeight: 1.4 }}>
+                              {slot.idea.idea}
+                            </div>
+                          )}
+                          {slot.idea.hook && (
+                            <div style={{ fontSize: 12, color: "#888", fontStyle: "italic", marginTop: 2 }}>
+                              {slot.idea.hook}
+                            </div>
+                          )}
                         </div>
-                        {slot.needs_info_for.map((q, i) => (
-                          <div key={i} style={{ fontSize: 12, color: "#555", lineHeight: 1.5 }}>
-                            {i + 1}. {q}
+                      )}
+
+                      {/* Нужна информация */}
+                      {slot.needs_info_for && slot.needs_info_for.length > 0 && (
+                        <div style={{ padding: "7px 11px", background: "#FFF8ED",
+                          borderRadius: 8, border: "1px solid #FFD699" }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#7C4400",
+                            textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>
+                            Требуется информация
                           </div>
-                        ))}
-                      </div>
-                    )}
+                          {slot.needs_info_for.map((q, i) => (
+                            <div key={i} style={{ fontSize: 12, color: "#555", lineHeight: 1.5 }}>
+                              {i + 1}. {q}
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
-                    {/* Текст поста */}
-                    {slot.post_text ? (
-                      <p style={{ fontSize: 14, lineHeight: 1.7, color: "#2a2a2a",
-                        margin: "0 0 12px", whiteSpace: "pre-wrap" }}>{slot.post_text}</p>
-                    ) : isGenerating ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 10,
-                        padding: "8px 0 12px", color: "#888" }}>
-                        <div style={{ width: 16, height: 16, border: "2px solid #bbb",
-                          borderTopColor: "#533AB7", borderRadius: "50%",
-                          animation: "spin 1s linear infinite", flexShrink: 0 }} />
-                        <span style={{ fontSize: 13 }}>Генерирую текст поста...</span>
-                      </div>
-                    ) : null}
+                      {/* Блок: Текст */}
+                      {slot.post_text ? (
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#888",
+                            textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Текст</div>
+                          <p style={{ fontSize: 13, lineHeight: 1.7, color: "#2a2a2a",
+                            margin: 0, whiteSpace: "pre-wrap",
+                            display: "-webkit-box", WebkitLineClamp: 4,
+                            WebkitBoxOrient: "vertical" as any, overflow: "hidden" }}>
+                            {slot.post_text}
+                          </p>
+                        </div>
+                      ) : isGenerating ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#888" }}>
+                          <div style={{ width: 14, height: 14, border: "2px solid #bbb",
+                            borderTopColor: "#533AB7", borderRadius: "50%",
+                            animation: "spin 1s linear infinite", flexShrink: 0 }} />
+                          <span style={{ fontSize: 12 }}>Генерирую текст поста...</span>
+                        </div>
+                      ) : null}
 
-                    {/* Единственная кнопка */}
-                    <button onClick={() => openSlot(slot)}
-                      style={{ padding: "7px 16px", background: "#F1EFE8", color: "#444",
-                        border: "1px solid #E0DED8", borderRadius: 8, cursor: "pointer",
-                        fontSize: 12, fontWeight: 500 }}>
-                      ✏️ Редактировать
-                    </button>
+                      {/* Кнопка */}
+                      <div>
+                        <button onClick={() => openSlot(slot)}
+                          style={{ padding: "6px 14px", background: "#F1EFE8", color: "#444",
+                            border: "1px solid #E0DED8", borderRadius: 8, cursor: "pointer",
+                            fontSize: 12, fontWeight: 500 }}>
+                          ✏️ Редактировать
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Превью изображения */}
+                    <div style={{ width: 120, flexShrink: 0, padding: "14px 14px 14px 0",
+                      display: "flex", alignItems: "flex-start", justifyContent: "center" }}>
+                      {hasImage ? (
+                        <img src={imgSrc!} alt="preview"
+                          onClick={() => openSlot(slot)}
+                          style={{ width: 106, height: 106, objectFit: "cover",
+                            borderRadius: 10, cursor: "pointer", border: "1px solid #EAE8E2" }} />
+                      ) : (
+                        <div onClick={() => openSlot(slot)}
+                          style={{ width: 106, height: 106, borderRadius: 10, border: "2px dashed #E0DED8",
+                            display: "flex", flexDirection: "column", alignItems: "center",
+                            justifyContent: "center", gap: 4, cursor: "pointer", background: "#FAFAF8" }}>
+                          <span style={{ fontSize: 20, opacity: 0.35 }}>🖼</span>
+                          <span style={{ fontSize: 9, color: "#bbb", textAlign: "center",
+                            lineHeight: 1.3 }}>Нет<br/>изображения</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -1192,7 +1295,7 @@ export default function ContentPage() {
                         <div style={{ marginBottom: 6, display: "flex", justifyContent: "space-evenly", alignItems: "center" }}>
                           <button
                             title="Добавить событие"
-                            onClick={e => { e.stopPropagation(); setEventModalOpen(true); }}
+                            onClick={e => { e.stopPropagation(); openEventModal(); }}
                             style={{ width: 11, height: 11, borderRadius: "50%", border: "none",
                               background: "#FF2D78", position: "relative",
                               cursor: "pointer", padding: 0,
@@ -2145,11 +2248,18 @@ export default function ContentPage() {
                   <span style={{ fontWeight: 600, fontSize: 13, color: "#1a1a1a" }}>4. Уведомление о старте мероприятия</span>
                 </label>
                 {evHasStart && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4, marginLeft: 26 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginLeft: 26 }}>
                     <span style={{ fontSize: 12, color: "#888" }}>Дата и время публикации поста о старте</span>
                     <input type="datetime-local" value={evStartDT} onChange={e => setEvStartDT(e.target.value)}
                       style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E0DED8",
                         fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
+                    {evAvailablePlatforms.length > 1 && (
+                      <EvPlatformPicker
+                        platforms={evAvailablePlatforms}
+                        selected={evStartPlatforms}
+                        onChange={setEvStartPlatforms}
+                      />
+                    )}
                   </div>
                 )}
               </div>
@@ -2163,11 +2273,18 @@ export default function ContentPage() {
                   <span style={{ fontWeight: 600, fontSize: 13, color: "#1a1a1a" }}>5. Уведомление о завершении (итоги)</span>
                 </label>
                 {evHasEnd && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4, marginLeft: 26 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginLeft: 26 }}>
                     <span style={{ fontSize: 12, color: "#888" }}>Дата и время публикации итогового поста</span>
                     <input type="datetime-local" value={evEndDT} onChange={e => setEvEndDT(e.target.value)}
                       style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E0DED8",
                         fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
+                    {evAvailablePlatforms.length > 1 && (
+                      <EvPlatformPicker
+                        platforms={evAvailablePlatforms}
+                        selected={evEndPlatforms}
+                        onChange={setEvEndPlatforms}
+                      />
+                    )}
                   </div>
                 )}
               </div>
@@ -2206,6 +2323,13 @@ export default function ContentPage() {
                             fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
                       </div>
                     ))}
+                    {evAvailablePlatforms.length > 1 && (
+                      <EvPlatformPicker
+                        platforms={evAvailablePlatforms}
+                        selected={evInterPlatforms}
+                        onChange={setEvInterPlatforms}
+                      />
+                    )}
                   </div>
                 )}
               </div>
@@ -2230,16 +2354,21 @@ export default function ContentPage() {
                       end_date: evEndDate,
                       has_start_notification: evHasStart,
                       start_post_datetime: evHasStart ? evStartDT : null,
+                      start_platforms: evHasStart && evStartPlatforms.length ? evStartPlatforms : null,
                       has_end_notification: evHasEnd,
                       end_post_datetime: evHasEnd ? evEndDT : null,
+                      end_platforms: evHasEnd && evEndPlatforms.length ? evEndPlatforms : null,
                       has_intermediate: evHasInter,
                       intermediate_count: evHasInter ? evInterCount : null,
                       intermediate_datetimes: evHasInter ? evInterDTs.slice(0, evInterCount) : null,
+                      intermediate_platforms: evHasInter && evInterPlatforms.length ? evInterPlatforms : null,
                     });
                     setEventModalOpen(false);
                     setEvName(""); setEvDesc(""); setEvStartDate(""); setEvEndDate("");
-                    setEvHasStart(false); setEvStartDT(""); setEvHasEnd(false); setEvEndDT("");
-                    setEvHasInter(false); setEvInterCount(1); setEvInterDTs([""]);
+                    setEvHasStart(false); setEvStartDT(""); setEvStartPlatforms([]);
+                    setEvHasEnd(false); setEvEndDT(""); setEvEndPlatforms([]);
+                    setEvHasInter(false); setEvInterCount(1); setEvInterDTs([""]); setEvInterPlatforms([]);
+                    setEvAvailablePlatforms([]);
                     await load(); await loadEvents();
                   } catch (e) { alert("Ошибка при создании события"); }
                   finally { setEvSaving(false); }
