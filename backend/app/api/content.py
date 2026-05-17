@@ -89,6 +89,8 @@ async def get_plan(
             "images": s.images,
             "needs_info_for": s.needs_info_for,
             "status": s.status.value if hasattr(s.status, "value") else s.status,
+            "event_id": str(s.event_id) if s.event_id else None,
+            "event_post_type": s.event_post_type,
         }
         for s in slots
     ]
