@@ -2005,7 +2005,7 @@ export default function ContentPage() {
                   </button>
                 )}
 
-                {(expanded.status === "content_ready" || expanded.status === "pending_approval") && (
+                {expanded.status === "content_ready" && (
                   <button onClick={publishModal}
                     style={{ padding: "10px 18px", background: "#185FA5", color: "#fff",
                       border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
