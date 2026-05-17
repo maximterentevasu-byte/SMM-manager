@@ -2074,7 +2074,7 @@ export default function ContentPage() {
                   background: "#F1EFE8", cursor: "pointer", fontSize: 18, color: "#555",
                   display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
             </div>
-            <iframe src="/post-creator" style={{ flex: 1, border: "none", width: "100%" }} />
+            <iframe src="/embed/post-creator" style={{ flex: 1, border: "none", width: "100%" }} />
           </div>
         </div>
       )}
