@@ -46,6 +46,14 @@ type Slot = {
   image_prompt: string | null; status: string;
   images: string[] | null;
   needs_info_for: string[] | null;
+  event_id: string | null;
+  event_post_type: string | null;
+};
+
+type CalEvent = {
+  id: string; name: string;
+  start_date: string; end_date: string;
+  status: string;
 };
 
 // ── Calendar utils ────────────────────────────────────────────────────────────
@@ -317,6 +325,22 @@ export default function ContentPage() {
   const [quickPostOpen, setQuickPostOpen] = useState(false);
   const [quickPostPlatforms, setQuickPostPlatforms] = useState<Array<{platform: string; page_name: string}>>([]);
 
+  // Events
+  const [calEvents, setCalEvents] = useState<CalEvent[]>([]);
+  const [eventModalOpen, setEventModalOpen] = useState(false);
+  const [evName, setEvName] = useState("");
+  const [evDesc, setEvDesc] = useState("");
+  const [evStartDate, setEvStartDate] = useState("");
+  const [evEndDate, setEvEndDate] = useState("");
+  const [evHasStart, setEvHasStart] = useState(false);
+  const [evStartDT, setEvStartDT] = useState("");
+  const [evHasEnd, setEvHasEnd] = useState(false);
+  const [evEndDT, setEvEndDT] = useState("");
+  const [evHasInter, setEvHasInter] = useState(false);
+  const [evInterCount, setEvInterCount] = useState(1);
+  const [evInterDTs, setEvInterDTs] = useState<string[]>([""]);
+  const [evSaving, setEvSaving] = useState(false);
+
   const modalSlotInputRef       = useRef<HTMLInputElement>(null);
   const modalVideoInputRef      = useRef<HTMLInputElement>(null);
   const modalEditSlotInputRef   = useRef<HTMLInputElement>(null);
@@ -327,6 +351,14 @@ export default function ContentPage() {
   const [businessId] = useState(() =>
     typeof window !== "undefined" ? localStorage.getItem("businessId") || "" : ""
   );
+
+  const loadEvents = useCallback(async () => {
+    if (!businessId) return;
+    try {
+      const { data } = await api.get(`/events/${businessId}`);
+      setCalEvents(data || []);
+    } catch {}
+  }, [businessId]);
 
   const load = useCallback(async () => {
     try {
@@ -342,8 +374,9 @@ export default function ContentPage() {
 
   useEffect(() => {
     load();
+    loadEvents();
     setStrategyUpdated(!!localStorage.getItem("strategyUpdatedAt"));
-  }, [load]);
+  }, [load, loadEvents]);
 
   // Синхронизация localInfoQuestions при открытии слота
   useEffect(() => {
@@ -1222,7 +1255,7 @@ export default function ContentPage() {
                         <div style={{ marginBottom: 6, display: "flex", justifyContent: "space-evenly", alignItems: "center" }}>
                           <button
                             title="Добавить событие"
-                            onClick={e => { e.stopPropagation(); }}
+                            onClick={e => { e.stopPropagation(); setEventModalOpen(true); }}
                             style={{ width: 11, height: 11, borderRadius: "50%", border: "none",
                               background: "#FF2D78", position: "relative",
                               cursor: "pointer", padding: 0,
@@ -1271,8 +1304,37 @@ export default function ContentPage() {
                           </button>
                         </div>
 
+                        {/* Событийные блоки (как в Outlook) */}
+                        {calEvents.filter(ev => {
+                          const s = new Date(ev.start_date); s.setHours(0,0,0,0);
+                          const e = new Date(ev.end_date); e.setHours(23,59,59,999);
+                          return day >= s && day <= e;
+                        }).map(ev => {
+                          const evStart = new Date(ev.start_date); evStart.setHours(0,0,0,0);
+                          const evEnd = new Date(ev.end_date); evEnd.setHours(0,0,0,0);
+                          const isStart = isSameDay(day, evStart);
+                          const isEnd   = isSameDay(day, evEnd);
+                          return (
+                            <div key={ev.id} title={ev.name} style={{
+                              background: ev.status === "completed" ? "#C2185B" : "#E91E8C",
+                              color: "#fff", fontSize: 10, fontWeight: 600,
+                              padding: "2px 6px", marginBottom: 3,
+                              borderRadius: isStart && isEnd ? 4 : isStart ? "4px 0 0 4px" : isEnd ? "0 4px 4px 0" : 0,
+                              marginLeft: isStart ? 0 : -8,
+                              marginRight: isEnd ? 0 : -8,
+                              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                              cursor: "default",
+                            }}>
+                              {isStart ? ev.name : ""}
+                            </div>
+                          );
+                        })}
+
                         {daySlots.map(slot => {
-                          const pc  = PLATFORM_COLORS[slot.platform] || { bg: "#F1EFE8", border: "#bbb" };
+                          const isEventSlot = !!slot.event_id;
+                          const pc  = isEventSlot
+                            ? { bg: "#FFF0F5", border: "#E91E8C" }
+                            : (PLATFORM_COLORS[slot.platform] || { bg: "#F1EFE8", border: "#bbb" });
                           const st  = STATUS_CONFIG[slot.status] || STATUS_CONFIG.planned;
                           const topic = slot.idea?.idea || slot.post_text?.substring(0, 60) || slot.rubric_name;
 
@@ -1284,7 +1346,7 @@ export default function ContentPage() {
                               title={topic}
                               style={{
                                 background: pc.bg,
-                                borderLeft: `3px solid ${slot.status === "pending_approval" ? "#F59E0B" : slot.status === "needs_info" ? "#EA580C" : pc.border}`,
+                                borderLeft: `3px solid ${isEventSlot ? "#E91E8C" : slot.status === "pending_approval" ? "#F59E0B" : slot.status === "needs_info" ? "#EA580C" : pc.border}`,
                                 borderRadius: 5, padding: "4px 7px", marginBottom: 3,
                                 cursor: "grab", userSelect: "none",
                                 opacity: draggingId === slot.id ? 0.4 : 1,
@@ -2070,6 +2132,196 @@ export default function ContentPage() {
           </div>
         );
       })()}
+
+      {/* ── Модал создания события ── */}
+      {eventModalOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div onClick={() => setEventModalOpen(false)}
+            style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)" }} />
+          <div style={{ position: "relative", width: "min(580px, 95vw)", maxHeight: "90vh",
+            background: "#fff", borderRadius: 20, overflow: "hidden",
+            boxShadow: "0 24px 80px rgba(0,0,0,0.2)", display: "flex", flexDirection: "column" }}>
+
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "18px 24px", borderBottom: "1px solid #F2F0EC", background: "#fff", flexShrink: 0 }}>
+              <span style={{ fontWeight: 700, fontSize: 17, color: "#1a1a1a" }}>🎪 Создать событие</span>
+              <button onClick={() => setEventModalOpen(false)}
+                style={{ width: 32, height: 32, borderRadius: "50%", border: "none",
+                  background: "#F1EFE8", cursor: "pointer", fontSize: 18, color: "#555",
+                  display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+            </div>
+
+            {/* Form */}
+            <div style={{ overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+              {/* Block 1 */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <label style={{ fontWeight: 600, fontSize: 13, color: "#1a1a1a" }}>1. Наименование события</label>
+                <input value={evName} onChange={e => setEvName(e.target.value)}
+                  placeholder="Например: Летняя акция -20%"
+                  style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #E0DED8",
+                    fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
+              </div>
+
+              {/* Block 2 */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <label style={{ fontWeight: 600, fontSize: 13, color: "#1a1a1a" }}>2. Краткое описание</label>
+                <textarea value={evDesc} onChange={e => setEvDesc(e.target.value)} rows={3}
+                  placeholder="Опишите событие..."
+                  style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #E0DED8",
+                    fontSize: 14, outline: "none", resize: "vertical", fontFamily: "inherit",
+                    width: "100%", boxSizing: "border-box" }} />
+                <div style={{ fontSize: 12, color: "#888", background: "#FAFAF8",
+                  borderRadius: 8, padding: "8px 12px", lineHeight: 1.6 }}>
+                  Если это <b>акция</b> — кратко опишите условия.<br/>
+                  Если это <b>ивент</b> — опишите суть мероприятия.<br/>
+                  Информация потребуется для генерации текста постов.
+                </div>
+              </div>
+
+              {/* Block 3 */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <label style={{ fontWeight: 600, fontSize: 13, color: "#1a1a1a" }}>3. Даты события</label>
+                <div style={{ display: "flex", gap: 12 }}>
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ fontSize: 12, color: "#888" }}>Начало</span>
+                    <input type="date" value={evStartDate} onChange={e => setEvStartDate(e.target.value)}
+                      style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E0DED8",
+                        fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
+                  </div>
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ fontSize: 12, color: "#888" }}>Окончание</span>
+                    <input type="date" value={evEndDate} onChange={e => setEvEndDate(e.target.value)}
+                      style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E0DED8",
+                        fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Block 4 */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px",
+                borderRadius: 12, border: "1px solid #F2F0EC", background: "#FAFAF8" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                  <input type="checkbox" checked={evHasStart} onChange={e => setEvHasStart(e.target.checked)}
+                    style={{ width: 16, height: 16, accentColor: "#E91E8C", cursor: "pointer" }} />
+                  <span style={{ fontWeight: 600, fontSize: 13, color: "#1a1a1a" }}>4. Уведомление о старте мероприятия</span>
+                </label>
+                {evHasStart && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, marginLeft: 26 }}>
+                    <span style={{ fontSize: 12, color: "#888" }}>Дата и время публикации поста о старте</span>
+                    <input type="datetime-local" value={evStartDT} onChange={e => setEvStartDT(e.target.value)}
+                      style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E0DED8",
+                        fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
+                  </div>
+                )}
+              </div>
+
+              {/* Block 5 */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px",
+                borderRadius: 12, border: "1px solid #F2F0EC", background: "#FAFAF8" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                  <input type="checkbox" checked={evHasEnd} onChange={e => setEvHasEnd(e.target.checked)}
+                    style={{ width: 16, height: 16, accentColor: "#E91E8C", cursor: "pointer" }} />
+                  <span style={{ fontWeight: 600, fontSize: 13, color: "#1a1a1a" }}>5. Уведомление о завершении (итоги)</span>
+                </label>
+                {evHasEnd && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, marginLeft: 26 }}>
+                    <span style={{ fontSize: 12, color: "#888" }}>Дата и время публикации итогового поста</span>
+                    <input type="datetime-local" value={evEndDT} onChange={e => setEvEndDT(e.target.value)}
+                      style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E0DED8",
+                        fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
+                  </div>
+                )}
+              </div>
+
+              {/* Block 6 */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px",
+                borderRadius: 12, border: "1px solid #F2F0EC", background: "#FAFAF8" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                  <input type="checkbox" checked={evHasInter} onChange={e => setEvHasInter(e.target.checked)}
+                    style={{ width: 16, height: 16, accentColor: "#E91E8C", cursor: "pointer" }} />
+                  <span style={{ fontWeight: 600, fontSize: 13, color: "#1a1a1a" }}>6. Промежуточные уведомления</span>
+                </label>
+                {evHasInter && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, marginLeft: 26 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 13, color: "#555" }}>Количество промежуточных постов</span>
+                      <input type="number" min={1} max={10} value={evInterCount}
+                        onChange={e => {
+                          const n = Math.max(1, Math.min(10, parseInt(e.target.value) || 1));
+                          setEvInterCount(n);
+                          setEvInterDTs(arr => {
+                            const next = [...arr];
+                            while (next.length < n) next.push("");
+                            return next.slice(0, n);
+                          });
+                        }}
+                        style={{ width: 64, padding: "6px 10px", borderRadius: 8,
+                          border: "1px solid #E0DED8", fontSize: 14, outline: "none" }} />
+                    </div>
+                    {evInterDTs.slice(0, evInterCount).map((dt, idx) => (
+                      <div key={idx} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        <span style={{ fontSize: 12, color: "#888" }}>Пост {idx + 1} — дата и время</span>
+                        <input type="datetime-local" value={dt}
+                          onChange={e => setEvInterDTs(arr => { const n=[...arr]; n[idx]=e.target.value; return n; })}
+                          style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E0DED8",
+                            fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Footer buttons */}
+            <div style={{ display: "flex", gap: 10, padding: "16px 24px",
+              borderTop: "1px solid #F2F0EC", background: "#fff", flexShrink: 0 }}>
+              <button
+                disabled={evSaving || !evName.trim() || !evStartDate || !evEndDate}
+                onClick={async () => {
+                  if (!evName.trim() || !evStartDate || !evEndDate) return;
+                  const bid = localStorage.getItem("businessId");
+                  if (!bid) return;
+                  setEvSaving(true);
+                  try {
+                    await api.post(`/events/${bid}`, {
+                      name: evName.trim(),
+                      description: evDesc.trim() || null,
+                      start_date: evStartDate,
+                      end_date: evEndDate,
+                      has_start_notification: evHasStart,
+                      start_post_datetime: evHasStart ? evStartDT : null,
+                      has_end_notification: evHasEnd,
+                      end_post_datetime: evHasEnd ? evEndDT : null,
+                      has_intermediate: evHasInter,
+                      intermediate_count: evHasInter ? evInterCount : null,
+                      intermediate_datetimes: evHasInter ? evInterDTs.slice(0, evInterCount) : null,
+                    });
+                    setEventModalOpen(false);
+                    setEvName(""); setEvDesc(""); setEvStartDate(""); setEvEndDate("");
+                    setEvHasStart(false); setEvStartDT(""); setEvHasEnd(false); setEvEndDT("");
+                    setEvHasInter(false); setEvInterCount(1); setEvInterDTs([""]);
+                    await load(); await loadEvents();
+                  } catch (e) { alert("Ошибка при создании события"); }
+                  finally { setEvSaving(false); }
+                }}
+                style={{ flex: 1, padding: "11px 0", borderRadius: 12, border: "none",
+                  background: evSaving || !evName.trim() || !evStartDate || !evEndDate ? "#ccc" : "#E91E8C",
+                  color: "#fff", fontWeight: 700, fontSize: 14,
+                  cursor: evSaving || !evName.trim() ? "not-allowed" : "pointer" }}>
+                {evSaving ? "Сохранение..." : "✓ Завершить создание события"}
+              </button>
+              <button onClick={() => setEventModalOpen(false)}
+                style={{ padding: "11px 20px", borderRadius: 12, border: "1px solid #E0DED8",
+                  background: "#fff", color: "#555", fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
+                Отменить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {quickPostOpen && (
         <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>

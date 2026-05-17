@@ -71,6 +71,7 @@ class Business(Base):
     user: Mapped["User"] = relationship(back_populates="businesses")
     platform_connections: Mapped[list["PlatformConnection"]] = relationship(back_populates="business")
     content_slots: Mapped[list["ContentSlot"]] = relationship(back_populates="business")
+    events: Mapped[list["Event"]] = relationship(back_populates="business")
 
 
 class PlatformConnection(Base):
@@ -126,6 +127,8 @@ class ContentSlot(Base):
     images: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)          # карусель (список base64)
     needs_info_for: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)  # список требуемых данных
     tg_approval_rejected: Mapped[bool] = mapped_column(Boolean, default=False)  # отклонено через TG → только через платформу
+    event_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID, ForeignKey("events.id", ondelete="SET NULL"), nullable=True)
+    event_post_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # 'start' | 'end' | 'intermediate_N'
 
     reach: Mapped[Optional[int]] = mapped_column(nullable=True)
     likes: Mapped[Optional[int]] = mapped_column(nullable=True)
@@ -136,6 +139,35 @@ class ContentSlot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     business: Mapped["Business"] = relationship(back_populates="content_slots")
+    event: Mapped[Optional["Event"]] = relationship(back_populates="content_slots")
+
+
+class Event(Base):
+    """Маркетинговое событие (акция, ивент) с автоматическими постами."""
+    __tablename__ = "events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    business_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("businesses.id"), index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    start_date: Mapped[datetime] = mapped_column(DateTime)
+    end_date: Mapped[datetime] = mapped_column(DateTime)
+
+    has_start_notification: Mapped[bool] = mapped_column(Boolean, default=False)
+    start_post_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    has_end_notification: Mapped[bool] = mapped_column(Boolean, default=False)
+    end_post_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    has_intermediate: Mapped[bool] = mapped_column(Boolean, default=False)
+    intermediate_count: Mapped[Optional[int]] = mapped_column(nullable=True)
+    intermediate_datetimes: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+
+    status: Mapped[str] = mapped_column(String(50), default="active")  # active | completed | cancelled
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    business: Mapped["Business"] = relationship(back_populates="events")
+    content_slots: Mapped[list["ContentSlot"]] = relationship(back_populates="event")
 
 
 class SlotNotification(Base):
