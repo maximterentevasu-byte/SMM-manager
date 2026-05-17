@@ -1031,152 +1031,89 @@ export default function ContentPage() {
 
         {/* ── List view ── */}
         {viewMode === "list" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {filtered.map(slot => {
               const st = STATUS_CONFIG[slot.status] || STATUS_CONFIG.planned;
               const date = new Date(slot.scheduled_at);
-              const isEditing = editingId === slot.id;
-              const needsApproval = slot.status === "pending_approval" || slot.status === "needs_info";
+              const isGenerating = !slot.post_text && !slot.idea && slot.status !== "needs_info";
               return (
-                <div key={slot.id} style={{ background: "#fff", borderRadius: 16,
-                  border: `1px solid ${needsApproval ? st.bg : "#EAE8E2"}`,
-                  outline: needsApproval ? `2px solid ${st.color}22` : "none",
-                  overflow: "hidden" }}>
-                  <div style={{ padding: "14px 20px", display: "flex", alignItems: "center",
-                    gap: 12, borderBottom: "1px solid #F2F0EC",
-                    background: needsApproval ? st.bg : "transparent" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "#888",
-                      background: "#F1EFE8", padding: "3px 8px", borderRadius: 6 }}>
+                <div key={slot.id} style={{ background: "#fff", borderRadius: 14,
+                  border: "1px solid #EAE8E2", overflow: "hidden" }}>
+
+                  {/* Header row */}
+                  <div style={{ padding: "12px 18px", display: "flex", alignItems: "center",
+                    gap: 10, borderBottom: "1px solid #F2F0EC" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#fff",
+                      background: PLATFORM_COLORS[slot.platform]?.border || "#888",
+                      padding: "2px 8px", borderRadius: 6, letterSpacing: 0.3 }}>
                       {PLATFORM_ICON[slot.platform] || slot.platform.toUpperCase()}
                     </span>
-                    <span style={{ fontSize: 13, color: "#555", fontWeight: 500 }}>{slot.rubric_name}</span>
-                    <div style={{ flex: 1 }} />
-                    <span style={{ fontSize: 12, color: "#999" }}>
+                    <span style={{ fontSize: 13, color: "#555", fontWeight: 500, flex: 1,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {slot.rubric_name}
+                    </span>
+                    <span style={{ fontSize: 12, color: "#999", flexShrink: 0 }}>
                       {date.getDate()} {MONTHS[date.getMonth()]} · {String(date.getHours()).padStart(2,"0")}:{String(date.getMinutes()).padStart(2,"0")}
                     </span>
-                    <span style={{ fontSize: 12, fontWeight: 600, padding: "3px 10px",
-                      borderRadius: 20, color: st.color, background: st.bg }}>{st.label}</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px",
+                      borderRadius: 20, color: st.color, background: st.bg, flexShrink: 0 }}>{st.label}</span>
                   </div>
-                  <div style={{ display: "flex" }}>
-                    <div style={{ flex: 1, padding: "16px 20px" }}>
-                      {isEditing ? (
-                        <div>
-                          <textarea value={editText} onChange={e => setEditText(e.target.value)}
-                            style={{ width: "100%", minHeight: 200, padding: 12, fontSize: 14,
-                              lineHeight: 1.6, border: "1.5px solid #533AB7", borderRadius: 10,
-                              resize: "vertical", fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
-                          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                            <button onClick={() => saveEdit(slot.id)} disabled={saving}
-                              style={{ padding: "8px 18px", background: "#1a1a1a", color: "#fff",
-                                border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
-                              {saving ? "Сохраняю..." : "Сохранить"}
-                            </button>
-                            <button onClick={() => setEditingId(null)}
-                              style={{ padding: "8px 18px", background: "#F1EFE8", color: "#555",
-                                border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
-                              Отмена
-                            </button>
+
+                  {/* Body */}
+                  <div style={{ padding: "14px 18px 16px" }}>
+
+                    {/* Идея и хук — всегда вверху */}
+                    {slot.idea && (
+                      <div style={{ marginBottom: 10 }}>
+                        {slot.idea.idea && (
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a1a", marginBottom: 2 }}>
+                            {slot.idea.idea}
                           </div>
-                        </div>
-                      ) : !slot.post_text && slot.status !== "needs_info" ? (
-                        /* Слот в процессе генерации текста */
-                        <div style={{ display: "flex", alignItems: "center", gap: 12,
-                          padding: "12px 0", color: "#888" }}>
-                          <div style={{ width: 20, height: 20, border: "2px solid #bbb",
-                            borderTopColor: "#533AB7", borderRadius: "50%",
-                            animation: "spin 1s linear infinite", flexShrink: 0 }} />
-                          <div>
-                            <div style={{ fontSize: 13, color: "#555", fontWeight: 500 }}>
-                              {slot.idea ? "Генерирую текст поста..." : "Ожидает генерации..."}
-                            </div>
-                            {slot.idea && (
-                              <div style={{ fontSize: 12, color: "#888", marginTop: 3 }}>
-                                {slot.idea.idea}
-                              </div>
-                            )}
+                        )}
+                        {slot.idea.hook && (
+                          <div style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>
+                            {slot.idea.hook}
                           </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Список нужной информации (needs_info) */}
+                    {slot.needs_info_for && slot.needs_info_for.length > 0 && (
+                      <div style={{ marginBottom: 10, padding: "8px 12px", background: "#FFF8ED",
+                        borderRadius: 8, border: "1px solid #FFD699" }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "#7C4400", marginBottom: 4 }}>
+                          📋 Требуется информация
                         </div>
-                      ) : slot.status === "needs_info" && !slot.post_text ? (
-                        /* Category 2: нет текста — показываем вопросы */
-                        <div>
-                          <div style={{ marginBottom: 10, padding: "10px 14px", background: "#FFF8ED",
-                            borderRadius: 8, border: "1px solid #FFD699" }}>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: "#7C4400", marginBottom: 6 }}>
-                              📋 Требуется информация для генерации поста
-                            </div>
-                            {(slot.needs_info_for || []).map((q, i) => (
-                              <div key={i} style={{ fontSize: 12, color: "#555", marginBottom: 3 }}>
-                                {i + 1}. {q}
-                              </div>
-                            ))}
+                        {slot.needs_info_for.map((q, i) => (
+                          <div key={i} style={{ fontSize: 12, color: "#555", lineHeight: 1.5 }}>
+                            {i + 1}. {q}
                           </div>
-                          {slot.idea && (
-                            <p style={{ fontSize: 13, color: "#888", margin: "0 0 12px", fontStyle: "italic" }}>
-                              Тема: {slot.idea.idea}
-                            </p>
-                          )}
-                          <button onClick={() => openSlot(slot)}
-                            style={{ padding: "8px 18px", background: "#EA580C", color: "#fff",
-                              border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
-                            ✏️ Ответить на вопросы
-                          </button>
-                        </div>
-                      ) : (
-                        <div>
-                          <p style={{ fontSize: 14, lineHeight: 1.7, color: "#2a2a2a",
-                            margin: 0, whiteSpace: "pre-wrap" }}>{slot.post_text}</p>
-                          <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-                            <button onClick={() => { setEditingId(slot.id); setEditText(slot.post_text || ""); }}
-                              style={{ padding: "7px 14px", background: "#F1EFE8", color: "#444",
-                                border: "1px solid #E0DED8", borderRadius: 8, cursor: "pointer", fontSize: 12 }}>
-                              ✏️ Редактировать
-                            </button>
-                            <button onClick={() => openSlot(slot)}
-                              style={{ padding: "7px 14px", background: "#F1EFE8", color: "#444",
-                                border: "1px solid #E0DED8", borderRadius: 8, cursor: "pointer", fontSize: 12 }}>
-                              🖼 Картинка
-                            </button>
-                            {needsApproval && slot.post_text && (
-                              <button onClick={() => openSlot(slot)}
-                                style={{ padding: "7px 14px", background: st.bg, color: st.color,
-                                  border: `1px solid ${st.color}44`, borderRadius: 8, cursor: "pointer",
-                                  fontSize: 12, fontWeight: 600 }}>
-                                ✓ Согласовать
-                              </button>
-                            )}
-                            {slot.status === "content_ready" && (
-                              <button onClick={() => publishNow(slot)}
-                                style={{ padding: "7px 14px", background: "#0F6E56", color: "#fff",
-                                  border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-                                ✈ Опубликовать
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ width: 160, borderLeft: "1px solid #F2F0EC", padding: 12,
-                      display: "flex", flexDirection: "column", gap: 8, alignItems: "center",
-                      justifyContent: "center", background: "#FAFAF8" }}>
-                      {slot.image_url || slot.image_base64 ? (
-                        <img src={slot.image_url || `data:image/png;base64,${slot.image_base64}`}
-                          alt="post" style={{ width: "100%", borderRadius: 8, objectFit: "cover", cursor: "pointer" }}
-                          onClick={() => openSlot(slot)} />
-                      ) : (
-                        <div style={{ width: "100%", aspectRatio: "1", background: "#F1EFE8",
-                          borderRadius: 8, display: "flex", flexDirection: "column",
-                          alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer" }}
-                          onClick={() => openSlot(slot)}>
-                          <span style={{ fontSize: 22 }}>🖼</span>
-                          <span style={{ fontSize: 10, color: "#999", textAlign: "center" }}>Нет картинки</span>
-                        </div>
-                      )}
-                      <button onClick={() => openSlot(slot)} disabled={generatingImg === slot.id}
-                        style={{ width: "100%", padding: "6px", background: "#533AB7", color: "#fff",
-                          border: "none", borderRadius: 7, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
-                        {generatingImg === slot.id ? "..." : slot.image_base64 || slot.image_url ? "🔄 Перегенерировать" : "✨ Создать"}
-                      </button>
-                    </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Текст поста */}
+                    {slot.post_text ? (
+                      <p style={{ fontSize: 14, lineHeight: 1.7, color: "#2a2a2a",
+                        margin: "0 0 12px", whiteSpace: "pre-wrap" }}>{slot.post_text}</p>
+                    ) : isGenerating ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10,
+                        padding: "8px 0 12px", color: "#888" }}>
+                        <div style={{ width: 16, height: 16, border: "2px solid #bbb",
+                          borderTopColor: "#533AB7", borderRadius: "50%",
+                          animation: "spin 1s linear infinite", flexShrink: 0 }} />
+                        <span style={{ fontSize: 13 }}>Генерирую текст поста...</span>
+                      </div>
+                    ) : null}
+
+                    {/* Единственная кнопка */}
+                    <button onClick={() => openSlot(slot)}
+                      style={{ padding: "7px 16px", background: "#F1EFE8", color: "#444",
+                        border: "1px solid #E0DED8", borderRadius: 8, cursor: "pointer",
+                        fontSize: 12, fontWeight: 500 }}>
+                      ✏️ Редактировать
+                    </button>
                   </div>
                 </div>
               );
