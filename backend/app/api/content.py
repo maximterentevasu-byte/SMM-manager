@@ -96,6 +96,21 @@ async def get_plan(
     ]
 
 
+@router.delete("/slot/{slot_id}")
+async def delete_slot(
+    slot_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(ContentSlot).where(ContentSlot.id == slot_id))
+    slot = result.scalar_one_or_none()
+    if not slot:
+        raise HTTPException(404, "Slot not found")
+    await db.delete(slot)
+    await db.commit()
+    return {"status": "deleted"}
+
+
 @router.patch("/slot/{slot_id}")
 async def update_slot(
     slot_id: str,

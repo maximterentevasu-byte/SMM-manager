@@ -135,6 +135,82 @@ const PLATFORM_LABELS: Record<string, { label: string; color: string; bg: string
   ok:       { label: "Одноклассники", color: "#F57C00", bg: "#FFF3E0" },
 };
 
+function SlideToConfirm({ label, onConfirm, color = "#DC2626" }: {
+  label: string; onConfirm: () => void; color?: string;
+}) {
+  const [progress, setProgress] = useState(0);
+  const [done, setDone] = useState(false);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
+  const startX = useRef(0);
+  const THUMB = 44;
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      if (!dragging.current || !trackRef.current) return;
+      const cx = "touches" in e ? e.touches[0].clientX : e.clientX;
+      const rect = trackRef.current.getBoundingClientRect();
+      const max = rect.width - THUMB;
+      const pct = Math.max(0, Math.min(100, ((cx - startX.current - rect.left) / max) * 100));
+      setProgress(pct);
+    };
+    const onUp = () => {
+      if (!dragging.current) return;
+      dragging.current = false;
+      setProgress(p => {
+        if (p >= 85) { setDone(true); onConfirm(); return 100; }
+        return 0;
+      });
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onMove, { passive: true });
+    window.addEventListener("touchend", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onUp);
+    };
+  }, [onConfirm]);
+
+  const start = (e: React.MouseEvent | React.TouchEvent) => {
+    dragging.current = true;
+    startX.current = "touches" in e
+      ? e.touches[0].clientX - (trackRef.current?.getBoundingClientRect().left || 0) - (progress / 100) * ((trackRef.current?.clientWidth || 300) - THUMB)
+      : e.clientX - (trackRef.current?.getBoundingClientRect().left || 0) - (progress / 100) * ((trackRef.current?.clientWidth || 300) - THUMB);
+  };
+
+  return (
+    <div ref={trackRef} style={{ position: "relative", height: 44, borderRadius: 22,
+      background: done ? `${color}22` : "#F1EFE8",
+      border: `1.5px solid ${done ? color : "#E0DED8"}`,
+      overflow: "hidden", userSelect: "none", cursor: "default" }}>
+      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0,
+        width: `${progress}%`, background: `${color}20`,
+        transition: dragging.current ? "none" : "width .25s" }} />
+      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center",
+        justifyContent: "center", fontSize: 12, fontWeight: 600,
+        color: done ? color : "#888", pointerEvents: "none", letterSpacing: 0.2 }}>
+        {done ? "✓ Подтверждено" : label}
+      </div>
+      {!done && (
+        <div onMouseDown={start} onTouchStart={start}
+          style={{ position: "absolute", top: 2,
+            left: `calc(${progress / 100} * (100% - ${THUMB}px))`,
+            width: THUMB, height: 40, borderRadius: 20,
+            background: color, cursor: "grab", display: "flex",
+            alignItems: "center", justifyContent: "center",
+            color: "#fff", fontSize: 18, fontWeight: 700,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+            transition: dragging.current ? "none" : "left .25s" }}>
+          →
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EvPlatformPicker({ platforms, selected, onChange }: {
   platforms: Array<{ platform: string; page_name: string }>;
   selected: string[];
@@ -382,6 +458,10 @@ export default function ContentPage() {
   const [evInterPlatforms, setEvInterPlatforms] = useState<string[]>([]);
   const [evSaving, setEvSaving] = useState(false);
   const [evAvailablePlatforms, setEvAvailablePlatforms] = useState<Array<{platform: string; page_name: string}>>([]);
+  const [evEditingId, setEvEditingId] = useState<string | null>(null);
+  const [evDeleting, setEvDeleting] = useState(false);
+  const [showDeleteSlot, setShowDeleteSlot] = useState(false);
+  const [deletingSlot, setDeletingSlot] = useState(false);
 
   const modalSlotInputRef       = useRef<HTMLInputElement>(null);
   const modalVideoInputRef      = useRef<HTMLInputElement>(null);
@@ -403,6 +483,11 @@ export default function ContentPage() {
   }, [businessId]);
 
   const openEventModal = useCallback(async () => {
+    setEvEditingId(null);
+    setEvName(""); setEvDesc(""); setEvStartDate(""); setEvEndDate("");
+    setEvHasStart(false); setEvStartDT(""); setEvStartPlatforms([]);
+    setEvHasEnd(false); setEvEndDT(""); setEvEndPlatforms([]);
+    setEvHasInter(false); setEvInterCount(1); setEvInterDTs([""]); setEvInterPlatforms([]);
     setEventModalOpen(true);
     try {
       const { data } = await api.get(`/platforms/list/${businessId}`);
@@ -415,6 +500,48 @@ export default function ContentPage() {
       setEvInterPlatforms(all);
     } catch {}
   }, [businessId]);
+
+  const openEventForEdit = useCallback(async (ev: CalEvent) => {
+    setEvEditingId(ev.id);
+    setEvName(ev.name);
+    setEvDesc("");
+    setEvStartDate(ev.start_date.split("T")[0]);
+    setEvEndDate(ev.end_date.split("T")[0]);
+    setEvHasStart(false); setEvStartDT(""); setEvStartPlatforms([]);
+    setEvHasEnd(false); setEvEndDT(""); setEvEndPlatforms([]);
+    setEvHasInter(false); setEvInterCount(1); setEvInterDTs([""]); setEvInterPlatforms([]);
+    setEventModalOpen(true);
+    try {
+      const { data: evData } = await api.get(`/events/${businessId}/${ev.id}`);
+      if (evData.description) setEvDesc(evData.description);
+      setEvHasStart(evData.has_start_notification || false);
+      if (evData.start_post_datetime) setEvStartDT(evData.start_post_datetime.slice(0, 16));
+      setEvHasEnd(evData.has_end_notification || false);
+      if (evData.end_post_datetime) setEvEndDT(evData.end_post_datetime.slice(0, 16));
+      setEvHasInter(evData.has_intermediate || false);
+      setEvInterCount(evData.intermediate_count || 1);
+      setEvInterDTs(evData.intermediate_datetimes?.map((d: string) => d.slice(0, 16)) || [""]);
+    } catch {}
+    try {
+      const { data: platData } = await api.get(`/platforms/list/${businessId}`);
+      const active = (platData || []).filter((p: any) => p.is_active)
+        .map((p: any) => ({ platform: p.platform, page_name: p.page_name }));
+      setEvAvailablePlatforms(active);
+      const all = active.map((p: any) => p.platform);
+      setEvStartPlatforms(all); setEvEndPlatforms(all); setEvInterPlatforms(all);
+    } catch {}
+  }, [businessId]);
+
+  const deleteCurrentSlot = useCallback(async () => {
+    if (!expanded) return;
+    setDeletingSlot(true);
+    try {
+      await api.delete(`/content/slot/${expanded.id}`);
+      setSlots(prev => prev.filter(s => s.id !== expanded.id));
+      closeModal();
+    } catch { alert("Ошибка удаления поста"); }
+    finally { setDeletingSlot(false); }
+  }, [expanded]);
 
   const load = useCallback(async () => {
     try {
@@ -614,10 +741,12 @@ export default function ContentPage() {
     setEditingDate(false);
     setModalEditInstruction("");
     setInfoAnswers([]); setInfoAnsweredFlags([]); setLocalInfoQuestions([]);
+    setShowDeleteSlot(false);
   };
   const closeModal = () => {
     setExpanded(null); setShowNeedsInfo(false); setEditingPrompt(false);
     setEditingDate(false); setModalImageMode(null);
+    setShowDeleteSlot(false);
     setModalUploadSlots(Array(10).fill(null)); setModalEditSlots(Array(10).fill(null));
     setModalVideoPreviewUrls(prev => { prev.forEach(u => u && URL.revokeObjectURL(u)); return [null, null, null]; });
     setModalVideoFiles([null, null, null]);
@@ -1366,7 +1495,9 @@ export default function ContentPage() {
                           const isStart = isSameDay(day, evStart);
                           const isEnd   = isSameDay(day, evEnd);
                           return (
-                            <div key={ev.id} title={ev.name} style={{
+                            <div key={ev.id} title={ev.name}
+                              onClick={e => { e.stopPropagation(); openEventForEdit(ev); }}
+                              style={{
                               background: ev.status === "completed" ? "#C2185B" : "#E91E8C",
                               color: "#fff", fontSize: 10, fontWeight: 600,
                               padding: "2px 6px", marginBottom: 3,
@@ -1374,7 +1505,7 @@ export default function ContentPage() {
                               marginLeft: isStart ? 0 : -8,
                               marginRight: isEnd ? 0 : -8,
                               whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                              cursor: "default",
+                              cursor: "pointer",
                             }}>
                               {isStart ? ev.name : ""}
                             </div>
@@ -2179,6 +2310,26 @@ export default function ContentPage() {
                 </button>
 
               </div>
+
+              {/* Удаление поста */}
+              <div style={{ padding: "12px 28px 18px", borderTop: "1px solid #F0EEE8" }}>
+                {!showDeleteSlot ? (
+                  <button onClick={() => setShowDeleteSlot(true)}
+                    style={{ fontSize: 12, color: "#DC2626", background: "none", border: "none",
+                      cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+                    Удалить пост
+                  </button>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ fontSize: 12, color: "#888" }}>Потяните вправо для подтверждения удаления</div>
+                    <SlideToConfirm
+                      label="→ Удалить пост"
+                      color="#DC2626"
+                      onConfirm={deleteCurrentSlot}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         );
@@ -2196,7 +2347,9 @@ export default function ContentPage() {
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
               padding: "18px 24px", borderBottom: "1px solid #F2F0EC", background: "#fff", flexShrink: 0 }}>
-              <span style={{ fontWeight: 700, fontSize: 17, color: "#1a1a1a" }}>🎪 Создать событие</span>
+              <span style={{ fontWeight: 700, fontSize: 17, color: "#1a1a1a" }}>
+                {evEditingId ? "✏️ Редактировать событие" : "🎪 Создать событие"}
+              </span>
               <button onClick={() => setEventModalOpen(false)}
                 style={{ width: 32, height: 32, borderRadius: "50%", border: "none",
                   background: "#F1EFE8", cursor: "pointer", fontSize: 18, color: "#555",
@@ -2348,53 +2501,78 @@ export default function ContentPage() {
             </div>
 
             {/* Footer buttons */}
-            <div style={{ display: "flex", gap: 10, padding: "16px 24px",
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "16px 24px",
               borderTop: "1px solid #F2F0EC", background: "#fff", flexShrink: 0 }}>
-              <button
-                disabled={evSaving || !evName.trim() || !evStartDate || !evEndDate}
-                onClick={async () => {
-                  if (!evName.trim() || !evStartDate || !evEndDate) return;
-                  const bid = localStorage.getItem("businessId");
-                  if (!bid) return;
-                  setEvSaving(true);
-                  try {
-                    await api.post(`/events/${bid}`, {
-                      name: evName.trim(),
-                      description: evDesc.trim() || null,
-                      start_date: evStartDate,
-                      end_date: evEndDate,
-                      has_start_notification: evHasStart,
-                      start_post_datetime: evHasStart ? evStartDT : null,
-                      start_platforms: evHasStart && evStartPlatforms.length ? evStartPlatforms : null,
-                      has_end_notification: evHasEnd,
-                      end_post_datetime: evHasEnd ? evEndDT : null,
-                      end_platforms: evHasEnd && evEndPlatforms.length ? evEndPlatforms : null,
-                      has_intermediate: evHasInter,
-                      intermediate_count: evHasInter ? evInterCount : null,
-                      intermediate_datetimes: evHasInter ? evInterDTs.slice(0, evInterCount) : null,
-                      intermediate_platforms: evHasInter && evInterPlatforms.length ? evInterPlatforms : null,
-                    });
-                    setEventModalOpen(false);
-                    setEvName(""); setEvDesc(""); setEvStartDate(""); setEvEndDate("");
-                    setEvHasStart(false); setEvStartDT(""); setEvStartPlatforms([]);
-                    setEvHasEnd(false); setEvEndDT(""); setEvEndPlatforms([]);
-                    setEvHasInter(false); setEvInterCount(1); setEvInterDTs([""]); setEvInterPlatforms([]);
-                    setEvAvailablePlatforms([]);
-                    await load(); await loadEvents();
-                  } catch (e) { alert("Ошибка при создании события"); }
-                  finally { setEvSaving(false); }
-                }}
-                style={{ flex: 1, padding: "11px 0", borderRadius: 12, border: "none",
-                  background: evSaving || !evName.trim() || !evStartDate || !evEndDate ? "#ccc" : "#E91E8C",
-                  color: "#fff", fontWeight: 700, fontSize: 14,
-                  cursor: evSaving || !evName.trim() ? "not-allowed" : "pointer" }}>
-                {evSaving ? "Сохранение..." : "✓ Завершить создание события"}
-              </button>
-              <button onClick={() => setEventModalOpen(false)}
-                style={{ padding: "11px 20px", borderRadius: 12, border: "1px solid #E0DED8",
-                  background: "#fff", color: "#555", fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
-                Отменить
-              </button>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  disabled={evSaving || !evName.trim() || !evStartDate || !evEndDate}
+                  onClick={async () => {
+                    if (!evName.trim() || !evStartDate || !evEndDate) return;
+                    const bid = localStorage.getItem("businessId");
+                    if (!bid) return;
+                    setEvSaving(true);
+                    try {
+                      if (evEditingId) {
+                        await api.patch(`/events/${evEditingId}/update`, {
+                          name: evName.trim(),
+                          description: evDesc.trim() || null,
+                          start_date: evStartDate,
+                          end_date: evEndDate,
+                        });
+                      } else {
+                        await api.post(`/events/${bid}`, {
+                          name: evName.trim(),
+                          description: evDesc.trim() || null,
+                          start_date: evStartDate,
+                          end_date: evEndDate,
+                          has_start_notification: evHasStart,
+                          start_post_datetime: evHasStart ? evStartDT : null,
+                          start_platforms: evHasStart && evStartPlatforms.length ? evStartPlatforms : null,
+                          has_end_notification: evHasEnd,
+                          end_post_datetime: evHasEnd ? evEndDT : null,
+                          end_platforms: evHasEnd && evEndPlatforms.length ? evEndPlatforms : null,
+                          has_intermediate: evHasInter,
+                          intermediate_count: evHasInter ? evInterCount : null,
+                          intermediate_datetimes: evHasInter ? evInterDTs.slice(0, evInterCount) : null,
+                          intermediate_platforms: evHasInter && evInterPlatforms.length ? evInterPlatforms : null,
+                        });
+                      }
+                      setEventModalOpen(false);
+                      setEvAvailablePlatforms([]); setEvEditingId(null);
+                      await load(); await loadEvents();
+                    } catch (e) { alert("Ошибка при сохранении события"); }
+                    finally { setEvSaving(false); }
+                  }}
+                  style={{ flex: 1, padding: "11px 0", borderRadius: 12, border: "none",
+                    background: evSaving || !evName.trim() || !evStartDate || !evEndDate ? "#ccc" : "#E91E8C",
+                    color: "#fff", fontWeight: 700, fontSize: 14,
+                    cursor: evSaving || !evName.trim() ? "not-allowed" : "pointer" }}>
+                  {evSaving ? "Сохранение..." : evEditingId ? "💾 Сохранить изменения" : "✓ Создать событие"}
+                </button>
+                <button onClick={() => setEventModalOpen(false)}
+                  style={{ padding: "11px 20px", borderRadius: 12, border: "1px solid #E0DED8",
+                    background: "#fff", color: "#555", fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
+                  Отменить
+                </button>
+              </div>
+
+              {/* Удалить событие */}
+              {evEditingId && (
+                <SlideToConfirm
+                  label="→ Удалить событие и все посты"
+                  color="#DC2626"
+                  onConfirm={async () => {
+                    setEvDeleting(true);
+                    try {
+                      await api.delete(`/events/${evEditingId}?delete_slots=true`);
+                      setEventModalOpen(false);
+                      setEvEditingId(null); setEvAvailablePlatforms([]);
+                      await load(); await loadEvents();
+                    } catch { alert("Ошибка удаления события"); }
+                    finally { setEvDeleting(false); }
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>

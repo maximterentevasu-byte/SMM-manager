@@ -195,6 +195,84 @@ async def list_events(
     ]
 
 
+class EventUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
+@router.get("/{business_id}/{event_id}")
+async def get_event(
+    business_id: str,
+    event_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    result = await db.execute(select(Event).where(Event.id == event_id, Event.business_id == business_id))
+    event = result.scalar_one_or_none()
+    if not event:
+        raise HTTPException(404)
+    return {
+        "id": str(event.id),
+        "name": event.name,
+        "description": event.description,
+        "start_date": event.start_date.isoformat(),
+        "end_date": event.end_date.isoformat(),
+        "status": event.status,
+        "has_start_notification": event.has_start_notification,
+        "start_post_datetime": event.start_post_datetime.isoformat() if event.start_post_datetime else None,
+        "has_end_notification": event.has_end_notification,
+        "end_post_datetime": event.end_post_datetime.isoformat() if event.end_post_datetime else None,
+        "has_intermediate": event.has_intermediate,
+        "intermediate_count": event.intermediate_count,
+        "intermediate_datetimes": event.intermediate_datetimes,
+    }
+
+
+@router.patch("/{event_id}/update")
+async def update_event(
+    event_id: str,
+    data: EventUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    result = await db.execute(select(Event).where(Event.id == event_id))
+    event = result.scalar_one_or_none()
+    if not event:
+        raise HTTPException(404)
+    if data.name is not None:
+        event.name = data.name
+    if data.description is not None:
+        event.description = data.description
+    if data.start_date is not None:
+        event.start_date = _parse_dt(data.start_date) or event.start_date
+    if data.end_date is not None:
+        event.end_date = _parse_dt(data.end_date) or event.end_date
+    await db.commit()
+    return {"status": "updated"}
+
+
+@router.delete("/{event_id}")
+async def delete_event(
+    event_id: str,
+    delete_slots: bool = True,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    result = await db.execute(select(Event).where(Event.id == event_id))
+    event = result.scalar_one_or_none()
+    if not event:
+        raise HTTPException(404)
+    if delete_slots:
+        from sqlalchemy import delete as sql_delete
+        from app.models.models import ContentSlot
+        await db.execute(sql_delete(ContentSlot).where(ContentSlot.event_id == event.id))
+    await db.delete(event)
+    await db.commit()
+    return {"status": "deleted"}
+
+
 @router.patch("/{event_id}/complete")
 async def complete_event(
     event_id: str,
