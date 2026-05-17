@@ -1097,19 +1097,30 @@ export default function ContentPage() {
               const imgSrc = slot.image_url || (slot.image_base64 ? `data:image/png;base64,${slot.image_base64}` : null);
               const platCfg = PLATFORM_COLORS[slot.platform] || { bg: "#F1EFE8", border: "#bbb" };
               return (
-                <div key={slot.id} style={{ background: "#fff", borderRadius: 14,
-                  border: isEvent ? "1px solid #F4A7C3" : "1px solid #EAE8E2", overflow: "hidden" }}>
+                <div key={slot.id} style={{
+                  background: isEvent ? "#FFF0F5" : "#fff",
+                  borderRadius: 14,
+                  border: isEvent ? "1.5px solid #F4A7C3" : "1px solid #EAE8E2",
+                  borderLeft: isEvent ? "4px solid #E91E8C" : "1px solid #EAE8E2",
+                  overflow: "hidden",
+                }}>
 
                   {/* Header */}
                   <div style={{ padding: "11px 18px", display: "flex", alignItems: "center",
-                    gap: 8, borderBottom: "1px solid #F2F0EC",
-                    background: isEvent ? "#FFF0F5" : "transparent" }}>
+                    gap: 8, borderBottom: isEvent ? "1px solid #F4A7C3" : "1px solid #F2F0EC",
+                    background: isEvent ? "#FCE4EF" : "transparent" }}>
                     {/* Событие-бейдж или платформа */}
                     {isEvent ? (
-                      <span style={{ fontSize: 11, fontWeight: 700, color: "#fff",
-                        background: "#E91E8C", padding: "2px 9px", borderRadius: 6, letterSpacing: 0.3, flexShrink: 0 }}>
-                        Событие
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#fff",
+                          background: "#E91E8C", padding: "2px 9px", borderRadius: 6, letterSpacing: 0.3 }}>
+                          Событие
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: platCfg.border,
+                          background: platCfg.bg || "#F1EFE8", padding: "2px 7px", borderRadius: 6, letterSpacing: 0.3 }}>
+                          {PLATFORM_ICON[slot.platform] || slot.platform.toUpperCase()}
+                        </span>
+                      </div>
                     ) : (
                       <span style={{ fontSize: 11, fontWeight: 700, color: "#fff",
                         background: platCfg.border, padding: "2px 8px", borderRadius: 6,
@@ -2253,7 +2264,7 @@ export default function ContentPage() {
                     <input type="datetime-local" value={evStartDT} onChange={e => setEvStartDT(e.target.value)}
                       style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E0DED8",
                         fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
-                    {evAvailablePlatforms.length > 1 && (
+                    {evAvailablePlatforms.length > 0 && (
                       <EvPlatformPicker
                         platforms={evAvailablePlatforms}
                         selected={evStartPlatforms}
@@ -2278,7 +2289,7 @@ export default function ContentPage() {
                     <input type="datetime-local" value={evEndDT} onChange={e => setEvEndDT(e.target.value)}
                       style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E0DED8",
                         fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
-                    {evAvailablePlatforms.length > 1 && (
+                    {evAvailablePlatforms.length > 0 && (
                       <EvPlatformPicker
                         platforms={evAvailablePlatforms}
                         selected={evEndPlatforms}
@@ -2323,7 +2334,7 @@ export default function ContentPage() {
                             fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
                       </div>
                     ))}
-                    {evAvailablePlatforms.length > 1 && (
+                    {evAvailablePlatforms.length > 0 && (
                       <EvPlatformPicker
                         platforms={evAvailablePlatforms}
                         selected={evInterPlatforms}
