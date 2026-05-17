@@ -315,6 +315,7 @@ export default function ContentPage() {
   const [savingDate, setSavingDate]   = useState(false);
 
   const [quickPostOpen, setQuickPostOpen] = useState(false);
+  const [quickPostPlatforms, setQuickPostPlatforms] = useState<Array<{platform: string; page_name: string}>>([]);
 
   const modalSlotInputRef       = useRef<HTMLInputElement>(null);
   const modalVideoInputRef      = useRef<HTMLInputElement>(null);
@@ -1244,7 +1245,18 @@ export default function ContentPage() {
 
                           <button
                             title="Быстрый пост"
-                            onClick={e => { e.stopPropagation(); setQuickPostOpen(true); }}
+                            onClick={e => {
+                              e.stopPropagation();
+                              const bid = localStorage.getItem("businessId");
+                              if (bid) {
+                                api.get(`/platforms/list/${bid}`)
+                                  .then(({ data }) => setQuickPostPlatforms(
+                                    (data || []).filter((p: any) => p.is_active)
+                                      .map((p: any) => ({ platform: p.platform, page_name: p.page_name }))
+                                  )).catch(() => {});
+                              }
+                              setQuickPostOpen(true);
+                            }}
                             style={{ width: 11, height: 11, borderRadius: "50%", border: "none",
                               background: "#3B82F6", position: "relative",
                               cursor: "pointer", padding: 0,
@@ -2068,7 +2080,32 @@ export default function ContentPage() {
             boxShadow: "0 24px 80px rgba(0,0,0,0.25)", display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
               padding: "14px 20px", borderBottom: "1px solid #F2F0EC", background: "#fff", flexShrink: 0 }}>
-              <span style={{ fontWeight: 700, fontSize: 16, color: "#1a1a1a" }}>⚡ Быстрый пост</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <span style={{ fontWeight: 700, fontSize: 16, color: "#1a1a1a" }}>⚡ Быстрый пост</span>
+                {quickPostPlatforms.length > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {quickPostPlatforms.map((p, i) => {
+                      const cfg: Record<string, { bg: string; color: string; label: string }> = {
+                        vk:       { bg: "#EBF2FB", color: "#4680C2", label: "ВКонтакте" },
+                        telegram: { bg: "#E3F4FF", color: "#2AABEE", label: "Telegram" },
+                        ok:       { bg: "#FFF3E0", color: "#F57C00", label: "Одноклассники" },
+                      };
+                      const c = cfg[p.platform] || { bg: "#F1EFE8", color: "#888", label: p.platform };
+                      return (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 6,
+                          background: c.bg, borderRadius: 20, padding: "4px 10px 4px 6px" }}>
+                          <div style={{ width: 20, height: 20, borderRadius: "50%",
+                            background: c.color, display: "flex", alignItems: "center",
+                            justifyContent: "center", fontSize: 9, fontWeight: 700, color: "#fff" }}>
+                            {p.platform === "vk" ? "VK" : p.platform === "telegram" ? "TG" : "OK"}
+                          </div>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: c.color }}>{p.page_name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
               <button onClick={() => setQuickPostOpen(false)}
                 style={{ width: 32, height: 32, borderRadius: "50%", border: "none",
                   background: "#F1EFE8", cursor: "pointer", fontSize: 18, color: "#555",
