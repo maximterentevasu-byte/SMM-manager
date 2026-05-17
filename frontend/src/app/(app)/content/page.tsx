@@ -314,6 +314,8 @@ export default function ContentPage() {
   const [modalDate, setModalDate]     = useState("");
   const [savingDate, setSavingDate]   = useState(false);
 
+  const [quickPostOpen, setQuickPostOpen] = useState(false);
+
   const modalSlotInputRef       = useRef<HTMLInputElement>(null);
   const modalVideoInputRef      = useRef<HTMLInputElement>(null);
   const modalEditSlotInputRef   = useRef<HTMLInputElement>(null);
@@ -1221,39 +1223,39 @@ export default function ContentPage() {
                             title="Добавить событие"
                             onClick={e => { e.stopPropagation(); }}
                             style={{ width: 11, height: 11, borderRadius: "50%", border: "none",
-                              background: "#FF2D78", display: "flex", alignItems: "center",
-                              justifyContent: "center", cursor: "pointer", padding: 0,
+                              background: "#FF2D78", position: "relative",
+                              cursor: "pointer", padding: 0,
                               opacity: 0.3, transition: "opacity .15s", flexShrink: 0 }}
                             onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
                             onMouseLeave={e => (e.currentTarget.style.opacity = "0.3")}
                           >
-                            <svg width="11" height="11" viewBox="0 0 11 11" style={{ display: "block" }}>
-                              <line x1="2" y1="5.5" x2="9" y2="5.5" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round"/>
-                              <line x1="5.5" y1="2" x2="5.5" y2="9" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round"/>
-                            </svg>
+                            <span style={{ position: "absolute", top: "50%", left: "50%",
+                              transform: "translate(-50%, -50%)", lineHeight: 1,
+                              fontSize: 10, color: "rgba(255,255,255,0.9)", fontWeight: 400,
+                              userSelect: "none" }}>+</span>
                           </button>
 
-                          <span style={{ width: 26, height: 26, borderRadius: "50%", display: "flex",
+                          <span style={{ width: 30, height: 30, borderRadius: "50%", display: "flex",
                             alignItems: "center", justifyContent: "center",
-                            fontSize: 12, fontWeight: isToday ? 700 : 400,
+                            fontSize: 14, fontWeight: isToday ? 700 : 400,
                             background: isToday ? "#533AB7" : "transparent",
                             color: isToday ? "#fff" : inCurrentMonth ? (di >= 5 ? "#aaa" : "#444") : "#ccc",
                           }}>{day.getDate()}</span>
 
                           <button
                             title="Быстрый пост"
-                            onClick={e => { e.stopPropagation(); }}
+                            onClick={e => { e.stopPropagation(); setQuickPostOpen(true); }}
                             style={{ width: 11, height: 11, borderRadius: "50%", border: "none",
-                              background: "#3B82F6", display: "flex", alignItems: "center",
-                              justifyContent: "center", cursor: "pointer", padding: 0,
+                              background: "#3B82F6", position: "relative",
+                              cursor: "pointer", padding: 0,
                               opacity: 0.3, transition: "opacity .15s", flexShrink: 0 }}
                             onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
                             onMouseLeave={e => (e.currentTarget.style.opacity = "0.3")}
                           >
-                            <svg width="11" height="11" viewBox="0 0 11 11" style={{ display: "block" }}>
-                              <line x1="2" y1="5.5" x2="9" y2="5.5" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round"/>
-                              <line x1="5.5" y1="2" x2="5.5" y2="9" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" strokeLinecap="round"/>
-                            </svg>
+                            <span style={{ position: "absolute", top: "50%", left: "50%",
+                              transform: "translate(-50%, -50%)", lineHeight: 1,
+                              fontSize: 10, color: "rgba(255,255,255,0.9)", fontWeight: 400,
+                              userSelect: "none" }}>+</span>
                           </button>
                         </div>
 
@@ -2056,6 +2058,26 @@ export default function ContentPage() {
           </div>
         );
       })()}
+
+      {quickPostOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div onClick={() => setQuickPostOpen(false)}
+            style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)" }} />
+          <div style={{ position: "relative", width: "90vw", maxWidth: 1100, height: "90vh",
+            background: "#fff", borderRadius: 16, overflow: "hidden",
+            boxShadow: "0 24px 80px rgba(0,0,0,0.25)", display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "14px 20px", borderBottom: "1px solid #F2F0EC", background: "#fff", flexShrink: 0 }}>
+              <span style={{ fontWeight: 700, fontSize: 16, color: "#1a1a1a" }}>⚡ Быстрый пост</span>
+              <button onClick={() => setQuickPostOpen(false)}
+                style={{ width: 32, height: 32, borderRadius: "50%", border: "none",
+                  background: "#F1EFE8", cursor: "pointer", fontSize: 18, color: "#555",
+                  display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+            </div>
+            <iframe src="/post-creator" style={{ flex: 1, border: "none", width: "100%" }} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
