@@ -76,6 +76,59 @@ async def refine_strategy(current_strategy: list, user_message: str, business_pr
     return _parse_json(text)
 
 
+async def strategy_chat(user_message: str, strategy: list | None, profile: dict) -> dict:
+    """Разговорный AI-чат по стратегии. Работает с профилем и без стратегии."""
+    has_strategy = bool(strategy)
+    has_profile = bool(profile)
+
+    context_lines = []
+    if has_profile:
+        name = profile.get("name", "")
+        niche = profile.get("niche", "")
+        platforms = profile.get("platforms", [])
+        context_lines.append(f"Бизнес: {name or 'не указан'}, ниша: {niche or 'не указана'}, платформы: {', '.join(platforms) or 'не выбраны'}")
+    else:
+        context_lines.append("Профиль бизнеса: не заполнен")
+
+    if has_strategy:
+        plats = [s.get("platform", "") for s in strategy]
+        context_lines.append(f"Стратегия: создана для {', '.join(plats)}")
+    else:
+        context_lines.append("Стратегия: ещё не создана")
+
+    system = """Ты АИСТ — AI-помощник SMM-платформы smmplatform. Помогаешь пользователям с контент-стратегией.
+
+Отвечай на русском, кратко (2-4 предложения), по-деловому, без лишних слов.
+
+Если стратегии нет — объясни что нужно:
+1. Перейти на вкладку «Профиль бизнеса» и заполнить данные
+2. Вернуться в онбординг для генерации стратегии
+
+Если стратегия есть и пользователь хочет её изменить — опиши что именно изменишь и попроси нажать «Уточнить» для применения.
+Если стратегия есть и пользователь задаёт вопрос — ответь на вопрос.
+Всегда возвращай ТОЛЬКО валидный JSON: {"response": "текст ответа"}"""
+
+    context = "\n".join(context_lines)
+    full_msg = f"{context}\n\nСообщение: {user_message}"
+
+    try:
+        resp = await client.messages.create(
+            model=_CLAUDE_MODEL,
+            max_tokens=512,
+            system=system,
+            messages=[{"role": "user", "content": full_msg}],
+        )
+        raw = resp.content[0].text.strip()
+        raw = re.sub(r"```(?:json)?\s*", "", raw).strip()
+        data = json.loads(raw)
+        return {"response": data.get("response", raw)}
+    except Exception as e:
+        log.error("[Claude strategy_chat] failed: %s", e)
+        if not has_strategy:
+            return {"response": "Стратегия ещё не создана. Перейдите на вкладку «Профиль бизнеса», заполните данные о бизнесе и сохраните — после этого можно вернуться в онбординг для генерации стратегии."}
+        return {"response": "Не удалось получить ответ. Попробуйте переформулировать запрос."}
+
+
 async def generate_strategy(business_profile: dict) -> list[dict]:
     """
     Генерирует полную контент-стратегию на 3 месяца

@@ -96,15 +96,10 @@ export default function StrategyPage() {
     setChat((prev) => [...prev, { role: "user", text: msg }]);
     setChatLoading(true);
     try {
-      const { data } = await api.post(`/businesses/${businessId}/refine-strategy`, { message: msg });
-      setStrategy(data.strategy);
-      localStorage.setItem("strategyUpdatedAt", String(Date.now()));
-      setChat((prev) => [...prev, {
-        role: "ai",
-        text: "Стратегия обновлена! Перейди в Контент-план и нажми «Обновить план» чтобы сгенерировать новые посты.",
-      }]);
+      const { data } = await api.post(`/businesses/${businessId}/strategy-chat`, { message: msg });
+      setChat((prev) => [...prev, { role: "ai", text: data.response }]);
     } catch {
-      setChat((prev) => [...prev, { role: "ai", text: "Ошибка обновления. Попробуйте ещё раз." }]);
+      setChat((prev) => [...prev, { role: "ai", text: "Не удалось получить ответ. Попробуйте ещё раз." }]);
     } finally {
       setChatLoading(false);
     }
@@ -186,9 +181,28 @@ export default function StrategyPage() {
 
             {!loadingStrategy && !strategy && (
               <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16,
-                padding: "3rem", textAlign: "center" }}>
-                <div style={{ fontSize: 48, marginBottom: 12 }}>⏳</div>
-                <p style={{ color: "#888", margin: 0 }}>Стратегия ещё не сгенерирована.</p>
+                padding: "40px 32px", textAlign: "center" }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>⏳</div>
+                <p style={{ fontSize: 16, fontWeight: 600, color: "#0D1B2A", margin: "0 0 8px" }}>
+                  Стратегия ещё не сгенерирована
+                </p>
+                <p style={{ color: "#6B7280", fontSize: 14, margin: "0 0 20px", lineHeight: 1.6 }}>
+                  Для создания стратегии нужно заполнить профиль бизнеса
+                </p>
+                <div style={{ background: "#F0F4FF", border: "1px solid #C7D9F8", borderRadius: 12,
+                  padding: "14px 20px", marginBottom: 20, textAlign: "left", display: "flex", gap: 12, alignItems: "flex-start" }}>
+                  <span style={{ fontSize: 16, flexShrink: 0 }}>ℹ️</span>
+                  <div style={{ fontSize: 13, color: "#2D4A9A", lineHeight: 1.6 }}>
+                    <strong>Как получить стратегию:</strong><br />
+                    1. Перейдите на вкладку <strong>«Профиль бизнеса»</strong> и заполните данные<br />
+                    2. Вернитесь в <a href="/onboarding" style={{ color: "#3478F6", fontWeight: 600 }}>Онбординг</a> для генерации стратегии
+                  </div>
+                </div>
+                <button onClick={() => setTab("profile")}
+                  style={{ padding: "10px 24px", background: "#3478F6", color: "#fff",
+                    border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                  Перейти в Профиль бизнеса →
+                </button>
               </div>
             )}
 
@@ -352,10 +366,17 @@ export default function StrategyPage() {
 
             {/* Chat */}
             <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16, overflow: "hidden" }}>
-              <div style={{ padding: "14px 20px", borderBottom: "1px solid #E5E7EB" }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "#0D1B2A" }}>🤖 Уточнить стратегию</div>
-                <div style={{ fontSize: 12, color: "#999", marginTop: 2 }}>
-                  Напиши что хочешь изменить — AI обновит стратегию
+              <div style={{ padding: "14px 20px", borderBottom: "1px solid #E5E7EB",
+                display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#EEF4FF",
+                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>
+                  🦢
+                </div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#0D1B2A" }}>АИСТ — AI-помощник стратегии</div>
+                  <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 1 }}>
+                    Задай вопрос или опиши что хочешь изменить в стратегии
+                  </div>
                 </div>
               </div>
 
@@ -374,8 +395,17 @@ export default function StrategyPage() {
                   ))}
                   {chatLoading && (
                     <div style={{ display: "flex", justifyContent: "flex-start" }}>
-                      <div style={{ padding: "10px 14px", borderRadius: 12, background: "#F1EFE8",
-                        fontSize: 13, color: "#888" }}>Обновляю стратегию...</div>
+                      <div style={{ padding: "10px 14px", borderRadius: 12, background: "#F5F7FA",
+                        fontSize: 13, color: "#6B7280", display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ display: "inline-flex", gap: 3 }}>
+                          {[0,1,2].map(i => (
+                            <span key={i} style={{ width: 5, height: 5, borderRadius: "50%",
+                              background: "#3478F6", display: "inline-block",
+                              animation: `bounce 1s ease-in-out ${i * 0.15}s infinite` }} />
+                          ))}
+                        </span>
+                        АИСТ думает...
+                      </div>
                     </div>
                   )}
                   <div ref={chatEndRef} />
@@ -388,8 +418,10 @@ export default function StrategyPage() {
                   placeholder="Хочу больше продающих постов / убери развлекательные рубрики / ..."
                   style={{ ...inp, flex: 1 }} />
                 <button onClick={sendChat} disabled={chatLoading || !chatInput.trim()}
-                  style={{ padding: "9px 20px", background: chatLoading || !chatInput.trim() ? "#ccc" : "#0D1B2A",
-                    color: "#fff", border: "none", borderRadius: 10,
+                  style={{ padding: "9px 20px",
+                    background: chatLoading || !chatInput.trim() ? "#E5E7EB" : "#3478F6",
+                    color: chatLoading || !chatInput.trim() ? "#9CA3AF" : "#fff",
+                    border: "none", borderRadius: 10,
                     cursor: chatLoading || !chatInput.trim() ? "not-allowed" : "pointer",
                     fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}>
                   Отправить

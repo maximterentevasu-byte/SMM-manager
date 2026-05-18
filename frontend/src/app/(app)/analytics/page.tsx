@@ -31,6 +31,8 @@ type TGCredsStatus = {
   channel_name?: string;
 };
 
+type DashTabKey = "weeks" | "posts" | "stories" | "timing";
+
 const fmt = (n: number | undefined | null, decimals = 0) =>
   n == null ? "—" : Number(n).toLocaleString("ru-RU", { maximumFractionDigits: decimals });
 
@@ -62,6 +64,7 @@ export default function AnalyticsPage() {
   const [savingVkCreds, setSavingVkCreds] = useState(false);
   const [vkCredsMsg, setVkCredsMsg] = useState("");
   const [numWeeks, setNumWeeks] = useState(8);
+  const [dashTab, setDashTab] = useState<DashTabKey>("weeks");
 
   const [businessId] = useState(() =>
     typeof window !== "undefined" ? localStorage.getItem("businessId") || "" : ""
@@ -319,64 +322,70 @@ export default function AnalyticsPage() {
               <div style={{ textAlign: "center", padding: "3rem", color: "#888" }}>Загружаем...</div>
             ) : tgData.length > 0 ? (
               <>
-                {/* Дашборд: только если полный режим */}
-                {!isBasicMode && tgData.length > 0 && (
-                  <TGDashboard data={tgData} numWeeks={numWeeks} onNumWeeksChange={setNumWeeks} />
-                )}
-                {/* Карточки: базовый режим */}
-                {isBasicMode && tgLast && (
-                  <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-                    {card("Подписчики", fmt(tgLast.subscribers))}
-                    {card("Постов за посл. неделю", String(tgLast.posts_count))}
-                  </div>
-                )}
-                {/* Баннер базового режима */}
-                {isBasicMode && (
-                  <div style={{ background: "#F0F4FF", border: "1px solid #C7D4F5",
-                    borderRadius: 12, padding: "14px 18px", marginBottom: 20,
-                    display: "flex", gap: 12, alignItems: "flex-start" }}>
-                    <span style={{ fontSize: 18 }}>ℹ</span>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: "#2D4A9A", marginBottom: 4 }}>
-                        Базовый режим — только подписчики и публикации через платформу
+                <DashTabBar active={dashTab} onChange={setDashTab} />
+
+                {dashTab === "weeks" && (
+                  <>
+                    {!isBasicMode && (
+                      <TGDashboard data={tgData} numWeeks={numWeeks} onNumWeeksChange={setNumWeeks} />
+                    )}
+                    {isBasicMode && tgLast && (
+                      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+                        {card("Подписчики", fmt(tgLast.subscribers))}
+                        {card("Постов за посл. неделю", String(tgLast.posts_count))}
                       </div>
-                      <div style={{ fontSize: 12, color: "#4A6AB0", lineHeight: 1.6 }}>
-                        Для охватов, просмотров и ER настрой MTProto-реквизиты ниже.
-                        Это одноразовая настройка — данные начнут собираться сразу.
+                    )}
+                    {isBasicMode && (
+                      <div style={{ background: "#F0F4FF", border: "1px solid #C7D4F5",
+                        borderRadius: 12, padding: "14px 18px", marginBottom: 20,
+                        display: "flex", gap: 12, alignItems: "flex-start" }}>
+                        <span style={{ fontSize: 18 }}>ℹ</span>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13, color: "#2D4A9A", marginBottom: 4 }}>
+                            Базовый режим — только подписчики и публикации через платформу
+                          </div>
+                          <div style={{ fontSize: 12, color: "#4A6AB0", lineHeight: 1.6 }}>
+                            Для охватов, просмотров и ER настрой MTProto-реквизиты ниже.
+                            Это одноразовая настройка — данные начнут собираться сразу.
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
+                    )}
+                    <WeeklyTable rows={tgData} cols={tg_cols} emptyText="Нет данных по Telegram" />
+                    {isBasicMode && (
+                      <div style={{ marginTop: 24 }}>
+                        <TGPhoneForm
+                          step={tgStep} phone={tgPhone} code={tgCode}
+                          loading={tgPhoneLoading} msg={tgPhoneMsg}
+                          onPhoneChange={setTgPhone} onCodeChange={setTgCode}
+                          onSendCode={sendTgCode} onSignIn={signInTg}
+                          onBack={() => { setTgStep(1); setTgPhoneMsg(""); }}
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
-                <WeeklyTable rows={tgData} cols={tg_cols} emptyText="Нет данных по Telegram" />
-                {/* Форма входа по телефону под таблицей в базовом режиме */}
-                {isBasicMode && (
-                  <div style={{ marginTop: 24 }}>
-                    <TGPhoneForm
-                      step={tgStep}
-                      phone={tgPhone}
-                      code={tgCode}
-                      loading={tgPhoneLoading}
-                      msg={tgPhoneMsg}
-                      onPhoneChange={setTgPhone}
-                      onCodeChange={setTgCode}
-                      onSendCode={sendTgCode}
-                      onSignIn={signInTg}
-                      onBack={() => { setTgStep(1); setTgPhoneMsg(""); }}
-                    />
-                  </div>
+
+                {dashTab === "posts" && (
+                  <ComingSoonTab
+                    title="Статистика по постам"
+                    desc="Детальная аналитика по каждой публикации: охваты, реакции, ER поста — появится в следующем обновлении."
+                  />
                 )}
+                {dashTab === "stories" && (
+                  <ComingSoonTab
+                    title="Статистика Сториз"
+                    desc="Аналитика историй Telegram: просмотры, ответы, переходы — появится в следующем обновлении."
+                  />
+                )}
+                {dashTab === "timing" && <BestTimingView data={tgData} />}
               </>
             ) : tgCredsStatus?.has_connection ? (
               <TGPhoneForm
-                step={tgStep}
-                phone={tgPhone}
-                code={tgCode}
-                loading={tgPhoneLoading}
-                msg={tgPhoneMsg}
-                onPhoneChange={setTgPhone}
-                onCodeChange={setTgCode}
-                onSendCode={sendTgCode}
-                onSignIn={signInTg}
+                step={tgStep} phone={tgPhone} code={tgCode}
+                loading={tgPhoneLoading} msg={tgPhoneMsg}
+                onPhoneChange={setTgPhone} onCodeChange={setTgCode}
+                onSendCode={sendTgCode} onSignIn={signInTg}
                 onBack={() => { setTgStep(1); setTgPhoneMsg(""); }}
               />
             ) : (
@@ -392,8 +401,27 @@ export default function AnalyticsPage() {
               <div style={{ textAlign: "center", padding: "3rem", color: "#888" }}>Загружаем...</div>
             ) : vkData.length > 0 ? (
               <>
-                <VKDashboard data={vkData} numWeeks={numWeeks} onNumWeeksChange={setNumWeeks} />
-                <WeeklyTable rows={vkData} cols={vk_cols} emptyText="Нет данных по ВКонтакте" />
+                <DashTabBar active={dashTab} onChange={setDashTab} />
+
+                {dashTab === "weeks" && (
+                  <>
+                    <VKDashboard data={vkData} numWeeks={numWeeks} onNumWeeksChange={setNumWeeks} />
+                    <WeeklyTable rows={vkData} cols={vk_cols} emptyText="Нет данных по ВКонтакте" />
+                  </>
+                )}
+                {dashTab === "posts" && (
+                  <ComingSoonTab
+                    title="Статистика по постам"
+                    desc="Детальная аналитика по каждой публикации: охваты, лайки, ER поста — появится в следующем обновлении."
+                  />
+                )}
+                {dashTab === "stories" && (
+                  <ComingSoonTab
+                    title="Статистика Сториз"
+                    desc="Аналитика историй ВКонтакте: просмотры, ответы, переходы — появится в следующем обновлении."
+                  />
+                )}
+                {dashTab === "timing" && <BestTimingView data={vkData} />}
               </>
             ) : vkCredsStatus?.has_connection ? (
               <VKUserTokenForm
@@ -978,6 +1006,195 @@ function TGDashboard({ data, numWeeks, onNumWeeksChange }: {
           color="#7C5CBF" title="Ср. комментарии" />
         <BarChartSVG data={filtered} getValue={d => d.avg_reposts || 0} getLabel={lbl}
           color="#C25B46" title="Ср. репосты" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Dash Tab Bar ─────────────────────────────────────────────────────────────
+
+const DASH_TABS: { key: DashTabKey; label: string }[] = [
+  { key: "weeks",  label: "По неделям" },
+  { key: "posts",  label: "По постам" },
+  { key: "stories", label: "Сториз" },
+  { key: "timing", label: "Лучшее время" },
+];
+
+function DashTabBar({ active, onChange }: { active: DashTabKey; onChange: (v: DashTabKey) => void }) {
+  return (
+    <div style={{ display: "flex", gap: 3, marginBottom: 20, background: "#F0EEE8",
+      padding: 4, borderRadius: 12, width: "fit-content" }}>
+      {DASH_TABS.map(t => (
+        <button key={t.key} onClick={() => onChange(t.key)}
+          style={{
+            padding: "7px 18px", borderRadius: 9, border: "none", cursor: "pointer",
+            fontSize: 13, fontWeight: active === t.key ? 600 : 400,
+            background: active === t.key ? "#fff" : "transparent",
+            color: active === t.key ? "#0D1B2A" : "#999",
+            boxShadow: active === t.key ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
+            transition: "all 0.15s",
+          }}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Coming Soon Tab ──────────────────────────────────────────────────────────
+
+function ComingSoonTab({ title, desc }: { title: string; desc: string }) {
+  return (
+    <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16,
+      padding: "56px 32px", textAlign: "center" }}>
+      <div style={{ display: "inline-flex", alignItems: "center",
+        background: "#EEF4FF", border: "1px solid #C7D9F8", borderRadius: 20,
+        padding: "4px 14px", marginBottom: 18 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "#3478F6", letterSpacing: 0.6 }}>СКОРО</span>
+      </div>
+      <h3 style={{ fontSize: 18, fontWeight: 700, color: "#0D1B2A", margin: "0 0 10px" }}>{title}</h3>
+      <p style={{ color: "#6B7280", fontSize: 14, margin: 0, maxWidth: 440,
+        marginLeft: "auto", marginRight: "auto", lineHeight: 1.6 }}>{desc}</p>
+    </div>
+  );
+}
+
+// ─── Best Timing View ─────────────────────────────────────────────────────────
+
+function BestTimingView({ data }: { data: (TGWeek | VKWeek)[] }) {
+  if (!data.length) return null;
+
+  const dayCount: Record<string, number> = {};
+  const hourCount: Record<string, number> = {};
+  data.forEach(w => {
+    if (w.best_day?.trim()) dayCount[w.best_day.trim()] = (dayCount[w.best_day.trim()] || 0) + 1;
+    if (w.best_hour?.trim()) hourCount[w.best_hour.trim()] = (hourCount[w.best_hour.trim()] || 0) + 1;
+  });
+
+  const dayOrder = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+  const sortedDays = Object.entries(dayCount).sort((a, b) => {
+    const ai = dayOrder.findIndex(d => a[0].startsWith(d));
+    const bi = dayOrder.findIndex(d => b[0].startsWith(d));
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+  const sortedHours = Object.entries(hourCount).sort((a, b) => a[0].localeCompare(b[0]));
+  const topDaysByFreq = [...sortedDays].sort((a, b) => b[1] - a[1]);
+  const topHoursByFreq = [...sortedHours].sort((a, b) => b[1] - a[1]);
+
+  const topDay = topDaysByFreq[0];
+  const topHour = topHoursByFreq[0];
+  const total = data.length;
+  const maxDay = Math.max(...Object.values(dayCount), 1);
+  const maxHour = Math.max(...Object.values(hourCount), 1);
+
+  const HBar = ({ label, count, max, color }: { label: string; count: number; max: number; color: string }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+      <div style={{ width: 36, fontSize: 12, fontWeight: 600, color: "#374151",
+        textAlign: "right", flexShrink: 0 }}>{label}</div>
+      <div style={{ flex: 1, background: "#F3F4F6", borderRadius: 5, height: 22, overflow: "hidden" }}>
+        <div style={{ width: `${(count / max) * 100}%`, height: "100%", background: color,
+          borderRadius: 5, minWidth: count > 0 ? 6 : 0,
+          display: "flex", alignItems: "center", paddingLeft: 8 }}>
+          {(count / max) > 0.25 && (
+            <span style={{ fontSize: 11, color: "#fff", fontWeight: 600 }}>{count}×</span>
+          )}
+        </div>
+      </div>
+      {(count / max) <= 0.25 && (
+        <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 500, minWidth: 20 }}>{count}×</span>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Summary */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16, padding: "24px 28px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", letterSpacing: 0.8, marginBottom: 8 }}>
+            ЛУЧШИЙ ДЕНЬ ПУБЛИКАЦИИ
+          </div>
+          <div style={{ fontSize: 40, fontWeight: 800, color: "#0D1B2A",
+            fontFamily: "'Manrope', sans-serif", marginBottom: 4 }}>
+            {topDay?.[0] || "—"}
+          </div>
+          <div style={{ fontSize: 12, color: "#6B7280" }}>
+            {topDay ? `лидирует в ${topDay[1]} из ${total} недель` : "Нет данных"}
+          </div>
+        </div>
+        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16, padding: "24px 28px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", letterSpacing: 0.8, marginBottom: 8 }}>
+            ЛУЧШЕЕ ВРЕМЯ ПУБЛИКАЦИИ
+          </div>
+          <div style={{ fontSize: 40, fontWeight: 800, color: "#3478F6",
+            fontFamily: "'Manrope', sans-serif", marginBottom: 4 }}>
+            {topHour?.[0] || "—"}
+          </div>
+          <div style={{ fontSize: 12, color: "#6B7280" }}>
+            {topHour ? `лидирует в ${topHour[1]} из ${total} недель` : "Нет данных"}
+          </div>
+        </div>
+      </div>
+
+      {/* Frequency charts */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16, padding: "20px 24px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", letterSpacing: 0.8, marginBottom: 14 }}>
+            ЧАСТОТА ПО ДНЯМ НЕДЕЛИ
+          </div>
+          {sortedDays.map(([day, count]) => (
+            <HBar key={day} label={day} count={count} max={maxDay} color="#3478F6" />
+          ))}
+          {!sortedDays.length && <div style={{ color: "#ccc", fontSize: 13 }}>Нет данных</div>}
+        </div>
+        <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16, padding: "20px 24px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", letterSpacing: 0.8, marginBottom: 14 }}>
+            ЧАСТОТА ПО ЧАСАМ
+          </div>
+          {sortedHours.map(([hour, count]) => (
+            <HBar key={hour} label={hour} count={count} max={maxHour} color="#059669" />
+          ))}
+          {!sortedHours.length && <div style={{ color: "#ccc", fontSize: 13 }}>Нет данных</div>}
+        </div>
+      </div>
+
+      {/* History table */}
+      <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16, overflow: "auto" }}>
+        <div style={{ padding: "14px 20px", borderBottom: "1px solid #F3F4F6",
+          fontSize: 11, fontWeight: 700, color: "#9CA3AF", letterSpacing: 0.8 }}>
+          ИСТОРИЯ ПО НЕДЕЛЯМ
+        </div>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: "#F9FAFB" }}>
+              {["НЕДЕЛЯ", "ЛУЧШИЙ ДЕНЬ", "ЛУЧШЕЕ ВРЕМЯ"].map(h => (
+                <th key={h} style={{ padding: "10px 20px", textAlign: "left",
+                  fontWeight: 600, color: "#6B7280", fontSize: 11,
+                  borderBottom: "1px solid #F3F4F6" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((w, i) => (
+              <tr key={i} style={{ borderBottom: "1px solid #F9FAFB",
+                background: i === 0 ? "#FAFAFA" : "transparent" }}>
+                <td style={{ padding: "10px 20px", color: "#374151", fontWeight: i === 0 ? 600 : 400 }}>
+                  {w.week_start} — {w.week_end}
+                </td>
+                <td style={{ padding: "10px 20px", color: "#374151" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%",
+                      background: "#3478F6", display: "inline-block", flexShrink: 0 }} />
+                    {w.best_day || "—"}
+                  </span>
+                </td>
+                <td style={{ padding: "10px 20px", color: "#059669", fontWeight: 500 }}>
+                  {w.best_hour || "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

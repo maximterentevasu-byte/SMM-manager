@@ -124,6 +124,25 @@ async def refine_strategy_endpoint(
     return {"strategy": new_strategy, "status": "updated"}
 
 
+@router.post("/{business_id}/strategy-chat")
+async def strategy_chat_endpoint(
+    business_id: str,
+    body: RefineStrategyRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Business).where(Business.id == business_id, Business.user_id == current_user.id)
+    )
+    business = result.scalar_one_or_none()
+    if not business:
+        raise HTTPException(404, "Не найдено")
+
+    from app.agents.strategy_agent import strategy_chat
+    chat_result = await strategy_chat(body.message, business.strategy, business.profile or {})
+    return chat_result
+
+
 @router.post("/{business_id}/generate-strategy")
 async def trigger_strategy(
     business_id: str,
