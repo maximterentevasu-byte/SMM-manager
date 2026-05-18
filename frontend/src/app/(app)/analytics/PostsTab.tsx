@@ -344,25 +344,25 @@ function PostDetail({ post, onClose }: { post: TGPost; onClose: () => void }) {
           <div style={{ borderBottom: "1px solid #F3F4F6" }}>
             <iframe
               src={embedUrl}
-              style={{ width: "100%", border: "none", minHeight: 200 }}
+              style={{ width: "100%", border: "none", minHeight: 420 }}
               sandbox="allow-scripts allow-same-origin allow-popups"
               onLoad={(e) => {
                 const iframe = e.currentTarget;
                 try {
-                  iframe.style.height =
-                    (iframe.contentWindow?.document.body.scrollHeight || 200) + "px";
+                  const h = iframe.contentWindow?.document.body.scrollHeight || 420;
+                  iframe.style.height = Math.max(h, 420) + "px";
                 } catch {}
               }}
             />
           </div>
         ) : post.has_media ? (
           <div style={{ padding: "16px", borderBottom: "1px solid #F3F4F6" }}>
-            <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "24px 16px",
-              display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
-              color: "#6B7280" }}>
-              <span style={{ fontSize: 36 }}>{MEDIA_ICON[post.media_type] || "📎"}</span>
-              <span style={{ fontSize: 13, textTransform: "capitalize" }}>{post.media_type}</span>
-              <span style={{ fontSize: 11, color: "#9CA3AF" }}>Медиа доступно только в Telegram</span>
+            <div style={{ background: "#F9FAFB", borderRadius: 12, minHeight: 200,
+              display: "flex", flexDirection: "column", alignItems: "center",
+              justifyContent: "center", gap: 10, color: "#6B7280" }}>
+              <span style={{ fontSize: 48 }}>{MEDIA_ICON[post.media_type] || "📎"}</span>
+              <span style={{ fontSize: 14, textTransform: "capitalize", fontWeight: 600 }}>{post.media_type}</span>
+              <span style={{ fontSize: 12, color: "#9CA3AF" }}>Медиа доступно только в Telegram</span>
             </div>
           </div>
         ) : null}
