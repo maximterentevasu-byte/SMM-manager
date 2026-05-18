@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from sqlalchemy import text
 from app.database import engine, Base
-from app.api import auth, businesses, onboarding, content, platforms, subscriptions, analytics, post_creator, events
+from app.api import auth, businesses, onboarding, content, platforms, subscriptions, analytics, post_creator, events, home
 
 # Колонки для миграций без Alembic — добавляются через ADD COLUMN IF NOT EXISTS
 _MIGRATIONS = [
@@ -64,6 +64,7 @@ app.include_router(subscriptions.router, prefix="/api/subscriptions", tags=["sub
 app.include_router(analytics.router,      prefix="/api/analytics",      tags=["analytics"])
 app.include_router(post_creator.router,   prefix="/api/post-creator",   tags=["post-creator"])
 app.include_router(events.router,         prefix="/api/events",          tags=["events"])
+app.include_router(home.router,           prefix="/api/home",            tags=["home"])
 
 
 @app.get("/")
