@@ -61,7 +61,10 @@ services:
     command: celery -A app.workers.celery_app beat --loglevel=info
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - NEXT_PUBLIC_API_URL=https://${DOMAIN}/api
     restart: always
     ports:
       - "3000:3000"
