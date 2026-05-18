@@ -1,8 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from sqlalchemy import text
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from app.database import engine, Base
+from app.config import settings
 from app.api import auth, businesses, onboarding, content, platforms, subscriptions, analytics, post_creator, events, home
 
 # Колонки для миграций без Alembic — добавляются через ADD COLUMN IF NOT EXISTS
@@ -41,19 +45,49 @@ async def lifespan(app: FastAPI):
     yield
 
 
+_is_prod = bool(settings.DOMAIN)
+
+# В проде Swagger недоступен — утечка схемы API
 app = FastAPI(
     title="SMM Platform API",
     version="0.1.0",
     lifespan=lifespan,
+    docs_url=None if _is_prod else "/docs",
+    redoc_url=None if _is_prod else "/redoc",
+    openapi_url=None if _is_prod else "/openapi.json",
 )
 
+# Rate limiter (использует IP-адрес клиента)
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS: только свой домен в проде; localhost — в разработке
+_origins = (
+    [f"https://{settings.DOMAIN}", f"https://www.{settings.DOMAIN}"]
+    if _is_prod
+    else ["http://localhost:3000", "http://127.0.0.1:3000"]
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
+
+# Security headers на каждый ответ
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response: Response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if _is_prod:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 app.include_router(auth.router,          prefix="/api/auth",          tags=["auth"])
 app.include_router(businesses.router,    prefix="/api/businesses",    tags=["businesses"])
@@ -69,7 +103,7 @@ app.include_router(home.router,           prefix="/api/home",            tags=["
 
 @app.get("/")
 async def root():
-    return {"message": "SMM Platform API работает ✓", "docs": "/docs"}
+    return {"status": "ok"}
 
 
 @app.get("/health")
@@ -77,32 +111,44 @@ async def health():
     return {"status": "ok"}
 
 
+def _check_debug_token(request: Request):
+    """Debug-эндпоинты защищены статическим токеном из SECRET_KEY."""
+    from fastapi import HTTPException
+    token = request.headers.get("X-Debug-Token") or request.query_params.get("token")
+    if not token or token != settings.SECRET_KEY[:16]:
+        raise HTTPException(403, "Forbidden")
+
+
 @app.api_route("/api/debug/trigger-notifications", methods=["GET", "POST"])
-async def debug_trigger_notifications():
+async def debug_trigger_notifications(request: Request):
     """Ручной запуск уведомлений needs_info (для тестирования)."""
+    _check_debug_token(request)
     from app.workers.notification_tasks import notify_pending_posts
     notify_pending_posts.delay()
     return {"status": "triggered", "message": "Задача уведомлений поставлена в очередь Celery"}
 
 
 @app.api_route("/api/debug/trigger-replies-check", methods=["GET", "POST"])
-async def debug_trigger_replies_check():
+async def debug_trigger_replies_check(request: Request):
     """Ручной запуск опроса Telegram на ответы."""
+    _check_debug_token(request)
     from app.workers.notification_tasks import check_telegram_replies
     check_telegram_replies.delay()
     return {"status": "triggered", "message": "Задача проверки ответов поставлена в очередь Celery"}
 
 
 @app.api_route("/api/debug/trigger-approvals", methods=["GET", "POST"])
-async def debug_trigger_approvals():
+async def debug_trigger_approvals(request: Request):
     """Ручной запуск уведомлений о согласовании (для тестирования)."""
+    _check_debug_token(request)
     from app.workers.notification_tasks import notify_pending_approvals
     notify_pending_approvals.delay()
     return {"status": "triggered", "message": "Задача согласования поставлена в очередь Celery"}
 
 
 @app.get("/api/debug/notifications-status")
-async def debug_notifications_status():
+async def debug_notifications_status(request: Request):
+    _check_debug_token(request)
     """Статус системы уведомлений: слоты, подключения, последние уведомления."""
     from sqlalchemy import text
     from app.database import AsyncSessionLocal
@@ -164,7 +210,8 @@ async def debug_notifications_status():
 
 
 @app.get("/api/debug/gemini-models")
-async def debug_gemini_models():
+async def debug_gemini_models(request: Request):
+    _check_debug_token(request)
     """Список моделей Gemini доступных по текущему API-ключу."""
     from app.config import settings
     import asyncio

@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = ""
 
+    DOMAIN: str = ""  # e.g. smmplatform.pro
+
     # ЮКасса
     YOOKASSA_SHOP_ID: str = ""
     YOOKASSA_SECRET_KEY: str = ""
