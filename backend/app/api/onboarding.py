@@ -240,7 +240,7 @@ async def quick_start(
     business = Business(
         id=uuid.uuid4(),
         user_id=current_user.id,
-        name="Мой бизнес",
+        name="",
         profile={"niche": "", "usp": "", "target_audience": "", "price_segment": "middle", "geo": ""},
     )
     db.add(business)

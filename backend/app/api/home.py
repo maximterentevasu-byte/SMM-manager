@@ -282,7 +282,7 @@ async def get_home_dashboard(
     }
 
     return {
-        "business_name": biz.name,
+        "business_name": profile.get("name") or biz.name or "",
         "smm_metrics": smm_metrics,
         "kpi": kpi,
         "analytics": {
