@@ -28,6 +28,7 @@ _MIGRATIONS = [
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_tgpost_biz_post ON telegram_posts(business_id, post_id)",
     # telegram_stories — аналогично
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_tgstory_biz_story ON telegram_stories(business_id, story_id)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_vkstory_biz_story ON vk_stories(business_id, story_id)",
 ]
 
 

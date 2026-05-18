@@ -4,6 +4,8 @@ import React, { useEffect, useState } from "react";
 import api from "@/lib/api";
 import PostsTab from "./PostsTab";
 import StoriesTab from "./StoriesTab";
+import VKPostsTab from "./VKPostsTab";
+import VKStoriesTab from "./VKStoriesTab";
 
 type TGWeek = {
   week_start: string; week_end: string; channel_name: string;
@@ -435,30 +437,22 @@ export default function AnalyticsPage() {
                     <WeeklyTable rows={vkData} cols={vk_cols} emptyText="Нет данных по ВКонтакте" />
                   </>
                 )}
-                {dashTab === "posts" && (
-                  <ComingSoonTab
-                    title="Статистика по постам"
-                    desc="Детальная аналитика по каждой публикации: охваты, лайки, ER поста — появится в следующем обновлении."
-                  />
-                )}
-                {dashTab === "stories" && (
-                  <ComingSoonTab
-                    title="Статистика Сториз"
-                    desc="Аналитика историй ВКонтакте: просмотры, ответы, переходы — появится в следующем обновлении."
-                  />
-                )}
+                {dashTab === "posts" && <VKPostsTab businessId={businessId} />}
+                {dashTab === "stories" && <VKStoriesTab businessId={businessId} />}
                 {dashTab === "timing" && <BestTimingView data={vkData} />}
                 {dashTab === "ai" && <AIAnalyticsTab businessId={businessId} platform="vk" />}
               </>
             ) : vkCredsStatus?.has_connection ? (
-              <VKUserTokenForm
-                token={vkUserToken}
-                onChange={setVkUserToken}
-                onSave={saveVkCreds}
-                saving={savingVkCreds}
-                msg={vkCredsMsg}
-                configured={vkCredsStatus.configured}
-              />
+              <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
+                padding: "40px 32px", textAlign: "center" }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>В</div>
+                <h3 style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", margin: "0 0 8px" }}>
+                  Сообщество подключено
+                </h3>
+                <p style={{ color: "#888", fontSize: 14, margin: "0 0 20px", lineHeight: 1.6 }}>
+                  Нажмите <strong>«⟳ Собрать сейчас»</strong> вверху страницы — данные появятся автоматически.
+                </p>
+              </div>
             ) : (
               <NoConnectionState platform="ВКонтакте" />
             )}

@@ -13,7 +13,7 @@ from app.database import get_db
 from app.models.models import (
     User, Business, PlatformConnection,
     TGWeeklyStats, VKWeeklyStats, ContentSlot, PlanStatus, Platform,
-    TelegramPost, TelegramStory,
+    TelegramPost, TelegramStory, VKStory,
 )
 from app.api.auth import get_current_user
 from app.services.publishers import decrypt_token, encrypt_token
@@ -139,7 +139,7 @@ async def get_vk_credentials_status(
     if not conn:
         return {"configured": False, "has_connection": False}
     return {
-        "configured": bool(conn.vk_user_token_encrypted),
+        "configured": bool(conn.vk_user_token_encrypted or conn.token_encrypted),
         "has_connection": True,
         "group_name": conn.page_name,
     }
@@ -303,13 +303,15 @@ async def _save_vk(db: AsyncSession, business_id: str, vk: PlatformConnection) -
     from app.services.analytics_vk import collect_vk_weekly
 
     community_token = decrypt_token(vk.token_encrypted)
-    user_token = decrypt_token(vk.vk_user_token_encrypted) if vk.vk_user_token_encrypted else None
+    # Используем отдельный user token если есть, иначе тот же токен что при подключении платформы
+    user_token = (
+        decrypt_token(vk.vk_user_token_encrypted)
+        if vk.vk_user_token_encrypted
+        else community_token
+    )
 
     if not user_token:
-        return {
-            "weeks": 0,
-            "error": "Нужен VK user token для чтения стены. Добавь его в настройках аналитики.",
-        }
+        return {"weeks": 0, "error": "VK токен не настроен. Подключите сообщество в разделе Платформы."}
 
     weekly, posts = await asyncio.to_thread(
         collect_vk_weekly, vk.external_page_id, community_token, user_token
@@ -1659,5 +1661,229 @@ async def collect_tg_stories(
         )
         count = await _upsert_stories(business_id, stories, db)
         return {"status": "ok", "collected": count, "deeper": deeper}
+    except Exception as e:
+        raise HTTPException(400, f"Ошибка сбора историй: {str(e)}")
+
+
+# ─── VK POSTS ─────────────────────────────────────────────────────────────────
+
+@router.get("/{business_id}/vk/posts")
+async def get_vk_posts(
+    business_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Возвращает все посты из embedded JSON в VKWeeklyStats."""
+    await _get_business(business_id, current_user, db)
+    result = await db.execute(
+        select(VKWeeklyStats)
+        .where(VKWeeklyStats.business_id == business_id)
+        .order_by(VKWeeklyStats.week_start.desc())
+    )
+    rows = result.scalars().all()
+    posts = []
+    seen_ids: set = set()
+    for row in rows:
+        for p in (row.posts or []):
+            pid = p.get("id")
+            if pid in seen_ids:
+                continue
+            seen_ids.add(pid)
+            views = p.get("views", 0) or 0
+            likes = p.get("likes", 0) or 0
+            comments = p.get("comments", 0) or 0
+            reposts = p.get("reposts", 0) or 0
+            er = round((likes + comments + reposts) / views * 100, 2) if views > 0 else 0
+            posts.append({
+                "post_id": pid,
+                "group_id": row.group_id,
+                "group_name": row.group_name,
+                "published_at": p.get("date", ""),
+                "text": p.get("text", ""),
+                "views": views,
+                "likes": likes,
+                "comments": comments,
+                "reposts": reposts,
+                "er_pct": er,
+                "updated_at": row.collected_at.isoformat(),
+            })
+    posts.sort(key=lambda p: str(p.get("published_at", "")), reverse=True)
+    return posts
+
+
+@router.post("/{business_id}/vk/posts/collect")
+async def collect_vk_posts_endpoint(
+    business_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Обновляет VK-аналитику (посты встроены в недельную статистику)."""
+    await _get_business(business_id, current_user, db)
+    vk = await _get_connection(business_id, "vk", db)
+    if not vk:
+        raise HTTPException(400, "ВКонтакте не подключён.")
+    try:
+        result = await _save_vk(db, business_id, vk)
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(400, f"Ошибка сбора: {str(e)}")
+
+
+# ─── VK STORIES ───────────────────────────────────────────────────────────────
+
+def _collect_vk_stories_sync(group_id: str, token: str) -> list[dict]:
+    """Собирает активные истории VK-сообщества через VK API."""
+    import asyncio as _aio
+    import aiohttp
+    from datetime import datetime as _dt
+
+    async def _do():
+        owner_id = f"-{str(group_id).lstrip('-')}"
+        stories_out = []
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                "https://api.vk.com/method/stories.get",
+                params={"owner_id": owner_id, "access_token": token, "v": "5.199"},
+            ) as resp:
+                data = await resp.json()
+
+        if "error" in data:
+            raise Exception(data["error"].get("error_msg", "VK API error"))
+
+        items = data.get("response", {}).get("items", [])
+        for story_group in items:
+            stories_list = story_group if isinstance(story_group, list) else [story_group]
+            for story in stories_list:
+                sid = story.get("id", 0)
+                if not sid:
+                    continue
+                views = story.get("views", 0) or 0
+                replies_d = story.get("replies", {})
+                replies = replies_d.get("count", 0) if isinstance(replies_d, dict) else (replies_d or 0)
+                shares_d = story.get("shares", {})
+                shares = shares_d.get("count", 0) if isinstance(shares_d, dict) else (shares_d or 0)
+                pub_ts = story.get("date", 0)
+                exp_ts = story.get("expires_at", 0)
+                published = _dt.utcfromtimestamp(pub_ts) if pub_ts else _dt.utcnow()
+                expires = _dt.utcfromtimestamp(exp_ts) if exp_ts else None
+                stype = story.get("type", "photo")
+                caption = ""
+                link = story.get("link")
+                if isinstance(link, dict):
+                    caption = link.get("text", "") or link.get("url", "")
+                er = round((replies + shares) / views * 100, 2) if views > 0 else 0
+                stories_out.append({
+                    "story_id": sid,
+                    "published_at": published,
+                    "expires_at": expires,
+                    "caption": caption,
+                    "views": views,
+                    "replies": replies,
+                    "shares": shares,
+                    "has_media": stype in ("photo", "video"),
+                    "media_type": stype,
+                    "er_pct": er,
+                })
+        return stories_out
+
+    loop = _aio.new_event_loop()
+    _aio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(_do())
+    finally:
+        loop.close()
+        _aio.set_event_loop(None)
+
+
+async def _upsert_vk_stories(business_id: str, group_id: str, group_name: str,
+                              stories: list[dict], db: AsyncSession) -> int:
+    if not stories:
+        return 0
+    biz_uuid = uuid.UUID(str(business_id))
+    _PRESERVE = ("views", "replies", "shares")
+    for sd in stories:
+        res = await db.execute(
+            select(VKStory).where(
+                VKStory.business_id == biz_uuid,
+                VKStory.story_id == sd["story_id"],
+            )
+        )
+        existing = res.scalar_one_or_none()
+        if existing:
+            for k, v in sd.items():
+                if k in _PRESERVE:
+                    old = getattr(existing, k, 0) or 0
+                    setattr(existing, k, max(old, v or 0))
+                else:
+                    setattr(existing, k, v)
+            v_views = existing.views or 0
+            if v_views > 0:
+                existing.er_pct = round((existing.replies + existing.shares) / v_views * 100, 2)
+            existing.updated_at = datetime.utcnow()
+        else:
+            db.add(VKStory(
+                id=uuid.uuid4(), business_id=biz_uuid,
+                group_id=group_id, group_name=group_name, **sd,
+            ))
+    await db.commit()
+    return len(stories)
+
+
+@router.get("/{business_id}/vk/stories")
+async def get_vk_stories(
+    business_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_business(business_id, current_user, db)
+    result = await db.execute(
+        select(VKStory)
+        .where(VKStory.business_id == business_id)
+        .order_by(VKStory.published_at.desc())
+    )
+    rows = result.scalars().all()
+    return [
+        {
+            "story_id": r.story_id,
+            "group_name": r.group_name,
+            "group_id": r.group_id,
+            "published_at": r.published_at.isoformat(),
+            "expires_at": r.expires_at.isoformat() if r.expires_at else None,
+            "caption": r.caption,
+            "views": r.views,
+            "replies": r.replies,
+            "shares": r.shares,
+            "has_media": r.has_media,
+            "media_type": r.media_type,
+            "er_pct": r.er_pct,
+            "updated_at": r.updated_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
+@router.post("/{business_id}/vk/stories/collect")
+async def collect_vk_stories(
+    business_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_business(business_id, current_user, db)
+    conn = await _get_connection(business_id, "vk", db)
+    if not conn:
+        raise HTTPException(400, "ВКонтакте не подключён.")
+    token = (
+        decrypt_token(conn.vk_user_token_encrypted)
+        if conn.vk_user_token_encrypted
+        else decrypt_token(conn.token_encrypted)
+    )
+    if not token:
+        raise HTTPException(400, "VK токен не найден.")
+    group_id = conn.external_page_id.lstrip("-")
+    group_name = conn.page_name or ""
+    try:
+        stories = await asyncio.to_thread(_collect_vk_stories_sync, group_id, token)
+        count = await _upsert_vk_stories(business_id, group_id, group_name, stories, db)
+        return {"status": "ok", "collected": count}
     except Exception as e:
         raise HTTPException(400, f"Ошибка сбора историй: {str(e)}")

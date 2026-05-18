@@ -3,6 +3,9 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "smmplatform — AI-платформа для системного SMM",
   description: "Стратегия, контент, планирование и аналитика в одном месте. Powered by АИСТ.",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
