@@ -228,19 +228,19 @@ export default function PostsTab({ businessId }: { businessId: string }) {
               <thead>
                 <tr>
                   {[
-                    { col: "published_at" as keyof TGPost, label: "Дата (ЕКБ)" },
-                    { col: "published_at" as keyof TGPost, label: "Время (ЕКБ)", noSort: true },
-                    { col: "post_id" as keyof TGPost, label: "ID" },
-                    { col: "text" as keyof TGPost, label: "Текст поста" },
-                    { col: "views" as keyof TGPost, label: "Просмотры" },
-                    { col: "reactions" as keyof TGPost, label: "Реакции" },
-                    { col: "comments" as keyof TGPost, label: "Комментарии" },
-                    { col: "reposts" as keyof TGPost, label: "Репосты" },
-                    { col: "er_pct" as keyof TGPost, label: "ER %" },
-                    { col: "virality_pct" as keyof TGPost, label: "Вирал %" },
-                    { col: "has_question" as keyof TGPost, label: "Вопрос" },
-                  ].map(({ col, label, noSort }) => (
-                    <th key={label} style={thStyle}
+                    { col: "published_at" as keyof TGPost, label: "Дата (ЕКБ)", minWidth: 110 },
+                    { col: "published_at" as keyof TGPost, label: "Время (ЕКБ)", noSort: true, minWidth: 90 },
+                    { col: "post_id" as keyof TGPost, label: "ID", minWidth: 72 },
+                    { col: "text" as keyof TGPost, label: "Текст поста", minWidth: 220 },
+                    { col: "views" as keyof TGPost, label: "Просмотры", minWidth: 110 },
+                    { col: "reactions" as keyof TGPost, label: "Реакции", minWidth: 100 },
+                    { col: "comments" as keyof TGPost, label: "Комментарии", minWidth: 120 },
+                    { col: "reposts" as keyof TGPost, label: "Репосты", minWidth: 100 },
+                    { col: "er_pct" as keyof TGPost, label: "ER %", minWidth: 80 },
+                    { col: "virality_pct" as keyof TGPost, label: "Вирал %", minWidth: 90 },
+                    { col: "has_question" as keyof TGPost, label: "Вопрос", minWidth: 85 },
+                  ].map(({ col, label, noSort, minWidth }) => (
+                    <th key={label} style={{ ...thStyle, minWidth }}
                       onClick={() => !noSort && toggleSort(col)}>
                       {label}{!noSort && <SortIcon col={col} />}
                     </th>
@@ -307,13 +307,15 @@ export default function PostsTab({ businessId }: { businessId: string }) {
 }
 
 function PostDetail({ post, onClose }: { post: TGPost; onClose: () => void }) {
-  const embedUrl = post.channel_name
+  // Only public channels with valid @username (letters/digits/underscore, no spaces) support embeds
+  const isValidUsername = (s: string) => /^[a-zA-Z0-9_]{3,}$/.test(s);
+  const embedUrl = isValidUsername(post.channel_name)
     ? `https://t.me/${post.channel_name}/${post.post_id}?embed=1&mode=tme`
     : null;
 
   return (
     <div style={{
-      width: 340, flexShrink: 0, background: "#fff", border: "1px solid #E5E7EB",
+      width: 480, flexShrink: 0, background: "#fff", border: "1px solid #E5E7EB",
       borderRadius: 16, overflow: "hidden", position: "sticky", top: 20,
       maxHeight: "calc(100vh - 120px)", display: "flex", flexDirection: "column",
     }}>
@@ -337,7 +339,7 @@ function PostDetail({ post, onClose }: { post: TGPost; onClose: () => void }) {
       </div>
 
       <div style={{ overflowY: "auto", flex: 1 }}>
-        {/* Telegram embed */}
+        {/* Media area: embed OR media placeholder — never post text here */}
         {embedUrl ? (
           <div style={{ borderBottom: "1px solid #F3F4F6" }}>
             <iframe
@@ -353,33 +355,35 @@ function PostDetail({ post, onClose }: { post: TGPost; onClose: () => void }) {
               }}
             />
           </div>
-        ) : (
-          /* Fallback: show text */
+        ) : post.has_media ? (
           <div style={{ padding: "16px", borderBottom: "1px solid #F3F4F6" }}>
-            {post.has_media && (
-              <div style={{ background: "#F9FAFB", borderRadius: 10, padding: "10px 14px",
-                marginBottom: 10, display: "flex", alignItems: "center", gap: 8,
-                fontSize: 13, color: "#6B7280" }}>
-                <span style={{ fontSize: 20 }}>{MEDIA_ICON[post.media_type] || "📎"}</span>
-                <span style={{ textTransform: "capitalize" }}>{post.media_type}</span>
-              </div>
-            )}
-            <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.6, margin: 0,
-              whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-              {post.text || <span style={{ color: "#9CA3AF", fontStyle: "italic" }}>[Без текста]</span>}
-            </p>
+            <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "24px 16px",
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+              color: "#6B7280" }}>
+              <span style={{ fontSize: 36 }}>{MEDIA_ICON[post.media_type] || "📎"}</span>
+              <span style={{ fontSize: 13, textTransform: "capitalize" }}>{post.media_type}</span>
+              <span style={{ fontSize: 11, color: "#9CA3AF" }}>Медиа доступно только в Telegram</span>
+            </div>
           </div>
-        )}
+        ) : null}
 
-        {/* Full text (if embed + has text) */}
-        {embedUrl && post.text && (
+        {/* Text section — always shown separately */}
+        {post.text ? (
           <div style={{ padding: "14px 16px", borderBottom: "1px solid #F3F4F6" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF",
               letterSpacing: 0.6, marginBottom: 8 }}>ТЕКСТ ПОСТА</div>
             <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.6, margin: 0,
-              whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 160,
+              whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 200,
               overflowY: "auto" }}>
               {post.text}
+            </p>
+          </div>
+        ) : (
+          <div style={{ padding: "14px 16px", borderBottom: "1px solid #F3F4F6" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF",
+              letterSpacing: 0.6, marginBottom: 8 }}>ТЕКСТ ПОСТА</div>
+            <p style={{ fontSize: 13, color: "#9CA3AF", fontStyle: "italic", margin: 0 }}>
+              [Без текста]
             </p>
           </div>
         )}
