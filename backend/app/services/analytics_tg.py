@@ -13,6 +13,11 @@ DAY_RU = {
     "Thursday": "Чт", "Friday": "Пт", "Saturday": "Сб", "Sunday": "Вс",
 }
 
+_TG_CONNECTION_ERRORS = (ConnectionError, EOFError, OSError, asyncio.IncompleteReadError)
+
+# Ошибки авторизации — не ретраим, сессия невалидна
+_TG_AUTH_KEYWORDS = ("auth_key", "unauthorized", "session_expired", "user_deactivated", "auth key")
+
 
 def _to_ekb(dt: datetime) -> datetime:
     return dt.replace(tzinfo=None) + timedelta(hours=EKB_HOURS)
@@ -31,7 +36,7 @@ def _parse_channel_id(chat_id: str) -> int:
     """
     s = str(chat_id).strip().lstrip("-")
     if s.startswith("100") and len(s) > 12:
-        s = s[3:]  # убираем 100 из -100XXXXXXXXX
+        s = s[3:]
     return int(s)
 
 
@@ -41,39 +46,54 @@ async def _fetch_channel(api_id: int, api_hash: str, session_str: str, chat_id: 
     from telethon.tl.functions.channels import GetFullChannelRequest
 
     numeric_id = _parse_channel_id(chat_id)
-    full_id = int(f"-100{numeric_id}")  # формат, который Telethon понимает без кэша
+    full_id = int(f"-100{numeric_id}")
 
-    async with TelegramClient(StringSession(session_str), api_id, api_hash) as client:
-        # get_entity по полному ID (-100XXXXXXXXX) работает даже без кэша сессии
+    last_exc: Exception = RuntimeError("no attempts")
+    for attempt in range(3):
+        if attempt > 0:
+            await asyncio.sleep(3 * attempt)
         try:
-            entity = await client.get_entity(full_id)
-        except Exception:
-            # если не получилось — обновляем диалоги и пробуем снова
-            await client.get_dialogs(limit=50)
-            entity = await client.get_entity(full_id)
+            async with TelegramClient(StringSession(session_str), api_id, api_hash) as client:
+                try:
+                    entity = await client.get_entity(full_id)
+                except Exception:
+                    await client.get_dialogs(limit=50)
+                    entity = await client.get_entity(full_id)
 
-        full = await client(GetFullChannelRequest(entity))
-        subscribers = full.full_chat.participants_count
-        channel_name = getattr(entity, "title", str(chat_id))
+                full = await client(GetFullChannelRequest(entity))
+                subscribers = full.full_chat.participants_count
+                channel_name = getattr(entity, "title", str(chat_id))
 
-        posts = []
-        async for msg in client.iter_messages(entity, limit=None):
-            if msg.views is None:
-                continue
-            reactions = 0
-            if msg.reactions:
-                reactions = sum(r.count for r in msg.reactions.results)
-            posts.append({
-                "id": msg.id,
-                "date": msg.date,
-                "views": msg.views or 0,
-                "reactions": reactions,
-                "comments": msg.replies.replies if msg.replies else 0,
-                "reposts": msg.forwards or 0,
-                "text": (msg.message or "")[:160],
-            })
+                posts = []
+                async for msg in client.iter_messages(entity, limit=None):
+                    if msg.views is None:
+                        continue
+                    reactions = 0
+                    if msg.reactions:
+                        reactions = sum(r.count for r in msg.reactions.results)
+                    posts.append({
+                        "id": msg.id,
+                        "date": msg.date,
+                        "views": msg.views or 0,
+                        "reactions": reactions,
+                        "comments": msg.replies.replies if msg.replies else 0,
+                        "reposts": msg.forwards or 0,
+                        "text": (msg.message or "")[:160],
+                    })
 
-    return subscribers, channel_name, posts
+            return subscribers, channel_name, posts
+
+        except _TG_CONNECTION_ERRORS as e:
+            last_exc = e
+            continue
+        except Exception as e:
+            # Auth errors — re-raise immediately, retry won't help
+            if any(k in str(e).lower() for k in _TG_AUTH_KEYWORDS):
+                raise
+            last_exc = e
+            continue
+
+    raise last_exc
 
 
 def _build_weekly(channel_id: str, subscribers: int, channel_name: str, posts: list) -> list[dict]:
