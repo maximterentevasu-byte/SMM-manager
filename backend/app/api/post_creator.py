@@ -76,33 +76,60 @@ async def _fetch_telegram_text(url: str, max_chars: int = 2500) -> str:
 
 
 async def _fetch_url_text(url: str, max_chars: int = 2500) -> str:
-    # Соцсети с закрытым контентом не парсятся без авторизации
-    _BLOCKED_DOMAINS = ("instagram.com", "vk.com", "ok.ru", "facebook.com")
+    _BLOCKED = {
+        "instagram.com": "Instagram требует авторизации",
+        "vk.com": "VK требует авторизации",
+        "ok.ru": "Одноклассники требуют авторизации",
+        "facebook.com": "Facebook требует авторизации",
+        "x.com": "X (Twitter) ограничивает доступ без авторизации",
+        "twitter.com": "Twitter ограничивает доступ без авторизации",
+    }
     try:
         from urllib.parse import urlparse
-        domain = urlparse(url).netloc.lower().lstrip("www.")
+        parsed = urlparse(url)
+        domain = parsed.netloc.lower().lstrip("www.")
+        path = parsed.path.lower()
 
-        # Telegram: специальный парсинг OG-метатегов
         if domain in ("t.me", "telegram.me") or domain.endswith(".t.me"):
             return await _fetch_telegram_text(url, max_chars)
 
-        if any(domain == b or domain.endswith("." + b) for b in _BLOCKED_DOMAINS):
-            return ""
+        for blocked, reason in _BLOCKED.items():
+            if domain == blocked or domain.endswith("." + blocked):
+                return f"[Ссылка не считана: {reason} — контент требует входа в аккаунт]"
+
+        # Яндекс Картинки / Google Images
+        if ("yandex.ru/images" in url or "images.yandex" in url
+                or ("google.com/search" in url and "tbm=isch" in url)):
+            return "[Ссылка не считана: страница поиска изображений — текстовое содержимое недоступно]"
+
+        # Прямая ссылка на изображение по расширению
+        if any(path.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg")):
+            return "[Ссылка указывает на изображение — текстовое содержимое недоступно]"
     except Exception:
         pass
+
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
             r = await client.get(
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
             )
+            ct = r.headers.get("content-type", "")
+            if ct.startswith("image/"):
+                return "[Ссылка указывает на изображение — текстовое содержимое недоступно]"
             html = r.text
             html = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html, flags=re.DOTALL | re.IGNORECASE)
             text = re.sub(r'<[^>]+>', ' ', html)
             text = re.sub(r'\s+', ' ', text).strip()
+            if len(text) < 50:
+                return "[Ссылка не считана: страница не содержит читаемого текста]"
             return text[:max_chars]
-    except Exception:
-        return ""
+    except httpx.TimeoutException:
+        return "[Ссылка не считана: сервер не ответил вовремя]"
+    except httpx.RequestError as e:
+        return f"[Ссылка не считана: ошибка сети ({type(e).__name__})]"
+    except Exception as e:
+        return f"[Ссылка не считана: {str(e)[:80]}]"
 
 
 # ─── Image description via Claude vision ─────────────────────────────────────
@@ -321,9 +348,16 @@ async def generate_post_text(
 
     if body.url:
         url_text = await _fetch_url_text(body.url)
-        # Включаем только если реально что-то получили (не ошибка, не пустота)
-        if url_text and not url_text.startswith("[Не удалось") and len(url_text) > 150:
-            context_parts.append(f"Референсный материал (стиль написания из внешнего источника):\n{url_text}")
+        if url_text:
+            if url_text.startswith("["):
+                # Ссылка не считана — передаём причину AI, он честно сообщит
+                context_parts.append(
+                    f"Пользователь прикрепил ссылку: {body.url}\n"
+                    f"Результат попытки чтения: {url_text}\n"
+                    f"Упомяни в самом конце поста (одна строка в скобках): что именно не удалось прочитать и почему."
+                )
+            elif len(url_text) > 150:
+                context_parts.append(f"Референсный материал (стиль написания из внешнего источника):\n{url_text}")
 
     if body.images:
         async with httpx.AsyncClient(timeout=30) as cl:
@@ -344,6 +378,7 @@ async def generate_post_text(
         "• Разбивай текст на абзацы через пустую строку (\\n\\n) — НЕ пиши сплошным блоком\n"
         "• Учитывай актуальные тренды российских соцсетей\n"
         "• Не добавляй никаких пояснений — только текст поста\n"
+        "• Исключение: если в контексте передана информация о нечитаемой ссылке — добавь одну строку в скобках в самом конце\n"
         "• СТРОГО используй только факты из идеи. Никогда не придумывай продукты, бренды, страны, события, детали, которые явно не указаны в идее"
     )
 

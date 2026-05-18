@@ -897,8 +897,8 @@ export default function PostCreatorPage() {
           <SectionTitle n={1} label="Опишите идею поста" done={false} />
           <p style={{ color: "#888", fontSize: 13, margin: "0 0 16px", lineHeight: 1.6 }}>Расскажите о мероприятии, продукте, акции. Можно добавить ссылку или прикрепить фото.</p>
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, color: "#888", display: "block", marginBottom: 6 }}>🔗 Ссылка на сайт или пост (ИИ проанализирует)</label>
-            <input type="url" value={ideaUrl} onChange={e => setIdeaUrl(e.target.value)} placeholder="https://example.com/post..."
+            <label style={{ fontSize: 12, color: "#888", display: "block", marginBottom: 6 }}>🔗 Ссылка для анализа (сайт, статья, объявление, пост в соцсетях…)</label>
+            <input type="text" value={ideaUrl} onChange={e => setIdeaUrl(e.target.value)} placeholder="https://avito.ru/... или vk.com/... — ИИ попробует прочитать"
               style={{ width: "100%", padding: "10px 14px", border: "1px solid #E0DED8", borderRadius: 10, fontSize: 13, background: "#FAFAF8", outline: "none", boxSizing: "border-box" }} />
           </div>
           <Textarea value={idea} onChange={setIdea} placeholder="Например: открываем новую точку 20 мая, адрес Ленина 15, скидка 20%..." rows={4} />
@@ -907,6 +907,9 @@ export default function PostCreatorPage() {
               📎 {ideaFiles.length > 0 ? `Прикреплено фото: ${ideaFiles.length}` : "Прикрепить фото (до 10)"}
             </button>
             <input ref={multiFileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onMultiFileChange} />
+            <div style={{ marginTop: 6, fontSize: 12, color: "#D97706", fontWeight: 600 }}>
+              !Фото используется только для описания идеи поста (не используется для генерации фото к посту)
+            </div>
           </div>
           {ideaFilePreviews.length > 0 && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
