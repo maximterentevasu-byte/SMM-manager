@@ -1241,6 +1241,199 @@ async def get_tg_stories(
     ]
 
 
+def _rate_posts_for_analysis(posts: list[dict], avg_views: float, avg_er: float) -> list[dict]:
+    """Рейтинг постов с поправкой на возраст — свежие посты ещё не набрали полную аудиторию."""
+    from datetime import datetime as _dt
+    now = _dt.utcnow()
+    rated = []
+    for p in posts:
+        try:
+            pub_str = p["published_at"].replace("Z", "").split(".")[0]
+            published = _dt.fromisoformat(pub_str)
+        except Exception:
+            published = now
+        age_days = max((now - published).days, 0)
+
+        views   = p.get("views", 0) or 0
+        er      = p.get("er_pct", 0) or 0
+        viral   = p.get("virality_pct", 0) or 0
+
+        # Поправочный коэффициент: свежие посты не успели набрать просмотры
+        if age_days < 1:
+            age_factor, age_label = 0.08, "опубликован сегодня — данных слишком мало"
+        elif age_days < 3:
+            age_factor, age_label = 0.30, f"{age_days} дн. назад — ещё набирает просмотры"
+        elif age_days < 7:
+            age_factor, age_label = 0.65, f"{age_days} дн. назад — статистика неполная"
+        elif age_days < 14:
+            age_factor, age_label = 0.90, None
+        else:
+            age_factor, age_label = 1.0, None
+
+        adj_views  = views / age_factor if age_factor > 0 else views
+        views_score = min((adj_views / max(avg_views, 1)) * 50, 100)
+        er_score    = min((er / max(avg_er, 0.01)) * 30, 60)
+        viral_score = min(viral * 5, 20)
+        score = round(views_score + er_score + viral_score, 1)
+
+        rated.append({**p, "score": score, "age_days": age_days,
+                      "age_label": age_label, "adj_views": round(adj_views)})
+
+    return sorted(rated, key=lambda x: x["score"], reverse=True)
+
+
+@router.post("/{business_id}/tg/ai-analysis")
+async def tg_ai_analysis(
+    business_id: str,
+    weeks: int = Query(8, description="Кол-во недель для анализа; 0 = всё время"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Полный AI-разбор канала: динамика, рейтинг постов, рекомендации."""
+    await _get_business(business_id, current_user, db)
+
+    from datetime import date, timedelta, datetime as _dt
+
+    # ── Недельная статистика ──────────────────────────────────────────────────
+    wq = select(TGWeeklyStats).where(TGWeeklyStats.business_id == business_id)
+    if weeks > 0:
+        cutoff = date.today() - timedelta(weeks=weeks)
+        wq = wq.where(TGWeeklyStats.week_start >= cutoff)
+    wq = wq.order_by(TGWeeklyStats.week_start.asc())
+    weekly_rows = (await db.execute(wq)).scalars().all()
+
+    if not weekly_rows:
+        raise HTTPException(404, "Нет недельных данных. Сначала соберите аналитику.")
+
+    # ── Посты ─────────────────────────────────────────────────────────────────
+    pq = select(TelegramPost).where(TelegramPost.business_id == business_id)
+    if weeks > 0:
+        cutoff_dt = _dt.utcnow() - timedelta(weeks=weeks)
+        pq = pq.where(TelegramPost.published_at >= cutoff_dt)
+    pq = pq.order_by(TelegramPost.published_at.desc()).limit(500)
+    posts_data = [
+        {
+            "post_id": p.post_id,
+            "published_at": p.published_at.isoformat(),
+            "text": (p.text or "")[:300],
+            "views": p.views or 0,
+            "reactions": p.reactions or 0,
+            "comments": p.comments or 0,
+            "reposts": p.reposts or 0,
+            "er_pct": float(p.er_pct or 0),
+            "virality_pct": float(p.virality_pct or 0),
+            "has_media": p.has_media,
+            "media_type": p.media_type or "none",
+            "has_question": p.has_question,
+        }
+        for p in (await db.execute(pq)).scalars().all()
+    ]
+
+    avg_views = sum(p["views"] for p in posts_data) / len(posts_data) if posts_data else 0
+    avg_er    = sum(p["er_pct"] for p in posts_data) / len(posts_data) if posts_data else 0
+
+    rated  = _rate_posts_for_analysis(posts_data, avg_views, avg_er)
+    mature = [p for p in rated if p["age_days"] >= 7]
+    top5   = rated[:5]
+    worst5 = list(reversed(mature[-5:])) if mature else []
+
+    # ── Строим текст для промпта ──────────────────────────────────────────────
+    week_lines = []
+    for r in weekly_rows:
+        s = r.stats or {}
+        week_lines.append(
+            f"  {r.week_start.date()} — {r.week_end.date()}: "
+            f"постов={s.get('posts_count',0)}, подп.={s.get('subscribers','?')}, "
+            f"ср.просм.={s.get('avg_views','?')}, медиана={s.get('median_views','?')}, "
+            f"ER просм={s.get('er_reach_pct','?')}%, ER акт={s.get('er_activity_pct','?')}%, "
+            f"реакц={s.get('avg_reactions',0):.1f}, репосты={s.get('avg_reposts',0):.1f}, "
+            f"вираль={s.get('virality_pct',0):.3f}%"
+        )
+
+    def _fmt_post(p: dict, rank: int) -> str:
+        age_note = f" [{p['age_label']}]" if p.get("age_label") else ""
+        preview  = (p["text"] or "").replace("\n", " ")[:140] or "(без текста)"
+        return (
+            f"  #{rank}. post_id={p['post_id']}, рейтинг={p['score']}, "
+            f"просм={p['views']} (расч.~{p['adj_views']}), ER={p['er_pct']:.2f}%{age_note}\n"
+            f"     {preview}\n"
+            f"     медиа={p['media_type']}, реакц={p['reactions']}, "
+            f"репосты={p['reposts']}, вопрос={'да' if p['has_question'] else 'нет'}"
+        )
+
+    top_txt   = "\n".join(_fmt_post(p, i + 1) for i, p in enumerate(top5))   or "  Нет данных"
+    worst_txt = "\n".join(_fmt_post(p, i + 1) for i, p in enumerate(worst5)) or "  Нет данных"
+
+    channel_name  = weekly_rows[-1].channel_name or "Telegram-канал"
+    period_label  = f"последние {weeks} нед." if weeks > 0 else "всё время"
+
+    prompt = f"""Ты опытный SMM-аналитик. Проведи развёрнутый разбор Telegram-канала «{channel_name}» за {period_label}.
+
+## Недельная статистика (хронологически):
+{chr(10).join(week_lines)}
+
+## Топ-5 лучших постов (рейтинг учитывает возраст поста):
+{top_txt}
+
+## Топ-5 слабых постов (только зрелые, 7+ дней):
+{worst_txt}
+
+Сводка: {len(posts_data)} постов за период, ср. просмотры = {avg_views:.1f}, ср. ER = {avg_er:.2f}%
+
+---
+
+Напиши аналитический отчёт на русском. Структура обязательна:
+
+## 1. Общая оценка канала
+2-3 предложения — общий вывод о состоянии, тональность честная.
+
+## 2. Динамика метрик
+Что растёт, что падает, переломные моменты. Конкретные цифры и недели.
+
+## 3. Анализ контента
+Почему топ-посты зашли (формат, тема, медиа, вопрос?). Почему слабые провалились. Паттерны.
+
+## 4. Что повторить
+Конкретные форматы, темы, подходы — с обоснованием из данных.
+
+## 5. Что исключить
+Антипаттерны, форматы с низким ER/просмотрами.
+
+## 6. Рекомендации на следующие 4 недели
+Минимум 5 конкретных действий с ожидаемым эффектом.
+
+Пиши честно. Если данных мало — скажи. Не придумывай цифры которых нет в условии."""
+
+    try:
+        from anthropic import AsyncAnthropic
+        msg = await AsyncAnthropic().messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2500,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        analysis_text = msg.content[0].text.strip()
+    except Exception as e:
+        raise HTTPException(500, f"Ошибка AI-анализа: {e}")
+
+    def _post_out(p: dict) -> dict:
+        return {k: p[k] for k in (
+            "post_id", "published_at", "text", "views", "adj_views",
+            "reactions", "comments", "reposts", "er_pct", "score",
+            "age_days", "age_label", "media_type"
+        )}
+
+    return {
+        "analysis": analysis_text,
+        "top_posts": [_post_out(p) for p in top5],
+        "worst_posts": [_post_out(p) for p in worst5],
+        "period": period_label,
+        "channel_name": channel_name,
+        "total_posts": len(posts_data),
+        "avg_views": round(avg_views, 1),
+        "avg_er": round(avg_er, 2),
+    }
+
+
 @router.post("/{business_id}/tg/stories/collect")
 async def collect_tg_stories(
     business_id: str,

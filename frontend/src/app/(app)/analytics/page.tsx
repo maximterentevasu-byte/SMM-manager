@@ -43,7 +43,7 @@ type TGCredsStatus = {
   channel_name?: string;
 };
 
-type DashTabKey = "weeks" | "posts" | "stories" | "timing";
+type DashTabKey = "weeks" | "posts" | "stories" | "timing" | "ai";
 
 const fmt = (n: number | undefined | null, decimals = 0) =>
   n == null ? "—" : Number(n).toLocaleString("ru-RU", { maximumFractionDigits: decimals });
@@ -404,6 +404,7 @@ export default function AnalyticsPage() {
                 {dashTab === "posts" && <PostsTab businessId={businessId} />}
                 {dashTab === "stories" && <StoriesTab businessId={businessId} />}
                 {dashTab === "timing" && <BestTimingView data={tgData} />}
+                {dashTab === "ai" && <AIAnalyticsTab businessId={businessId} />}
               </>
             ) : tgCredsStatus?.has_connection ? (
               <TGPhoneForm
@@ -1128,6 +1129,7 @@ const DASH_TABS: { key: DashTabKey; label: string }[] = [
   { key: "posts",  label: "По постам" },
   { key: "stories", label: "Сториз" },
   { key: "timing", label: "Лучшее время" },
+  { key: "ai",    label: "✦ ИИ аналитика" },
 ];
 
 function DashTabBar({ active, onChange }: { active: DashTabKey; onChange: (v: DashTabKey) => void }) {
@@ -1309,6 +1311,259 @@ function BestTimingView({ data }: { data: (TGWeek | VKWeek)[] }) {
     </div>
   );
 }
+
+// ─── AI Analytics Tab ────────────────────────────────────────────────────────
+
+const AI_PERIOD_OPTS = [
+  { label: "2 нед.", v: 2 },
+  { label: "1 мес.", v: 4 },
+  { label: "2 мес.", v: 8 },
+  { label: "3 мес.", v: 13 },
+  { label: "6 мес.", v: 26 },
+  { label: "Всё время", v: 0 },
+];
+
+type AIPost = {
+  post_id: number; published_at: string; text: string;
+  views: number; adj_views: number; reactions: number;
+  comments: number; reposts: number; er_pct: number;
+  score: number; age_days: number; age_label: string | null; media_type: string;
+};
+type AIResult = {
+  analysis: string; top_posts: AIPost[]; worst_posts: AIPost[];
+  period: string; channel_name: string; total_posts: number;
+  avg_views: number; avg_er: number;
+};
+
+function renderAIMarkdown(text: string): React.ReactNode {
+  const lines = text.split("\n");
+  return lines.map((line, i) => {
+    if (/^##\s/.test(line)) {
+      return <h3 key={i} style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a",
+        margin: "20px 0 8px", borderBottom: "1px solid #F0EEE8", paddingBottom: 6 }}>
+        {line.replace(/^##\s/, "")}
+      </h3>;
+    }
+    if (/^#\s/.test(line)) {
+      return <h2 key={i} style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", margin: "0 0 16px" }}>
+        {line.replace(/^#\s/, "")}
+      </h2>;
+    }
+    if (/^[-*]\s/.test(line)) {
+      return <div key={i} style={{ display: "flex", gap: 8, margin: "3px 0" }}>
+        <span style={{ color: "#3478F6", fontWeight: 700, flexShrink: 0 }}>•</span>
+        <span style={{ color: "#333" }}>{inlineBold(line.replace(/^[-*]\s/, ""))}</span>
+      </div>;
+    }
+    if (line.trim() === "") return <div key={i} style={{ height: 6 }} />;
+    return <p key={i} style={{ margin: "3px 0", color: "#444", lineHeight: 1.65 }}>
+      {inlineBold(line)}
+    </p>;
+  });
+}
+
+function inlineBold(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) =>
+    part.startsWith("**") && part.endsWith("**")
+      ? <strong key={i} style={{ color: "#1a1a1a" }}>{part.slice(2, -2)}</strong>
+      : part
+  );
+}
+
+function AIPostCard({ post, rank, type }: { post: AIPost; rank: number; type: "top" | "worst" }) {
+  const isTop = type === "top";
+  const scoreColor = isTop ? "#0F6E56" : "#A32D2D";
+  const scoreBg   = isTop ? "#E1F5EE" : "#FEF2F2";
+  const ekb = new Date(new Date(post.published_at).getTime() + 5 * 3600 * 1000);
+  const dateStr = ekb.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+
+  return (
+    <div style={{ background: "#FAFAF8", borderRadius: 12, padding: "14px 16px",
+      border: "1px solid #EAE8E2", marginBottom: 8 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <div style={{ width: 28, height: 28, borderRadius: 8, background: scoreBg,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 12, fontWeight: 700, color: scoreColor, flexShrink: 0 }}>
+          {rank}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: scoreColor,
+              background: scoreBg, padding: "2px 8px", borderRadius: 6 }}>
+              {post.score.toFixed(0)} pts
+            </span>
+            <span style={{ fontSize: 11, color: "#888" }}>{dateStr}</span>
+            {post.media_type !== "none" && (
+              <span style={{ fontSize: 11, color: "#666", background: "#F0EEE8",
+                padding: "1px 6px", borderRadius: 4 }}>
+                {post.media_type === "photo" ? "📷" : post.media_type === "video" ? "🎬" : "📎"}
+              </span>
+            )}
+            {post.age_label && (
+              <span style={{ fontSize: 10, color: "#B45309", background: "#FFFBEB",
+                border: "1px solid #FDE68A", padding: "1px 6px", borderRadius: 4 }}>
+                {post.age_label}
+              </span>
+            )}
+          </div>
+          <p style={{ margin: "0 0 6px", fontSize: 12, color: "#333",
+            lineHeight: 1.5, overflow: "hidden", display: "-webkit-box",
+            WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as any }}>
+            {post.text || "(без текста)"}
+          </p>
+          <div style={{ display: "flex", gap: 12, fontSize: 11, color: "#666" }}>
+            <span>👁 {post.views.toLocaleString("ru-RU")}</span>
+            {post.age_days < 14 && post.adj_views !== post.views && (
+              <span style={{ color: "#888" }}>~ {post.adj_views.toLocaleString("ru-RU")} расч.</span>
+            )}
+            <span>ER {post.er_pct.toFixed(2)}%</span>
+            {post.reactions > 0 && <span>❤ {post.reactions}</span>}
+            {post.reposts > 0 && <span>↗ {post.reposts}</span>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AIAnalyticsTab({ businessId }: { businessId: string }) {
+  const [weeks, setWeeks] = useState(8);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<AIResult | null>(null);
+  const [error, setError] = useState("");
+
+  const run = async () => {
+    setLoading(true); setError(""); setResult(null);
+    try {
+      const { data } = await api.post(`/analytics/${businessId}/tg/ai-analysis?weeks=${weeks}`);
+      setResult(data);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || "Ошибка анализа");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <style>{`@keyframes _spin { to { transform: rotate(360deg); } }`}</style>
+
+      {/* Период + кнопка */}
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 24, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 3, background: "#F0EEE8", padding: 3, borderRadius: 10 }}>
+          {AI_PERIOD_OPTS.map(o => (
+            <button key={o.v} onClick={() => setWeeks(o.v)}
+              style={{ padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer",
+                fontSize: 12, fontWeight: o.v === weeks ? 600 : 400,
+                background: o.v === weeks ? "#fff" : "transparent",
+                color: o.v === weeks ? "#1a1a1a" : "#999",
+                boxShadow: o.v === weeks ? "0 1px 4px rgba(0,0,0,0.08)" : "none" }}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <button onClick={run} disabled={loading}
+          style={{ padding: "10px 26px", background: loading ? "#6B7280" : "#3478F6",
+            color: "#fff", border: "none", borderRadius: 10, fontSize: 14,
+            fontWeight: 600, cursor: loading ? "not-allowed" : "pointer",
+            display: "flex", alignItems: "center", gap: 10 }}>
+          {loading
+            ? <><span style={{ display: "inline-block", width: 14, height: 14,
+                border: "2px solid rgba(255,255,255,0.35)", borderTopColor: "#fff",
+                borderRadius: "50%", animation: "_spin 0.75s linear infinite" }} />
+                Анализирую...</>
+            : "✦ Запустить ИИ-анализ"}
+        </button>
+        {result && (
+          <span style={{ fontSize: 12, color: "#aaa" }}>
+            {result.channel_name} · {result.period} · {result.total_posts} постов
+          </span>
+        )}
+      </div>
+
+      {/* Загрузка */}
+      {loading && (
+        <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
+          padding: "48px 32px", textAlign: "center" }}>
+          <div style={{ fontSize: 28, marginBottom: 16 }}>✦</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", marginBottom: 8 }}>
+            ИИ анализирует канал
+          </div>
+          <div style={{ fontSize: 13, color: "#888" }}>Обычно занимает 15–30 секунд</div>
+        </div>
+      )}
+
+      {/* Ошибка */}
+      {error && (
+        <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12,
+          padding: "14px 18px", color: "#A32D2D", fontSize: 13 }}>
+          {error}
+        </div>
+      )}
+
+      {/* Результат */}
+      {result && (
+        <div>
+          {/* Текст анализа */}
+          <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
+            padding: "28px 32px", marginBottom: 20, fontSize: 14, lineHeight: 1.7 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#aaa", letterSpacing: 0.7,
+              marginBottom: 16 }}>
+              ИИ-АНАЛИЗ · {result.channel_name.toUpperCase()} · {result.period.toUpperCase()}
+            </div>
+            {renderAIMarkdown(result.analysis)}
+          </div>
+
+          {/* Посты */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
+              padding: "20px 20px" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#0F6E56",
+                letterSpacing: 0.7, marginBottom: 14 }}>
+                ТОП ПОСТОВ
+              </div>
+              {result.top_posts.length === 0
+                ? <div style={{ color: "#ccc", fontSize: 13 }}>Нет данных по постам</div>
+                : result.top_posts.map((p, i) =>
+                    <AIPostCard key={p.post_id} post={p} rank={i + 1} type="top" />
+                  )}
+            </div>
+            <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
+              padding: "20px 20px" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#A32D2D",
+                letterSpacing: 0.7, marginBottom: 14 }}>
+                СЛАБЫЕ ПОСТЫ (7+ ДНЕЙ)
+              </div>
+              {result.worst_posts.length === 0
+                ? <div style={{ color: "#ccc", fontSize: 13 }}>Недостаточно зрелых постов для сравнения</div>
+                : result.worst_posts.map((p, i) =>
+                    <AIPostCard key={p.post_id} post={p} rank={i + 1} type="worst" />
+                  )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Пустое состояние */}
+      {!loading && !result && !error && (
+        <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
+          padding: "56px 32px", textAlign: "center" }}>
+          <div style={{ fontSize: 36, marginBottom: 16 }}>✦</div>
+          <h3 style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", margin: "0 0 10px" }}>
+            ИИ-разбор канала
+          </h3>
+          <p style={{ color: "#6B7280", fontSize: 14, margin: "0 auto", maxWidth: 440, lineHeight: 1.6 }}>
+            Выбери период и нажми «Запустить ИИ-анализ» — получишь полный разбор метрик,
+            рейтинг постов с поправкой на возраст и рекомендации на следующие 4 недели.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── VK Dashboard ──────────────────────────────────────────────────────────────
 
 function VKDashboard({ data, numWeeks, onNumWeeksChange }: {
   data: VKWeek[]; numWeeks: number; onNumWeeksChange: (v: number) => void;
