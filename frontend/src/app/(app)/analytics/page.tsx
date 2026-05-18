@@ -914,14 +914,27 @@ function DashCard({ label, value, suffix = "", trend, sparkVals, compact = false
   );
 }
 
-function BarChartSVG({ data, getValue, getLabel, color, title }: {
+function BarChartSVG({ data, getValue, getLabel, color, title, suffix = "" }: {
   data: any[]; getValue: (d: any) => number;
-  getLabel: (d: any) => string; color: string; title: string;
+  getLabel: (d: any) => string; color: string; title: string; suffix?: string;
 }) {
+  const [hovIdx, setHovIdx] = useState<number | null>(null);
+
   const vals = data.map(getValue);
   const max = Math.max(...vals, 0.001);
   const n = vals.length;
-  const W = 400, H = 96, labelH = 18;
+  const LEFT = 40, W = 400, H = 96, labelH = 18;
+  const chartW = W - LEFT;
+
+  const fmtY = (v: number) => {
+    if (v >= 10000) return (v / 1000).toFixed(0) + "k";
+    if (v >= 1000) return (v / 1000).toFixed(1) + "k";
+    if (v < 1) return v.toFixed(2);
+    if (v < 10) return v.toFixed(1);
+    return Math.round(v).toString();
+  };
+
+  const yTicks = [0.25, 0.5, 0.75, 1].map(f => ({ f, val: max * f, y: H - H * f }));
 
   return (
     <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 14, padding: "18px 20px" }}>
@@ -929,32 +942,54 @@ function BarChartSVG({ data, getValue, getLabel, color, title }: {
         {title.toUpperCase()}
       </div>
       <svg viewBox={`0 0 ${W} ${H + labelH}`} style={{ width: "100%", height: H + labelH + 4, display: "block", overflow: "visible" }}>
-        {/* gridlines */}
-        {[0.25, 0.5, 0.75, 1].map(f => (
-          <line key={f} x1={0} y1={H - H * f} x2={W} y2={H - H * f}
-            stroke="#F0EEE8" strokeWidth={1} />
+        {/* baseline */}
+        <line x1={LEFT} y1={H} x2={W} y2={H} stroke="#E0DED8" strokeWidth={1} />
+        {/* Y-axis grid + labels */}
+        {yTicks.map(({ f, val, y }) => (
+          <g key={f}>
+            <line x1={LEFT} y1={y} x2={W} y2={y} stroke="#F0EEE8" strokeWidth={1} />
+            <text x={LEFT - 4} y={y + 3} textAnchor="end" fontSize={7.5} fill="#bbb">
+              {fmtY(val)}
+            </text>
+          </g>
         ))}
+        {/* Bars */}
         {vals.map((v, i) => {
-          const slotW = W / n;
-          const barW = Math.max(Math.min(slotW * 0.55, 40), 6);
-          const x = i * slotW + (slotW - barW) / 2;
-          const barH = (v / max) * H;
+          const slotW = chartW / n;
+          const barW = Math.max(Math.min(slotW * 0.6, 44), 5);
+          const x = LEFT + i * slotW + (slotW - barW) / 2;
+          const barH = Math.max((v / max) * H, v > 0 ? 2 : 0);
           const y = H - barH;
-          const isLast = i === n - 1;
+          const isHov = hovIdx === i;
+
+          const tipW = 58;
+          const tipX = Math.min(Math.max(x + barW / 2 - tipW / 2, LEFT), W - tipW);
+          const tipY = Math.max(y - 22, 0);
+
           return (
-            <g key={i}>
+            <g key={i}
+              onMouseEnter={() => setHovIdx(i)}
+              onMouseLeave={() => setHovIdx(null)}
+              style={{ cursor: "default" }}>
               <rect x={x} y={y} width={barW} height={barH}
-                fill={isLast ? color : color + "60"} rx={3} />
+                fill={isHov ? color : color + "88"} rx={3}
+                style={{ transition: "fill 0.1s" }} />
               <text x={x + barW / 2} y={H + labelH - 1} textAnchor="middle"
-                fontSize={8.5} fill={isLast ? "#555" : "#bbb"}>
+                fontSize={8.5} fill={isHov ? "#333" : "#bbb"}>
                 {getLabel(data[i])}
               </text>
+              {isHov && (
+                <g>
+                  <rect x={tipX} y={tipY} width={tipW} height={17} fill="#1a1a1a" rx={4} opacity={0.88} />
+                  <text x={tipX + tipW / 2} y={tipY + 12} textAnchor="middle"
+                    fontSize={9.5} fill="#fff" fontWeight="700">
+                    {v.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}{suffix}
+                  </text>
+                </g>
+              )}
             </g>
           );
         })}
-        <text x={2} y={10} fontSize={8} fill="#ddd">
-          {max.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}
-        </text>
       </svg>
     </div>
   );
@@ -1057,15 +1092,23 @@ function TGDashboard({ data, numWeeks, onNumWeeksChange }: {
           sparkVals={filtered.map(d => d.posts_count || 0)} />
       </div>
 
-      {/* 2 графика: охват + ER */}
+      {/* Ряд 1: охват + ER просмотры */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.avg_views || 0} getLabel={lbl}
           color="#1a1a1a" title="Средний охват по неделям" />
-        <LineChartSVG data={filtered} getValue={d => d.er_reach_pct || 0} getLabel={lbl}
+        <BarChartSVG data={filtered} getValue={d => d.er_reach_pct || 0} getLabel={lbl}
           color="#0F6E56" title="ER (просмотры) %" suffix="%" />
       </div>
 
-      {/* 3 графика: реакции / комменты / репосты */}
+      {/* Ряд 2: подписчики + ER активности */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+        <BarChartSVG data={filtered} getValue={d => d.subscribers || 0} getLabel={lbl}
+          color="#3478F6" title="Подписчики" />
+        <BarChartSVG data={filtered} getValue={d => d.er_activity_pct || 0} getLabel={lbl}
+          color="#7C5CBF" title="ER (активности) %" suffix="%" />
+      </div>
+
+      {/* Ряд 3: реакции / комменты / репосты */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.avg_reactions || 0} getLabel={lbl}
           color="#4680C2" title="Ср. реакции" />
