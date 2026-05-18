@@ -1001,20 +1001,20 @@ function TGDashboard({ data, numWeeks, onNumWeeksChange }: {
         <DashCard label="Ср. охват" value={last.avg_views}
           trend={pct(last.avg_views, prev?.avg_views)}
           sparkVals={filtered.map(d => d.avg_views || 0)} />
-        <DashCard label="ER просмотры" value={last.er_views_pct} suffix="%"
-          trend={pct(last.er_views_pct, prev?.er_views_pct)}
-          sparkVals={filtered.map(d => d.er_views_pct || 0)} />
-        <DashCard label="Индекс качества" value={last.quality_index}
-          trend={pct(last.quality_index, prev?.quality_index)}
-          sparkVals={filtered.map(d => d.quality_index || 0)} />
+        <DashCard label="ER (просмотры)" value={last.er_reach_pct} suffix="%"
+          trend={pct(last.er_reach_pct, prev?.er_reach_pct)}
+          sparkVals={filtered.map(d => d.er_reach_pct || 0)} />
+        <DashCard label="ER (активности)" value={last.er_activity_pct} suffix="%"
+          trend={pct(last.er_activity_pct, prev?.er_activity_pct)}
+          sparkVals={filtered.map(d => d.er_activity_pct || 0)} />
       </div>
 
       {/* 2 графика: охват + ER */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.avg_views || 0} getLabel={lbl}
           color="#1a1a1a" title="Средний охват по неделям" />
-        <LineChartSVG data={filtered} getValue={d => d.er_views_pct || 0} getLabel={lbl}
-          color="#0F6E56" title="ER динамика %" suffix="%" />
+        <LineChartSVG data={filtered} getValue={d => d.er_reach_pct || 0} getLabel={lbl}
+          color="#0F6E56" title="ER (просмотры) %" suffix="%" />
       </div>
 
       {/* 3 графика: реакции / комменты / репосты */}
