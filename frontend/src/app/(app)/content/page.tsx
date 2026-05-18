@@ -2417,12 +2417,17 @@ export default function ContentPage() {
                     <input type="datetime-local" value={evStartDT} onChange={e => setEvStartDT(e.target.value)}
                       style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E5E7EB",
                         fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
-                    {evAvailablePlatforms.length > 0 && (
+                    {evAvailablePlatforms.length > 0 ? (
                       <EvPlatformPicker
                         platforms={evAvailablePlatforms}
                         selected={evStartPlatforms}
                         onChange={setEvStartPlatforms}
                       />
+                    ) : (
+                      <div style={{ fontSize: 12, color: "#9CA3AF", padding: "4px 0" }}>
+                        Нет подключённых площадок.{" "}
+                        <a href="/platforms" style={{ color: "#3478F6", textDecoration: "none" }}>Подключить →</a>
+                      </div>
                     )}
                   </div>
                 )}
@@ -2442,12 +2447,17 @@ export default function ContentPage() {
                     <input type="datetime-local" value={evEndDT} onChange={e => setEvEndDT(e.target.value)}
                       style={{ padding: "9px 12px", borderRadius: 10, border: "1px solid #E5E7EB",
                         fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
-                    {evAvailablePlatforms.length > 0 && (
+                    {evAvailablePlatforms.length > 0 ? (
                       <EvPlatformPicker
                         platforms={evAvailablePlatforms}
                         selected={evEndPlatforms}
                         onChange={setEvEndPlatforms}
                       />
+                    ) : (
+                      <div style={{ fontSize: 12, color: "#9CA3AF", padding: "4px 0" }}>
+                        Нет подключённых площадок.{" "}
+                        <a href="/platforms" style={{ color: "#3478F6", textDecoration: "none" }}>Подключить →</a>
+                      </div>
                     )}
                   </div>
                 )}
@@ -2487,12 +2497,17 @@ export default function ContentPage() {
                             fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" }} />
                       </div>
                     ))}
-                    {evAvailablePlatforms.length > 0 && (
+                    {evAvailablePlatforms.length > 0 ? (
                       <EvPlatformPicker
                         platforms={evAvailablePlatforms}
                         selected={evInterPlatforms}
                         onChange={setEvInterPlatforms}
                       />
+                    ) : (
+                      <div style={{ fontSize: 12, color: "#9CA3AF", padding: "4px 0" }}>
+                        Нет подключённых площадок.{" "}
+                        <a href="/platforms" style={{ color: "#3478F6", textDecoration: "none" }}>Подключить →</a>
+                      </div>
                     )}
                   </div>
                 )}
