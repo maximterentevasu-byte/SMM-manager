@@ -841,10 +841,12 @@ function CelerySetupGuide() {
 
 function PeriodFilter({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const opts = [
-    { label: "4 нед.", v: 4 },
-    { label: "8 нед.", v: 8 },
-    { label: "12 нед.", v: 12 },
-    { label: "Все", v: 0 },
+    { label: "2 нед.", v: 2 },
+    { label: "1 мес.", v: 4 },
+    { label: "2 мес.", v: 8 },
+    { label: "3 мес.", v: 13 },
+    { label: "6 мес.", v: 26 },
+    { label: "Всё время", v: 0 },
   ];
   return (
     <div style={{ display: "flex", gap: 3, background: "#F0EEE8", padding: 3, borderRadius: 10 }}>
@@ -881,24 +883,27 @@ function Sparkline({ vals, color }: { vals: number[]; color: string }) {
   );
 }
 
-function DashCard({ label, value, suffix = "", trend, sparkVals }: {
+function DashCard({ label, value, suffix = "", trend, sparkVals, compact = false }: {
   label: string; value: number | null; suffix?: string;
-  trend?: number | null; sparkVals: number[];
+  trend?: number | null; sparkVals: number[]; compact?: boolean;
 }) {
   const trendColor = trend == null ? "#aaa" : trend > 0 ? "#0F6E56" : trend < 0 ? "#A32D2D" : "#888";
   const v = value ?? 0;
   return (
     <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 14,
-      padding: "18px 20px", flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: 10, color: "#aaa", fontWeight: 700, letterSpacing: 0.8, marginBottom: 6 }}>
+      padding: compact ? "12px 14px" : "18px 20px", flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: 9, color: "#aaa", fontWeight: 700, letterSpacing: 0.7,
+        marginBottom: compact ? 4 : 6 }}>
         {label.toUpperCase()}
       </div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: "#1a1a1a", lineHeight: 1, marginBottom: 6 }}>
+      <div style={{ fontSize: compact ? 20 : 24, fontWeight: 700, color: "#1a1a1a",
+        lineHeight: 1, marginBottom: compact ? 4 : 6 }}>
         {v.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}
-        {suffix && <span style={{ fontSize: 13, fontWeight: 400, color: "#888", marginLeft: 2 }}>{suffix}</span>}
+        {suffix && <span style={{ fontSize: compact ? 11 : 13, fontWeight: 400,
+          color: "#888", marginLeft: 2 }}>{suffix}</span>}
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <div style={{ fontSize: 11, color: trendColor, fontWeight: 500 }}>
+        <div style={{ fontSize: 10, color: trendColor, fontWeight: 500 }}>
           {trend != null
             ? <>{trend > 0 ? "▲" : trend < 0 ? "▼" : "•"} {Math.abs(trend).toFixed(1)}%</>
             : <span style={{ color: "#ddd" }}>—</span>}
@@ -1033,20 +1038,23 @@ function TGDashboard({ data, numWeeks, onNumWeeksChange }: {
         <PeriodFilter value={numWeeks} onChange={onNumWeeksChange} />
       </div>
 
-      {/* 4 карточки */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
-        <DashCard label="Подписчики" value={last.subscribers}
+      {/* 5 карточек */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginBottom: 12 }}>
+        <DashCard compact label="Подписчики" value={last.subscribers}
           trend={pct(last.subscribers, prev?.subscribers)}
           sparkVals={filtered.map(d => d.subscribers || 0)} />
-        <DashCard label="Ср. охват" value={last.avg_views}
+        <DashCard compact label="Ср. охват" value={last.avg_views}
           trend={pct(last.avg_views, prev?.avg_views)}
           sparkVals={filtered.map(d => d.avg_views || 0)} />
-        <DashCard label="ER (просмотры)" value={last.er_reach_pct} suffix="%"
+        <DashCard compact label="ER (просмотры)" value={last.er_reach_pct} suffix="%"
           trend={pct(last.er_reach_pct, prev?.er_reach_pct)}
           sparkVals={filtered.map(d => d.er_reach_pct || 0)} />
-        <DashCard label="ER (активности)" value={last.er_activity_pct} suffix="%"
+        <DashCard compact label="ER (активности)" value={last.er_activity_pct} suffix="%"
           trend={pct(last.er_activity_pct, prev?.er_activity_pct)}
           sparkVals={filtered.map(d => d.er_activity_pct || 0)} />
+        <DashCard compact label="Постов" value={last.posts_count}
+          trend={pct(last.posts_count, prev?.posts_count)}
+          sparkVals={filtered.map(d => d.posts_count || 0)} />
       </div>
 
       {/* 2 графика: охват + ER */}
