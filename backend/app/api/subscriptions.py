@@ -13,11 +13,13 @@ from app.config import settings
 router = APIRouter()
 
 PLAN_CONFIG = {
-    "demo":     {"posts_limit": 10,  "platforms_limit": 1, "days": 3,   "price": 0},
+    "demo":     {"posts_limit": 10,  "platforms_limit": 1, "days": 7,   "price": 0},
     "start":    {"posts_limit": 12,  "platforms_limit": 1, "days": 30,  "price": 299000},
     "business": {"posts_limit": 30,  "platforms_limit": 3, "days": 30,  "price": 599000},
     "pro":      {"posts_limit": 9999,"platforms_limit": 10,"days": 30,  "price": 1199000},
 }
+
+PAID_PLANS_AVAILABLE = False  # Включить когда будет Юкасса
 
 
 class ActivatePlanRequest(BaseModel):
@@ -33,6 +35,9 @@ async def activate_plan(
     plan = body.plan
     if plan not in PLAN_CONFIG:
         raise HTTPException(400, "Неизвестный тариф")
+
+    if plan != "demo" and not PAID_PLANS_AVAILABLE:
+        raise HTTPException(400, "Платные тарифы скоро будут доступны — следите за обновлениями!")
 
     config = PLAN_CONFIG[plan]
 
@@ -118,6 +123,15 @@ async def get_my_subscription(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    # Проверяем использовался ли демо
+    demo_result = await db.execute(
+        select(Subscription).where(
+            Subscription.user_id == current_user.id,
+            Subscription.plan == SubscriptionPlan.demo
+        )
+    )
+    demo_used = demo_result.scalar_one_or_none() is not None
+
     result = await db.execute(
         select(Subscription).where(
             Subscription.user_id == current_user.id,
@@ -127,13 +141,13 @@ async def get_my_subscription(
     sub = result.scalar_one_or_none()
 
     if not sub:
-        return {"has_subscription": False, "plan": None}
+        return {"has_subscription": False, "plan": None, "demo_used": demo_used}
 
     # Проверяем не истёк ли
     if sub.current_period_end < datetime.utcnow():
         sub.status = "expired"
         await db.commit()
-        return {"has_subscription": False, "plan": None}
+        return {"has_subscription": False, "plan": None, "demo_used": demo_used}
 
     days_left = (sub.current_period_end - datetime.utcnow()).days
 
@@ -145,6 +159,7 @@ async def get_my_subscription(
         "days_left": days_left,
         "posts_limit": sub.posts_limit,
         "platforms_limit": sub.platforms_limit,
+        "demo_used": demo_used,
     }
 
 

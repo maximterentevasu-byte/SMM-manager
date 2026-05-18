@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import api from "@/lib/api";
 
 const NAV = [
   {
@@ -66,15 +68,266 @@ const NAV = [
   },
 ];
 
+const PLAN_CARDS = [
+  {
+    id: "demo",
+    name: "Демо",
+    price: "0 ₽",
+    period: "3 дня",
+    color: "#5F5E5A",
+    bg: "#F1EFE8",
+    features: ["10 постов", "1 площадка", "AI-стратегия", "AI-тексты", "Автопостинг"],
+  },
+  {
+    id: "start",
+    name: "Старт",
+    price: "2 990 ₽",
+    period: "месяц",
+    color: "#185FA5",
+    bg: "#E6F1FB",
+    features: ["12 постов/мес", "1 площадка", "AI-тексты + картинки", "Аналитика"],
+  },
+  {
+    id: "business",
+    name: "Бизнес",
+    price: "5 990 ₽",
+    period: "месяц",
+    color: "#0F6E56",
+    bg: "#E1F5EE",
+    badge: "Популярный",
+    features: ["30 постов/мес", "3 площадки", "AI-тексты + картинки", "Полная аналитика", "Приоритетная поддержка"],
+  },
+  {
+    id: "pro",
+    name: "Про",
+    price: "11 990 ₽",
+    period: "месяц",
+    color: "#533AB7",
+    bg: "#EEEDFE",
+    features: ["Без ограничений", "Все площадки", "White label", "API доступ", "Персональный менеджер"],
+  },
+];
+
+function PaywallScreen({
+  demoUsed,
+  onLogout,
+}: {
+  demoUsed: boolean;
+  onLogout: () => void;
+}) {
+  const router = useRouter();
+  const [activating, setActivating] = useState(false);
+  const [error, setError] = useState("");
+
+  const startDemo = async () => {
+    setActivating(true);
+    setError("");
+    try {
+      await api.post("/subscriptions/activate", { plan: "demo" });
+      router.push("/onboarding");
+    } catch (e: any) {
+      setError(e.response?.data?.detail || "Ошибка активации");
+    } finally {
+      setActivating(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 9999,
+      background: "#F8F7F4", display: "flex", flexDirection: "column",
+      alignItems: "center", overflowY: "auto", padding: "3rem 1rem 2rem",
+      fontFamily: "'Inter', 'Segoe UI', sans-serif",
+    }}>
+      {/* Logo */}
+      <div style={{
+        fontFamily: "'Manrope', sans-serif", fontSize: 22, fontWeight: 800,
+        color: "#0D1B2A", marginBottom: 32,
+      }}>
+        smm<span style={{ color: "#3478F6" }}>platform</span>
+      </div>
+
+      {/* Status card */}
+      <div style={{
+        background: "#fff", borderRadius: 20, padding: "32px 36px",
+        maxWidth: 480, width: "100%", textAlign: "center",
+        boxShadow: "0 4px 24px rgba(0,0,0,0.07)", marginBottom: 40,
+        border: "1px solid #EAE8E2",
+      }}>
+        <div style={{ fontSize: 40, marginBottom: 16 }}>
+          {demoUsed ? "⏰" : "👋"}
+        </div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: "#1a1a1a", margin: "0 0 10px" }}>
+          {demoUsed ? "Пробный период завершён" : "Выберите тариф для начала работы"}
+        </h2>
+        <p style={{ color: "#888", fontSize: 14, lineHeight: 1.6, margin: "0 0 8px" }}>
+          {demoUsed
+            ? "Ваш 3-дневный пробный период закончился. Платные тарифы скоро станут доступны — следите за обновлениями."
+            : "Начните бесплатно с демо-периода на 3 дня. Карта не нужна."}
+        </p>
+        {demoUsed && (
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8,
+            background: "#FFF8E1", border: "1px solid #FFD54F",
+            borderRadius: 20, padding: "5px 14px", fontSize: 13, color: "#7B6200",
+          }}>
+            <span>🔒</span>
+            <span>Платные тарифы скоро будут доступны</span>
+          </div>
+        )}
+        {error && (
+          <div style={{
+            marginTop: 12, padding: "10px 14px", background: "#FCEBEB",
+            borderRadius: 10, fontSize: 13, color: "#A32D2D",
+          }}>
+            {error}
+          </div>
+        )}
+      </div>
+
+      {/* Plan cards */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+        gap: 16, maxWidth: 1000, width: "100%", marginBottom: 32,
+      }}>
+        {PLAN_CARDS.map((plan) => {
+          const isPaid = plan.id !== "demo";
+          const isDemoDisabled = plan.id === "demo" && demoUsed;
+          const isDisabled = isPaid || isDemoDisabled;
+
+          return (
+            <div key={plan.id} style={{
+              background: isDisabled ? "#FAFAFA" : "#fff",
+              border: plan.id === "business" && !isDisabled
+                ? `2px solid ${plan.color}`
+                : "1px solid #EAE8E2",
+              borderRadius: 20, padding: "24px 20px", position: "relative",
+              display: "flex", flexDirection: "column",
+              opacity: isDisabled ? 0.6 : 1,
+            }}>
+              {"badge" in plan && plan.badge && (
+                <div style={{
+                  position: "absolute", top: -12, left: "50%",
+                  transform: "translateX(-50%)",
+                  background: isDisabled ? "#9CA3AF" : plan.color,
+                  color: "#fff", fontSize: 11, fontWeight: 600,
+                  padding: "3px 12px", borderRadius: 20, whiteSpace: "nowrap",
+                }}>
+                  {plan.badge}
+                </div>
+              )}
+              {isPaid && (
+                <div style={{
+                  position: "absolute", top: 12, right: 12,
+                  background: "#F3F4F6", color: "#6B7280",
+                  fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20,
+                }}>
+                  Скоро
+                </div>
+              )}
+              <span style={{
+                fontSize: 12, fontWeight: 600, padding: "2px 8px",
+                borderRadius: 20, background: plan.bg, color: plan.color,
+                display: "inline-block", marginBottom: 12, alignSelf: "flex-start",
+              }}>
+                {plan.name}
+              </span>
+              <div style={{ marginBottom: 16 }}>
+                <span style={{ fontSize: 26, fontWeight: 700, color: isDisabled ? "#9CA3AF" : "#1a1a1a" }}>
+                  {plan.price}
+                </span>
+                <span style={{ fontSize: 13, color: "#999", marginLeft: 4 }}>/ {plan.period}</span>
+              </div>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                {plan.features.map((f) => (
+                  <div key={f} style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                    <span style={{ color: isDisabled ? "#9CA3AF" : plan.color, fontSize: 14, marginTop: 1 }}>✓</span>
+                    <span style={{ fontSize: 13, color: isDisabled ? "#9CA3AF" : "#444", lineHeight: 1.4 }}>{f}</span>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={!isDisabled ? startDemo : undefined}
+                disabled={isDisabled || activating}
+                style={{
+                  width: "100%", padding: "11px",
+                  background: isDisabled ? "#E5E7EB" : activating ? "#888" : plan.id === "business" ? plan.color : "#1a1a1a",
+                  color: isDisabled ? "#9CA3AF" : "#fff",
+                  border: "none", borderRadius: 10,
+                  cursor: isDisabled ? "not-allowed" : "pointer",
+                  fontSize: 14, fontWeight: 600,
+                }}
+              >
+                {isDisabled
+                  ? isDemoDisabled ? "Уже использован" : "Скоро доступно"
+                  : activating ? "Подождите..." : "Начать бесплатно"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Support & logout */}
+      <p style={{ color: "#aaa", fontSize: 13, textAlign: "center", marginBottom: 12 }}>
+        По вопросам:{" "}
+        <a href="mailto:support@smmplatform.ru" style={{ color: "#3478F6", textDecoration: "none" }}>
+          support@smmplatform.ru
+        </a>
+      </p>
+      <button
+        onClick={onLogout}
+        style={{
+          background: "transparent", border: "1px solid #E5E7EB",
+          color: "#888", borderRadius: 10, padding: "9px 24px",
+          fontSize: 13, cursor: "pointer",
+        }}
+      >
+        Выйти из аккаунта
+      </button>
+    </div>
+  );
+}
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [subChecked, setSubChecked] = useState(false);
+  const [hasActiveSub, setHasActiveSub] = useState(true);
+  const [demoUsed, setDemoUsed] = useState(false);
+  const [daysLeft, setDaysLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+    api.get("/subscriptions/my")
+      .then(({ data }) => {
+        setHasActiveSub(data.has_subscription ?? false);
+        setDemoUsed(data.demo_used ?? false);
+        setDaysLeft(data.days_left ?? null);
+      })
+      .catch(() => {
+        // 401 перехватчик сам редиректит на /login
+      })
+      .finally(() => setSubChecked(true));
+  }, []);
 
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("businessId");
     router.push("/login");
   };
+
+  // Пока проверяем — не рендерим ничего (избегаем мигания)
+  if (!subChecked) return null;
+
+  // Подписка истекла или не активирована — показываем пейвол
+  if (!hasActiveSub) {
+    return <PaywallScreen demoUsed={demoUsed} onLogout={logout} />;
+  }
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#F5F7FA", fontFamily: "'Inter', sans-serif" }}>
@@ -118,6 +371,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         })}
 
         <div style={{ flex: 1 }} />
+
+        {/* Trial badge */}
+        {daysLeft !== null && daysLeft <= 3 && (
+          <div style={{
+            padding: "8px 12px", borderRadius: 10,
+            background: "rgba(239,68,68,0.15)", marginBottom: 4,
+          }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#F87171", marginBottom: 1 }}>
+              Демо заканчивается
+            </div>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", lineHeight: 1.4 }}>
+              Осталось {daysLeft} {daysLeft === 1 ? "день" : "дня"}
+            </div>
+          </div>
+        )}
 
         {/* АИСТ hint */}
         <div style={{ padding: "10px 12px", borderRadius: 10,
