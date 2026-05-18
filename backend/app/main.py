@@ -62,18 +62,23 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS: только свой домен в проде; localhost — в разработке
-_origins = (
-    [f"https://{settings.DOMAIN}", f"https://www.{settings.DOMAIN}"]
-    if _is_prod
-    else ["http://localhost:3000", "http://127.0.0.1:3000"]
-)
+# CORS: свой домен в проде (http + https пока нет сертификата), * в разработке
+if _is_prod:
+    _origins = [
+        f"https://{settings.DOMAIN}",
+        f"http://{settings.DOMAIN}",
+        f"https://www.{settings.DOMAIN}",
+        f"http://www.{settings.DOMAIN}",
+    ]
+else:
+    _origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Accept"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Security headers на каждый ответ
