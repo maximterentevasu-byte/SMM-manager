@@ -212,6 +212,28 @@ class VKWeeklyStats(Base):
     collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class TelegramStory(Base):
+    """Каждая история Telegram-канала — хранится навсегда, обновляется при сборе."""
+    __tablename__ = "telegram_stories"
+    __table_args__ = (UniqueConstraint("business_id", "story_id", name="uq_tgstory_biz_story"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    business_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    story_id: Mapped[int] = mapped_column(Integer, index=True)
+    channel_name: Mapped[str] = mapped_column(String(200), default="")
+    published_at: Mapped[datetime] = mapped_column(DateTime)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    caption: Mapped[str] = mapped_column(Text, default="")
+    views: Mapped[int] = mapped_column(Integer, default=0)
+    reactions: Mapped[int] = mapped_column(Integer, default=0)
+    forwards: Mapped[int] = mapped_column(Integer, default=0)
+    has_media: Mapped[bool] = mapped_column(Boolean, default=False)
+    media_type: Mapped[str] = mapped_column(String(20), default="none")  # none/photo/video
+    er_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class TelegramPost(Base):
     """Каждый пост Telegram-канала — хранится навсегда, обновляется при сборе."""
     __tablename__ = "telegram_posts"

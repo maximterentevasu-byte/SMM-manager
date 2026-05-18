@@ -13,7 +13,7 @@ from app.database import get_db
 from app.models.models import (
     User, Business, PlatformConnection,
     TGWeeklyStats, VKWeeklyStats, ContentSlot, PlanStatus, Platform,
-    TelegramPost,
+    TelegramPost, TelegramStory,
 )
 from app.api.auth import get_current_user
 from app.services.publishers import decrypt_token, encrypt_token
@@ -921,3 +921,203 @@ async def collect_tg_posts(
         return {"status": "ok", "collected": count, "deeper": deeper}
     except Exception as e:
         raise HTTPException(400, f"Ошибка сбора постов: {str(e)}")
+
+
+# ─── TG STORIES ───────────────────────────────────────────────────────────────
+
+def _collect_stories_sync(api_id: int, api_hash: str, session_str: str,
+                          channel: str, offset_id: int = 0) -> list[dict]:
+    """Собирает истории из Telegram-канала через архив Stories."""
+    import asyncio as _aio
+    from telethon import TelegramClient
+    from telethon.sessions import StringSession
+    from app.services.analytics_tg import _parse_channel_id
+
+    loop = _aio.new_event_loop()
+    _aio.set_event_loop(loop)
+
+    async def _do():
+        client = TelegramClient(StringSession(session_str or None), api_id, api_hash)
+        await client.connect()
+        stories_out = []
+        try:
+            numeric_id = _parse_channel_id(channel)
+            full_id = int(f"-100{numeric_id}")
+
+            try:
+                entity = await client.get_entity(full_id)
+            except Exception:
+                await client.get_dialogs(limit=50)
+                entity = await client.get_entity(full_id)
+
+            ch_name = getattr(entity, "username", "") or getattr(entity, "title", "") or ""
+
+            from telethon.tl.functions.stories import GetStoriesArchiveRequest
+            result = await client(GetStoriesArchiveRequest(
+                peer=entity,
+                offset_id=offset_id,
+                limit=100,
+            ))
+
+            for story in (result.stories or []):
+                views_count = 0
+                reactions_count = 0
+                forwards_count = 0
+                sv = getattr(story, "views", None)
+                if sv:
+                    views_count = getattr(sv, "views_count", 0) or 0
+                    reactions_count = getattr(sv, "reactions_count", 0) or 0
+                    forwards_count = getattr(sv, "forwards_count", 0) or 0
+
+                has_media = False
+                mtype = "none"
+                media = getattr(story, "media", None)
+                if media:
+                    has_media = True
+                    if hasattr(media, "photo") and media.photo:
+                        mtype = "photo"
+                    elif hasattr(media, "document") and media.document:
+                        mtype = "video"
+
+                er = ((reactions_count + forwards_count) / views_count * 100) if views_count > 0 else 0.0
+
+                published = story.date
+                if hasattr(published, "replace"):
+                    published = published.replace(tzinfo=None)
+
+                expires_raw = getattr(story, "expire_date", None)
+                expires = None
+                if isinstance(expires_raw, int):
+                    from datetime import datetime as _dt
+                    expires = _dt.utcfromtimestamp(expires_raw)
+                elif expires_raw:
+                    expires = expires_raw.replace(tzinfo=None) if hasattr(expires_raw, "replace") else None
+
+                caption = getattr(story, "caption", "") or ""
+
+                stories_out.append({
+                    "story_id": story.id,
+                    "channel_name": ch_name,
+                    "published_at": published,
+                    "expires_at": expires,
+                    "caption": caption,
+                    "views": views_count,
+                    "reactions": reactions_count,
+                    "forwards": forwards_count,
+                    "has_media": has_media,
+                    "media_type": mtype,
+                    "er_pct": round(er, 2),
+                })
+        finally:
+            await client.disconnect()
+        return stories_out
+
+    return loop.run_until_complete(_do())
+
+
+async def _upsert_stories(business_id: str, stories: list[dict], db: AsyncSession) -> int:
+    if not stories:
+        return 0
+    biz_uuid = uuid.UUID(str(business_id))
+    # Метрики, которые могут обнуляться в Telegram после истечения истории —
+    # перезаписываем только если новое значение больше уже сохранённого.
+    _PRESERVABLE = ("views", "reactions", "forwards")
+    for sd in stories:
+        res = await db.execute(
+            select(TelegramStory).where(
+                TelegramStory.business_id == biz_uuid,
+                TelegramStory.story_id == sd["story_id"],
+            )
+        )
+        existing = res.scalar_one_or_none()
+        if existing:
+            for k, v in sd.items():
+                if k in _PRESERVABLE:
+                    # Сохраняем максимум: не затираем ненулевые данные нулями
+                    old = getattr(existing, k, 0) or 0
+                    setattr(existing, k, max(old, v or 0))
+                else:
+                    setattr(existing, k, v)
+            # Пересчитываем ER на основе актуальных (preserved) значений
+            v_views = existing.views or 0
+            if v_views > 0:
+                existing.er_pct = round((existing.reactions + existing.forwards) / v_views * 100, 2)
+            existing.updated_at = datetime.utcnow()
+        else:
+            db.add(TelegramStory(id=uuid.uuid4(), business_id=biz_uuid, **sd))
+    await db.commit()
+    return len(stories)
+
+
+@router.get("/{business_id}/tg/stories")
+async def get_tg_stories(
+    business_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_business(business_id, current_user, db)
+    result = await db.execute(
+        select(TelegramStory)
+        .where(TelegramStory.business_id == business_id)
+        .order_by(TelegramStory.published_at.desc())
+    )
+    rows = result.scalars().all()
+    return [
+        {
+            "story_id": r.story_id,
+            "channel_name": r.channel_name,
+            "published_at": r.published_at.isoformat(),
+            "expires_at": r.expires_at.isoformat() if r.expires_at else None,
+            "caption": r.caption,
+            "views": r.views,
+            "reactions": r.reactions,
+            "forwards": r.forwards,
+            "has_media": r.has_media,
+            "media_type": r.media_type,
+            "er_pct": r.er_pct,
+            "updated_at": r.updated_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
+@router.post("/{business_id}/tg/stories/collect")
+async def collect_tg_stories(
+    business_id: str,
+    deeper: bool = Query(False, description="True — уходим глубже в историю"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_business(business_id, current_user, db)
+    conn = await _get_connection(business_id, "telegram", db)
+    if not conn or not conn.tg_session_encrypted:
+        raise HTTPException(400, "Telegram не авторизован. Войдите через вкладку Аналитика → Telegram.")
+
+    from app.config import settings
+    api_id = int(settings.TG_API_ID) if settings.TG_API_ID else 0
+    api_hash = settings.TG_API_HASH or ""
+    if not api_id:
+        raise HTTPException(400, "TG_API_ID / TG_API_HASH не настроены.")
+
+    session_str = decrypt_token(conn.tg_session_encrypted)
+    channel = conn.external_page_id or ""
+    if not channel:
+        raise HTTPException(400, "Идентификатор канала не найден. Переподключите Telegram.")
+
+    offset_id = 0
+    if deeper:
+        res = await db.execute(
+            select(func.min(TelegramStory.story_id)).where(TelegramStory.business_id == business_id)
+        )
+        min_stored = res.scalar()
+        if min_stored:
+            offset_id = min_stored - 1
+
+    try:
+        stories = await asyncio.to_thread(
+            _collect_stories_sync, api_id, api_hash, session_str, channel, offset_id
+        )
+        count = await _upsert_stories(business_id, stories, db)
+        return {"status": "ok", "collected": count, "deeper": deeper}
+    except Exception as e:
+        raise HTTPException(400, f"Ошибка сбора историй: {str(e)}")

@@ -39,6 +39,11 @@ celery_app.conf.update(
             "task": "app.workers.analytics_tasks.collect_all_analytics_task",
             "schedule": crontab(hour=6, minute=0, day_of_week=1),
         },
+        # Сбор историй Telegram ежедневно в 10:00 ЕКБ (UTC+5) = 05:00 UTC
+        "collect-tg-stories-daily": {
+            "task": "app.workers.analytics_tasks.collect_stories_daily_task",
+            "schedule": crontab(hour=5, minute=0),
+        },
         # Уведомления в TG за 3 дня до публикации — с 10:00 МСК, каждые 3 часа
         "notify-pending-posts": {
             "task": "app.workers.notification_tasks.notify_pending_posts",

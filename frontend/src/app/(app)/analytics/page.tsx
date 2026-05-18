@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import api from "@/lib/api";
 import PostsTab from "./PostsTab";
+import StoriesTab from "./StoriesTab";
 
 type TGWeek = {
   week_start: string; week_end: string; channel_name: string;
@@ -368,12 +369,7 @@ export default function AnalyticsPage() {
                 )}
 
                 {dashTab === "posts" && <PostsTab businessId={businessId} />}
-                {dashTab === "stories" && (
-                  <ComingSoonTab
-                    title="Статистика Сториз"
-                    desc="Аналитика историй Telegram: просмотры, ответы, переходы — появится в следующем обновлении."
-                  />
-                )}
+                {dashTab === "stories" && <StoriesTab businessId={businessId} />}
                 {dashTab === "timing" && <BestTimingView data={tgData} />}
               </>
             ) : tgCredsStatus?.has_connection ? (

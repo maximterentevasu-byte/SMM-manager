@@ -4,7 +4,7 @@ from datetime import datetime
 
 from app.workers.celery_app import celery_app
 from app.workers.db import get_worker_db
-from app.models.models import Business, PlatformConnection, TGWeeklyStats, VKWeeklyStats
+from app.models.models import Business, PlatformConnection, TGWeeklyStats, VKWeeklyStats, TelegramStory
 from app.config import settings
 from app.services.publishers import decrypt_token
 from sqlalchemy import select, delete
@@ -137,3 +137,54 @@ async def _collect(business_id: str):
                 print(f"[analytics] VK ошибка для {business.name}: {e}")
         else:
             print(f"[analytics] VK: нет активного подключения для {business.name}")
+
+
+@celery_app.task(name="app.workers.analytics_tasks.collect_stories_daily_task")
+def collect_stories_daily_task():
+    """Ежедневный сбор историй Telegram для всех бизнесов в 10:00 ЕКБ (05:00 UTC)."""
+    asyncio.run(_collect_all_stories())
+
+
+async def _collect_all_stories():
+    async with get_worker_db() as db:
+        result = await db.execute(select(Business))
+        businesses = result.scalars().all()
+    for biz in businesses:
+        try:
+            await _collect_stories(str(biz.id))
+        except Exception as e:
+            print(f"[stories] Ошибка для {biz.id}: {e}")
+
+
+async def _collect_stories(business_id: str):
+    async with get_worker_db() as db:
+        tg_res = await db.execute(
+            select(PlatformConnection).where(
+                PlatformConnection.business_id == business_id,
+                PlatformConnection.platform == "telegram",
+                PlatformConnection.is_active == True,
+            )
+        )
+        tg = tg_res.scalar_one_or_none()
+        if not tg or not tg.tg_session_encrypted:
+            return
+
+        api_id = int(settings.TG_API_ID) if settings.TG_API_ID else 0
+        api_hash = settings.TG_API_HASH or ""
+        if not api_id:
+            return
+
+        session_str = decrypt_token(tg.tg_session_encrypted)
+        channel = tg.external_page_id or ""
+        if not channel:
+            return
+
+        try:
+            from app.api.analytics import _collect_stories_sync, _upsert_stories
+            stories = await asyncio.get_event_loop().run_in_executor(
+                None, _collect_stories_sync, api_id, api_hash, session_str, channel, 0
+            )
+            count = await _upsert_stories(business_id, stories, db)
+            print(f"[stories] Собрано {count} историй для business_id={business_id}")
+        except Exception as e:
+            print(f"[stories] Ошибка сбора для {business_id}: {e}")

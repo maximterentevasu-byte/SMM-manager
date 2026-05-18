@@ -26,6 +26,8 @@ _MIGRATIONS = [
     "ALTER TABLE email_verifications ADD COLUMN IF NOT EXISTS purpose VARCHAR(20) DEFAULT 'register'",
     # telegram_posts — создаётся через Base.metadata.create_all; индекс добавляется вручную
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_tgpost_biz_post ON telegram_posts(business_id, post_id)",
+    # telegram_stories — аналогично
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_tgstory_biz_story ON telegram_stories(business_id, story_id)",
 ]
 
 

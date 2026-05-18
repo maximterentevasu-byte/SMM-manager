@@ -3,78 +3,70 @@
 import React, { useEffect, useState, useCallback } from "react";
 import api from "@/lib/api";
 
-type TGPost = {
-  post_id: number;
+type TGStory = {
+  story_id: number;
   channel_name: string;
   published_at: string;
-  text: string;
+  expires_at: string | null;
+  caption: string;
   views: number;
   reactions: number;
-  comments: number;
-  reposts: number;
+  forwards: number;
   has_media: boolean;
   media_type: string;
   er_pct: number;
-  virality_pct: number;
-  has_question: boolean;
-  subscribers: number;
   updated_at: string;
 };
 
 type Period = "week" | "month" | "3months" | "year" | "all";
 
 const PERIODS: { key: Period; label: string; days: number }[] = [
-  { key: "week",    label: "Неделя",   days: 7 },
-  { key: "month",   label: "Месяц",    days: 30 },
-  { key: "3months", label: "3 месяца", days: 90 },
-  { key: "year",    label: "Год",      days: 365 },
+  { key: "week",    label: "Неделя",    days: 7 },
+  { key: "month",   label: "Месяц",     days: 30 },
+  { key: "3months", label: "3 месяца",  days: 90 },
+  { key: "year",    label: "Год",       days: 365 },
   { key: "all",     label: "Всё время", days: 0 },
 ];
 
 const MEDIA_ICON: Record<string, string> = {
   photo: "🖼",
   video: "🎬",
-  voice: "🎙",
-  document: "📎",
   none: "",
 };
 
-// UTC → Yekaterinburg (UTC+5)
 function toEKB(iso: string): Date {
   const d = new Date(iso);
   return new Date(d.getTime() + 5 * 60 * 60 * 1000);
 }
 function fmtDate(iso: string) {
   const d = toEKB(iso);
-  return `${d.getUTCDate().toString().padStart(2,"0")}.${(d.getUTCMonth()+1).toString().padStart(2,"0")}.${d.getUTCFullYear()}`;
+  return `${d.getUTCDate().toString().padStart(2, "0")}.${(d.getUTCMonth() + 1).toString().padStart(2, "0")}.${d.getUTCFullYear()}`;
 }
 function fmtTime(iso: string) {
   const d = toEKB(iso);
-  return `${d.getUTCHours().toString().padStart(2,"0")}:${d.getUTCMinutes().toString().padStart(2,"0")}`;
+  return `${d.getUTCHours().toString().padStart(2, "0")}:${d.getUTCMinutes().toString().padStart(2, "0")}`;
 }
-
 function truncate(s: string, n = 60) {
   return s.length > n ? s.slice(0, n) + "…" : s;
 }
-
 function fmt(n: number, dec = 0) {
   return n == null ? "—" : Number(n).toLocaleString("ru-RU", { maximumFractionDigits: dec });
 }
 
-export default function PostsTab({ businessId }: { businessId: string }) {
-  const [posts, setPosts] = useState<TGPost[]>([]);
+export default function StoriesTab({ businessId }: { businessId: string }) {
+  const [stories, setStories] = useState<TGStory[]>([]);
   const [loading, setLoading] = useState(true);
   const [collecting, setCollecting] = useState(false);
   const [collectMsg, setCollectMsg] = useState("");
   const [period, setPeriod] = useState<Period>("all");
-  const [selected, setSelected] = useState<TGPost | null>(null);
-  const [sortCol, setSortCol] = useState<keyof TGPost>("published_at");
+  const [selected, setSelected] = useState<TGStory | null>(null);
+  const [sortCol, setSortCol] = useState<keyof TGStory>("published_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const load = useCallback(async () => {
     try {
-      const { data } = await api.get(`/analytics/${businessId}/tg/posts`);
-      setPosts(data);
+      const { data } = await api.get(`/analytics/${businessId}/tg/stories`);
+      setStories(data);
     } catch {
       // empty
     } finally {
@@ -89,9 +81,9 @@ export default function PostsTab({ businessId }: { businessId: string }) {
     setCollectMsg("");
     try {
       const { data } = await api.post(
-        `/analytics/${businessId}/tg/posts/collect?deeper=${deeper}`
+        `/analytics/${businessId}/tg/stories/collect?deeper=${deeper}`
       );
-      setCollectMsg(`✓ Собрано ${data.collected} постов`);
+      setCollectMsg(`✓ Собрано ${data.collected} историй`);
       await load();
     } catch (e: any) {
       setCollectMsg("⚠ " + (e?.response?.data?.detail || "Ошибка сбора"));
@@ -100,15 +92,13 @@ export default function PostsTab({ businessId }: { businessId: string }) {
     }
   };
 
-  // Period filter
   const now = Date.now();
-  const filtered = posts.filter(p => {
+  const filtered = stories.filter(s => {
     if (period === "all") return true;
     const days = PERIODS.find(x => x.key === period)!.days;
-    return new Date(p.published_at).getTime() > now - days * 86400_000;
+    return new Date(s.published_at).getTime() > now - days * 86400_000;
   });
 
-  // Sort
   const sorted = [...filtered].sort((a, b) => {
     let av = a[sortCol] as any;
     let bv = b[sortCol] as any;
@@ -119,12 +109,12 @@ export default function PostsTab({ businessId }: { businessId: string }) {
     return 0;
   });
 
-  const toggleSort = (col: keyof TGPost) => {
+  const toggleSort = (col: keyof TGStory) => {
     if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortCol(col); setSortDir("desc"); }
   };
 
-  const SortIcon = ({ col }: { col: keyof TGPost }) => {
+  const SortIcon = ({ col }: { col: keyof TGStory }) => {
     if (sortCol !== col) return <span style={{ color: "#ddd", fontSize: 9, marginLeft: 3 }}>↕</span>;
     return <span style={{ fontSize: 9, marginLeft: 3 }}>{sortDir === "asc" ? "↑" : "↓"}</span>;
   };
@@ -143,7 +133,7 @@ export default function PostsTab({ businessId }: { businessId: string }) {
   if (loading) {
     return (
       <div style={{ textAlign: "center", padding: "3rem", color: "#888" }}>
-        Загружаем посты...
+        Загружаем истории...
       </div>
     );
   }
@@ -152,7 +142,6 @@ export default function PostsTab({ businessId }: { businessId: string }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {/* Controls */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        {/* Period selector */}
         <div style={{ display: "flex", gap: 3, background: "#F0EEE8", padding: 4, borderRadius: 10 }}>
           {PERIODS.map(p => (
             <button key={p.key} onClick={() => setPeriod(p.key)}
@@ -171,7 +160,7 @@ export default function PostsTab({ businessId }: { businessId: string }) {
         <div style={{ flex: 1 }} />
 
         <span style={{ fontSize: 12, color: "#9CA3AF" }}>
-          {sorted.length} постов из {posts.length} сохранённых
+          {sorted.length} историй из {stories.length} сохранённых
         </span>
 
         <button onClick={() => collect(false)} disabled={collecting}
@@ -192,25 +181,26 @@ export default function PostsTab({ businessId }: { businessId: string }) {
       )}
 
       {/* Empty state */}
-      {posts.length === 0 && !collecting && (
+      {stories.length === 0 && !collecting && (
         <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16,
           padding: "48px 32px", textAlign: "center" }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>📊</div>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>📖</div>
           <p style={{ fontSize: 15, fontWeight: 600, color: "#0D1B2A", margin: "0 0 8px" }}>
-            Нет данных по постам
+            Нет данных по историям
           </p>
           <p style={{ color: "#6B7280", fontSize: 14, margin: "0 0 20px" }}>
-            Нажмите «Обновить» чтобы собрать посты из Telegram-канала
+            Нажмите «Обновить» чтобы собрать истории из Telegram-канала.<br />
+            Автосбор работает ежедневно в 10:00 по ЕКБ.
           </p>
           <button onClick={() => collect(false)} disabled={collecting}
             style={{ padding: "10px 24px", background: "#3478F6", color: "#fff",
               border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-            Собрать посты
+            Собрать истории
           </button>
         </div>
       )}
 
-      {/* Table */}
+      {/* Table + side panel */}
       {sorted.length > 0 && (
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
           <div style={{ flex: 1, minWidth: 0, background: "#fff",
@@ -219,18 +209,15 @@ export default function PostsTab({ businessId }: { businessId: string }) {
               <thead>
                 <tr>
                   {[
-                    { col: "published_at" as keyof TGPost, label: "Дата (ЕКБ)", minWidth: 110 },
-                    { col: "published_at" as keyof TGPost, label: "Время (ЕКБ)", noSort: true, minWidth: 90 },
-                    { col: "post_id" as keyof TGPost, label: "ID", minWidth: 72 },
-                    { col: "text" as keyof TGPost, label: "Текст поста", minWidth: 220 },
-                    { col: "views" as keyof TGPost, label: "Просмотры", minWidth: 110 },
-                    { col: "reactions" as keyof TGPost, label: "Реакции", minWidth: 100 },
-                    { col: "comments" as keyof TGPost, label: "Комментарии", minWidth: 120 },
-                    { col: "reposts" as keyof TGPost, label: "Репосты", minWidth: 100 },
-                    { col: "er_pct" as keyof TGPost, label: "ER %", minWidth: 80 },
-                    { col: "virality_pct" as keyof TGPost, label: "Вирал %", minWidth: 90 },
-                    { col: "has_question" as keyof TGPost, label: "Вопрос", minWidth: 85 },
-                  ].map(({ col, label, noSort, minWidth }) => (
+                    { col: "published_at" as keyof TGStory, label: "Дата (ЕКБ)",   minWidth: 110 },
+                    { col: "published_at" as keyof TGStory, label: "Время (ЕКБ)",  minWidth: 90, noSort: true },
+                    { col: "story_id"    as keyof TGStory, label: "ID",             minWidth: 72 },
+                    { col: "caption"     as keyof TGStory, label: "Подпись",        minWidth: 220 },
+                    { col: "views"       as keyof TGStory, label: "Просмотры",      minWidth: 110 },
+                    { col: "reactions"   as keyof TGStory, label: "Реакции",        minWidth: 100 },
+                    { col: "forwards"    as keyof TGStory, label: "Пересылки",      minWidth: 110 },
+                    { col: "er_pct"      as keyof TGStory, label: "ER %",           minWidth: 80 },
+                  ].map(({ col, label, minWidth, noSort }) => (
                     <th key={label} style={{ ...thStyle, minWidth }}
                       onClick={() => !noSort && toggleSort(col)}>
                       {label}{!noSort && <SortIcon col={col} />}
@@ -239,11 +226,11 @@ export default function PostsTab({ businessId }: { businessId: string }) {
                 </tr>
               </thead>
               <tbody>
-                {sorted.map(p => {
-                  const isActive = selected?.post_id === p.post_id;
+                {sorted.map(s => {
+                  const isActive = selected?.story_id === s.story_id;
                   return (
-                    <tr key={p.post_id}
-                      onClick={() => setSelected(isActive ? null : p)}
+                    <tr key={s.story_id}
+                      onClick={() => setSelected(isActive ? null : s)}
                       style={{
                         background: isActive ? "#EEF4FF" : "transparent",
                         cursor: "pointer",
@@ -255,30 +242,26 @@ export default function PostsTab({ businessId }: { businessId: string }) {
                       onMouseLeave={e => {
                         if (!isActive) (e.currentTarget as HTMLElement).style.background = "transparent";
                       }}>
-                      <td style={tdStyle}>{fmtDate(p.published_at)}</td>
-                      <td style={tdStyle}>{fmtTime(p.published_at)}</td>
-                      <td style={{ ...tdStyle, color: "#9CA3AF", fontFamily: "monospace" }}>{p.post_id}</td>
+                      <td style={tdStyle}>{fmtDate(s.published_at)}</td>
+                      <td style={tdStyle}>{fmtTime(s.published_at)}</td>
+                      <td style={{ ...tdStyle, color: "#9CA3AF", fontFamily: "monospace" }}>{s.story_id}</td>
                       <td style={{ ...tdStyle, maxWidth: 240 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                          {p.has_media && (
-                            <span style={{ fontSize: 14, flexShrink: 0 }}>{MEDIA_ICON[p.media_type] || "📎"}</span>
+                          {s.has_media && (
+                            <span style={{ fontSize: 14, flexShrink: 0 }}>{MEDIA_ICON[s.media_type] || "📎"}</span>
                           )}
                           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                            color: p.text ? "#374151" : "#9CA3AF", fontStyle: p.text ? "normal" : "italic" }}>
-                            {p.text ? truncate(p.text, 55) : "[без текста]"}
+                            color: s.caption ? "#374151" : "#9CA3AF",
+                            fontStyle: s.caption ? "normal" : "italic" }}>
+                            {s.caption ? truncate(s.caption, 55) : "[без подписи]"}
                           </span>
                         </div>
                       </td>
-                      <td style={{ ...tdStyle, fontWeight: 600 }}>{fmt(p.views)}</td>
-                      <td style={tdStyle}>{fmt(p.reactions)}</td>
-                      <td style={tdStyle}>{fmt(p.comments)}</td>
-                      <td style={tdStyle}>{fmt(p.reposts)}</td>
-                      <td style={{ ...tdStyle, color: p.er_pct > 5 ? "#059669" : p.er_pct > 2 ? "#D97706" : "#374151" }}>
-                        {fmt(p.er_pct, 2)}%
-                      </td>
-                      <td style={tdStyle}>{fmt(p.virality_pct, 2)}%</td>
-                      <td style={{ ...tdStyle, color: p.has_question ? "#3478F6" : "#9CA3AF" }}>
-                        {p.has_question ? "да" : "нет"}
+                      <td style={{ ...tdStyle, fontWeight: 600 }}>{fmt(s.views)}</td>
+                      <td style={tdStyle}>{fmt(s.reactions)}</td>
+                      <td style={tdStyle}>{fmt(s.forwards)}</td>
+                      <td style={{ ...tdStyle, color: s.er_pct > 5 ? "#059669" : s.er_pct > 2 ? "#D97706" : "#374151" }}>
+                        {fmt(s.er_pct, 2)}%
                       </td>
                     </tr>
                   );
@@ -286,23 +269,17 @@ export default function PostsTab({ businessId }: { businessId: string }) {
               </tbody>
             </table>
           </div>
-
         </div>
       )}
 
       {selected && (
-        <PostDetail post={selected} onClose={() => setSelected(null)} />
+        <StoryDetail story={selected} onClose={() => setSelected(null)} />
       )}
     </div>
   );
 }
 
-function PostDetail({ post, onClose }: { post: TGPost; onClose: () => void }) {
-  const isValidUsername = (s: string) => /^[a-zA-Z0-9_]{3,}$/.test(s);
-  const embedUrl = isValidUsername(post.channel_name)
-    ? `https://t.me/${post.channel_name}/${post.post_id}?embed=1&mode=tme`
-    : null;
-
+function StoryDetail({ story, onClose }: { story: TGStory; onClose: () => void }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1000,
       display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -311,7 +288,7 @@ function PostDetail({ post, onClose }: { post: TGPost; onClose: () => void }) {
         style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)" }} />
 
       {/* Modal */}
-      <div style={{ position: "relative", width: "min(860px, 95vw)", maxHeight: "90vh",
+      <div style={{ position: "relative", width: "min(720px, 95vw)", maxHeight: "90vh",
         background: "#fff", borderRadius: 20, overflow: "hidden",
         boxShadow: "0 24px 80px rgba(0,0,0,0.25)",
         display: "flex", flexDirection: "column" }}>
@@ -321,11 +298,11 @@ function PostDetail({ post, onClose }: { post: TGPost; onClose: () => void }) {
           display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#0D1B2A" }}>
-              Пост #{post.post_id}
+              История #{story.story_id}
             </div>
             <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>
-              {fmtDate(post.published_at)} · {fmtTime(post.published_at)} ЕКБ
-              {post.channel_name && ` · @${post.channel_name}`}
+              {fmtDate(story.published_at)} · {fmtTime(story.published_at)} ЕКБ
+              {story.channel_name && ` · @${story.channel_name}`}
             </div>
           </div>
           <button onClick={onClose}
@@ -336,54 +313,38 @@ function PostDetail({ post, onClose }: { post: TGPost; onClose: () => void }) {
           </button>
         </div>
 
-        {/* Body — две колонки: предпросмотр слева, метрики справа */}
+        {/* Body — две колонки */}
         <div style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
 
-          {/* Левая колонка: предпросмотр */}
-          <div style={{ flex: "0 0 55%", borderRight: "1px solid #F3F4F6", overflowY: "auto" }}>
-            {embedUrl ? (
-              <iframe
-                src={embedUrl}
-                style={{ width: "100%", border: "none", minHeight: 480, display: "block" }}
-                sandbox="allow-scripts allow-same-origin allow-popups"
-                onLoad={(e) => {
-                  const iframe = e.currentTarget;
-                  try {
-                    const h = iframe.contentWindow?.document.body.scrollHeight || 480;
-                    iframe.style.height = Math.max(h, 480) + "px";
-                  } catch {}
-                }}
-              />
-            ) : (
-              <div style={{ padding: 24, height: "100%", display: "flex",
-                flexDirection: "column", alignItems: "center", justifyContent: "center",
-                gap: 12, color: "#6B7280", background: "#F9FAFB" }}>
-                <span style={{ fontSize: 56 }}>{post.has_media ? (MEDIA_ICON[post.media_type] || "📎") : "📝"}</span>
-                <span style={{ fontSize: 15, fontWeight: 600 }}>
-                  {post.has_media
-                    ? (post.media_type === "photo" ? "Фото" : post.media_type === "video" ? "Видео" : "Файл")
-                    : "Без медиа"}
-                </span>
-                <span style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", maxWidth: 260, lineHeight: 1.5 }}>
-                  {post.has_media
-                    ? "Медиа доступно только в Telegram"
-                    : "Публичный канал с @username поддерживает встроенный предпросмотр"}
-                </span>
-              </div>
-            )}
+          {/* Левая: медиа-плейсхолдер */}
+          <div style={{ flex: "0 0 50%", borderRight: "1px solid #F3F4F6",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexDirection: "column", gap: 12, background: "#F9FAFB",
+            padding: 24, color: "#6B7280" }}>
+            <span style={{ fontSize: 64 }}>
+              {story.has_media ? (MEDIA_ICON[story.media_type] || "📎") : "📖"}
+            </span>
+            <span style={{ fontSize: 15, fontWeight: 600 }}>
+              {story.has_media
+                ? (story.media_type === "photo" ? "Фото" : "Видео")
+                : "Без медиа"}
+            </span>
+            <span style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center",
+              maxWidth: 260, lineHeight: 1.6 }}>
+              Предпросмотр историй Telegram недоступен — откройте канал напрямую
+            </span>
           </div>
 
-          {/* Правая колонка: метрики */}
+          {/* Правая: метрики */}
           <div style={{ flex: 1, padding: "20px", overflowY: "auto" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF",
               letterSpacing: 0.6, marginBottom: 14 }}>ПОКАЗАТЕЛИ</div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               {[
-                { emoji: "👁", label: "Просмотры", value: post.views.toLocaleString("ru-RU") },
-                { emoji: "❤️", label: "Реакции",    value: String(post.reactions) },
-                { emoji: "💬", label: "Комментарии", value: String(post.comments) },
-                { emoji: "🔁", label: "Репосты",    value: String(post.reposts) },
+                { emoji: "👁", label: "Просмотры", value: story.views.toLocaleString("ru-RU") },
+                { emoji: "❤️", label: "Реакции",   value: String(story.reactions) },
+                { emoji: "🔁", label: "Пересылки", value: String(story.forwards) },
               ].map(m => (
                 <div key={m.label} style={{ background: "#F9FAFB", borderRadius: 12, padding: "14px 16px" }}>
                   <div style={{ fontSize: 20, marginBottom: 4 }}>{m.emoji}</div>
@@ -393,13 +354,13 @@ function PostDetail({ post, onClose }: { post: TGPost; onClose: () => void }) {
               ))}
             </div>
 
-            <div style={{ marginTop: 10, background: post.er_pct > 5 ? "#ECFDF5" : "#F9FAFB",
+            <div style={{ marginTop: 10, background: story.er_pct > 5 ? "#ECFDF5" : "#F9FAFB",
               borderRadius: 12, padding: "14px 18px",
               display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ fontSize: 13, color: "#6B7280" }}>ER поста</div>
+              <div style={{ fontSize: 13, color: "#6B7280" }}>ER истории</div>
               <div style={{ fontSize: 24, fontWeight: 700,
-                color: post.er_pct > 5 ? "#059669" : post.er_pct > 2 ? "#D97706" : "#0D1B2A" }}>
-                {post.er_pct.toFixed(2)}%
+                color: story.er_pct > 5 ? "#059669" : story.er_pct > 2 ? "#D97706" : "#0D1B2A" }}>
+                {story.er_pct.toFixed(2)}%
               </div>
             </div>
           </div>
