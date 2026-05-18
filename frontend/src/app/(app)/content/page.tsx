@@ -439,6 +439,8 @@ export default function ContentPage() {
   const [quickPostOpen, setQuickPostOpen] = useState(false);
   const [quickPostPlatforms, setQuickPostPlatforms] = useState<Array<{platform: string; page_name: string}>>([]);
 
+  const [brandAssetsLabels, setBrandAssetsLabels] = useState<Array<{name: string; label: string}>>([]);
+
   // Events
   const [calEvents, setCalEvents] = useState<CalEvent[]>([]);
   const [eventModalOpen, setEventModalOpen] = useState(false);
@@ -559,6 +561,11 @@ export default function ContentPage() {
     load();
     loadEvents();
     setStrategyUpdated(!!localStorage.getItem("strategyUpdatedAt"));
+    if (businessId) {
+      api.get(`/post-creator/${businessId}/brand-context`)
+        .then(({ data }) => setBrandAssetsLabels(data.brand_assets_labels || []))
+        .catch(() => {});
+    }
   }, [load, loadEvents]);
 
   // Синхронизация localInfoQuestions при открытии слота
@@ -1818,6 +1825,22 @@ export default function ContentPage() {
                           </span>
                         )}
                       </div>
+                      {brandAssetsLabels.length > 0 && (
+                        <div style={{ marginBottom: 10, padding: "10px 12px", background: "#FFF8F0", border: "1px solid #FED7AA", borderRadius: 10 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: "#C2410C", marginBottom: 6 }}>Ссылаться на элементы фирменного стиля:</div>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            {brandAssetsLabels.map((a, i) => {
+                              const nm = a.label || a.name;
+                              return (
+                                <button key={i} onClick={() => setModalGenPrompt(p => p ? `${p}\nучитывай элемент фирменного стиля «${nm}»` : `учитывай элемент фирменного стиля «${nm}»`)}
+                                  style={{ padding: "4px 10px", background: "#fff", border: "1.5px solid #FED7AA", borderRadius: 16, color: "#C2410C", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
+                                  + {nm}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                       <textarea value={modalGenPrompt} onChange={e => setModalGenPrompt(e.target.value)}
                         placeholder="Опишите желаемое изображение на русском или английском..."
                         style={{ ...inp13, minHeight: 80 }}

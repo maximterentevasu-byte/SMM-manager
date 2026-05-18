@@ -20,7 +20,8 @@ const MAX_UPLOAD_SLOTS = 10;
 const MAX_FILES = 10;
 const DRAFT_KEY_PREFIX = "qp_draft_v1_";
 
-interface BrandContext { visual_style: string; brand_colors: string[]; brand_voice: string; niche: string; usp: string }
+interface BrandAssetLabel { name: string; label: string }
+interface BrandContext { visual_style: string; brand_colors: string[]; brand_voice: string; niche: string; usp: string; brand_assets_labels?: BrandAssetLabel[] }
 
 interface Draft {
   idea: string; ideaUrl: string; postText: string;
@@ -120,29 +121,52 @@ const PLATFORM_META: Record<Platform, { label: string; color: string; icon: stri
 // ── Brand Context Panel ────────────────────────────────────────────────────────
 
 function BrandContextPanel({ brand, onInsert }: { brand: BrandContext; onInsert: (t: string) => void }) {
-  if (!brand.visual_style && brand.brand_colors.length === 0) return null;
-  const phrases = [
+  const hasStyle = !!brand.visual_style || brand.brand_colors.length > 0;
+  const assets = brand.brand_assets_labels || [];
+  if (!hasStyle && assets.length === 0) return null;
+
+  const styleChips = [
     brand.visual_style && { label: "Фирменный стиль", value: `Use brand visual style: ${brand.visual_style}` },
-    brand.visual_style && { label: "Фон как в магазине", value: `Background style matching our store aesthetic: ${brand.visual_style}` },
     brand.brand_colors.length > 0 && { label: "Фирменные цвета", value: `Use brand colors: ${brand.brand_colors.join(", ")}` },
     (brand.visual_style && brand.brand_colors.length > 0) && { label: "Цвета + стиль", value: `Brand color palette ${brand.brand_colors.join(", ")} with visual style: ${brand.visual_style}` },
   ].filter(Boolean) as { label: string; value: string }[];
 
   return (
-    <div style={{ marginBottom: 16, padding: "14px 16px", background: "#F8F6FF", border: "1px solid #DDD6FE", borderRadius: 12 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#6B46C1", marginBottom: 10 }}>Фирменный стиль бизнеса — нажмите чтобы добавить в промт:</div>
-      {brand.visual_style && <div style={{ fontSize: 12, color: "#555", marginBottom: 8 }}><span style={{ fontWeight: 600, color: "#6B46C1" }}>Стиль:</span> {brand.visual_style}</div>}
-      {brand.brand_colors.length > 0 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "#6B46C1" }}>Цвета:</span>
-          {brand.brand_colors.slice(0, 8).map((c, i) => <div key={i} title={c} style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, background: c.startsWith("#") ? c : `#${c}`, border: "1.5px solid #E0DED8" }} />)}
-          <span style={{ fontSize: 11, color: "#aaa" }}>{brand.brand_colors.slice(0, 8).join(", ")}</span>
+    <>
+      {hasStyle && (
+        <div style={{ marginBottom: 12, padding: "14px 16px", background: "#F8F6FF", border: "1px solid #DDD6FE", borderRadius: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#6B46C1", marginBottom: 10 }}>Фирменный стиль — нажмите чтобы добавить в промт:</div>
+          {brand.visual_style && <div style={{ fontSize: 12, color: "#555", marginBottom: 8 }}><span style={{ fontWeight: 600, color: "#6B46C1" }}>Стиль:</span> {brand.visual_style}</div>}
+          {brand.brand_colors.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#6B46C1" }}>Цвета:</span>
+              {brand.brand_colors.slice(0, 8).map((c, i) => <div key={i} title={c} style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, background: c.startsWith("#") ? c : `#${c}`, border: "1.5px solid #E0DED8" }} />)}
+              <span style={{ fontSize: 11, color: "#aaa" }}>{brand.brand_colors.slice(0, 8).join(", ")}</span>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {styleChips.map((p, i) => <button key={i} onClick={() => onInsert(p.value)} style={{ padding: "5px 12px", background: "#fff", border: "1.5px solid #DDD6FE", borderRadius: 20, color: "#6B46C1", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ {p.label}</button>)}
+          </div>
         </div>
       )}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {phrases.map((p, i) => <button key={i} onClick={() => onInsert(p.value)} style={{ padding: "5px 12px", background: "#fff", border: "1.5px solid #DDD6FE", borderRadius: 20, color: "#6B46C1", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>+ {p.label}</button>)}
-      </div>
-    </div>
+      {assets.length > 0 && (
+        <div style={{ marginBottom: 12, padding: "12px 14px", background: "#FFF8F0", border: "1px solid #FED7AA", borderRadius: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#C2410C", marginBottom: 8 }}>Ссылаться на элементы фирменного стиля:</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {assets.map((a, i) => {
+              const name = a.label || a.name;
+              return (
+                <button key={i} onClick={() => onInsert(`учитывай элемент фирменного стиля «${name}»`)}
+                  style={{ padding: "5px 12px", background: "#fff", border: "1.5px solid #FED7AA", borderRadius: 20, color: "#C2410C", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
+                  + {name}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 11, color: "#9A6315", marginTop: 8 }}>АИСТ использует описание элемента как инструкцию для генерации изображения</div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -976,14 +1000,6 @@ export default function PostCreatorPage() {
             <SectionTitle n={3} label="Промт для изображения" done={!!imagePrompt.trim()} />
             <p style={{ color: "#888", fontSize: 13, margin: "0 0 14px" }}>Напишите промт — опишите что должно быть на изображении.</p>
             <BrandContextPanel brand={brandContext} onInsert={appendToPrompt} />
-            <div style={{ marginBottom: 12, padding: "10px 14px", background: "#F8F7F4", borderRadius: 10, fontSize: 12, color: "#666" }}>
-              <div style={{ fontWeight: 600, marginBottom: 6, color: "#555" }}>Примеры фраз:</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {["background style like my store", "use my brand colors", "consistent with our visual identity", "same aesthetic as our shop interior"].map((h, i) => (
-                  <button key={i} onClick={() => appendToPrompt(h)} style={{ padding: "3px 10px", background: "#fff", border: "1px solid #E0DED8", borderRadius: 12, cursor: "pointer", fontSize: 11, color: "#555" }}>+ {h}</button>
-                ))}
-              </div>
-            </div>
             <Textarea value={imagePrompt} onChange={setImagePrompt} placeholder="A professional product photo of a coffee cup on a wooden table, warm lighting, bokeh background, photorealistic..." rows={4} />
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, flexWrap: "wrap" }}>
               {imagePrompt.trim() && <Btn label={loadingImage ? "Генерирую..." : "🖼 Сгенерировать изображение"} onClick={generateImage} disabled={loadingImage || imageGenCount >= MAX_IMAGE_ATTEMPTS} loading={loadingImage} color="#4680C2" />}

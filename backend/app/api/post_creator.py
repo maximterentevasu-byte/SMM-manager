@@ -408,6 +408,7 @@ async def get_brand_context(
         "brand_voice": profile.get("brand_voice", ""),
         "niche": profile.get("niche", ""),
         "usp": profile.get("usp", ""),
+        "brand_assets_labels": profile.get("brand_assets_labels", []),
     }
 
 
@@ -437,7 +438,7 @@ async def generate_image_prompt(
 
     if body.url:
         url_text = await _fetch_url_text(body.url, max_chars=1000)
-        if url_text and not url_text.startswith("[Не удалось") and len(url_text) > 150:
+        if url_text and not url_text.startswith("[") and len(url_text) > 150:
             context_parts.append(f"Reference content (for style/context only):\n{url_text}")
 
     if body.images:
@@ -485,10 +486,34 @@ async def generate_image(
     business_id: str,
     body: ImageIn,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Переводит промт и немедленно возвращает task_id (генерация идёт в Celery-воркере)."""
     import asyncio
     from app.workers.image_tasks import generate_image_task
+
+    # Загружаем brand assets из профиля для контекстуализации промта
+    brand_assets_context = ""
+    try:
+        biz = await _get_business(business_id, current_user, db)
+        profile = biz.profile if isinstance(biz.profile, dict) else {}
+        assets = profile.get("brand_assets_labels", [])
+        visual_style = profile.get("visual_style", "")
+        brand_colors = profile.get("brand_colors", [])
+        if assets or visual_style:
+            parts = []
+            if assets:
+                labels = [a.get("label") or a.get("name", "") for a in assets if a.get("label") or a.get("name")]
+                if labels:
+                    parts.append(f"Brand style assets: {', '.join(labels)}")
+            if visual_style:
+                parts.append(f"Visual style: {visual_style}")
+            if brand_colors:
+                parts.append(f"Brand colors: {', '.join(brand_colors[:6])}")
+            if parts:
+                brand_assets_context = "\n\nBrand context:\n" + "\n".join(parts)
+    except Exception:
+        pass
 
     prompt = body.prompt
 
@@ -497,11 +522,13 @@ async def generate_image(
             "You are a professional translator specializing in AI image generation prompts. "
             "Translate the following prompt from Russian to English. "
             "Preserve all visual details, style, mood, and compositional elements exactly. "
-            "Return ONLY the English translation, no explanations or comments."
+            "If the prompt references brand style assets by name (e.g. 'логобук', 'брендбук'), "
+            "incorporate their visual characteristics from the brand context provided. "
+            "Return ONLY the English translation/prompt, no explanations or comments."
         )
         try:
             prompt, _ = await asyncio.wait_for(
-                _generate_text(translation_system, body.prompt_ru, 400),
+                _generate_text(translation_system, body.prompt_ru + brand_assets_context, 400),
                 timeout=10.0,
             )
         except Exception:
