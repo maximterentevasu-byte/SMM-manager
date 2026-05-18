@@ -132,6 +132,16 @@ export default function StoriesTab({ businessId }: { businessId: string }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Честный дисклеймер */}
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "#FFFBEB",
+        border: "1px solid #FDE68A", borderRadius: 12, padding: "12px 16px" }}>
+        <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+        <p style={{ margin: 0, fontSize: 13, color: "#92400E", lineHeight: 1.6 }}>
+          <strong>Telegram не хранит историю Сториз.</strong> В статистику попадут только истории,
+          опубликованные после подключения к smmplatform. Истории, вышедшие раньше, восстановить невозможно.
+        </p>
+      </div>
+
       {/* Controls */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         {/* Date range */}
