@@ -82,6 +82,8 @@ export default function AnalyticsPage() {
     typeof window !== "undefined" ? localStorage.getItem("businessId") || "" : ""
   );
 
+  const [aiModal, setAiModal] = useState<{ period: string; text: string } | null>(null);
+
   useEffect(() => {
     if (!businessId) return;
     api.get(`/analytics/${businessId}/tg`)
@@ -246,7 +248,17 @@ export default function AnalyticsPage() {
     { key: "virality_pct",      label: "Вираль %",         render: (r: TGWeek) => pct(r.virality_pct, 3),            w: 90 },
     { key: "best_post_views",   label: "Лучший пост",      render: (r: TGWeek) => dash(r.best_post_views),           w: 115 },
     { key: "worst_post_views",  label: "Худший пост",      render: (r: TGWeek) => dash(r.worst_post_views),          w: 115 },
-    { key: "ai_status",         label: "Статус недели",    render: (r: TGWeek) => r.ai_status || "—",                w: 300, wrap: true },
+    {
+      key: "ai_status", label: "Статус недели",
+      render: (r: TGWeek) => r.ai_status
+        ? <button onClick={() => setAiModal({ period: `${r.week_start} — ${r.week_end}`, text: r.ai_status! })}
+            style={{ background: "none", border: "none", padding: 0, cursor: "pointer",
+              color: "#3478F6", fontSize: 13, textDecoration: "underline", fontFamily: "inherit" }}>
+            Рекомендации
+          </button>
+        : <span style={{ color: "#ccc" }}>—</span>,
+      w: 130,
+    },
   ];
 
   const tg_cols_basic = [
@@ -451,6 +463,34 @@ export default function AnalyticsPage() {
           </>
         )}
       </div>
+
+      {/* AI-статус модал */}
+      {aiModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1000,
+          display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div onClick={() => setAiModal(null)}
+            style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)" }} />
+          <div style={{ position: "relative", width: "min(520px, 92vw)",
+            background: "#fff", borderRadius: 20, padding: "32px 36px",
+            boxShadow: "0 24px 80px rgba(0,0,0,0.22)" }}>
+            <button onClick={() => setAiModal(null)}
+              style={{ position: "absolute", top: 16, right: 16, background: "none",
+                border: "none", fontSize: 20, cursor: "pointer", color: "#aaa", lineHeight: 1 }}>
+              ×
+            </button>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#aaa",
+              letterSpacing: 0.7, marginBottom: 6 }}>
+              СТАТУС НЕДЕЛИ
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a1a", marginBottom: 20 }}>
+              {aiModal.period}
+            </div>
+            <div style={{ fontSize: 14, color: "#444", lineHeight: 1.7 }}>
+              {aiModal.text}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
