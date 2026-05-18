@@ -18,15 +18,6 @@ type TGStory = {
   updated_at: string;
 };
 
-type Period = "week" | "month" | "3months" | "year" | "all";
-
-const PERIODS: { key: Period; label: string; days: number }[] = [
-  { key: "week",    label: "Неделя",    days: 7 },
-  { key: "month",   label: "Месяц",     days: 30 },
-  { key: "3months", label: "3 месяца",  days: 90 },
-  { key: "year",    label: "Год",       days: 365 },
-  { key: "all",     label: "Всё время", days: 0 },
-];
 
 const MEDIA_ICON: Record<string, string> = {
   photo: "🖼",
@@ -58,7 +49,8 @@ export default function StoriesTab({ businessId }: { businessId: string }) {
   const [loading, setLoading] = useState(true);
   const [collecting, setCollecting] = useState(false);
   const [collectMsg, setCollectMsg] = useState("");
-  const [period, setPeriod] = useState<Period>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [selected, setSelected] = useState<TGStory | null>(null);
   const [sortCol, setSortCol] = useState<keyof TGStory>("published_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -92,11 +84,11 @@ export default function StoriesTab({ businessId }: { businessId: string }) {
     }
   };
 
-  const now = Date.now();
   const filtered = stories.filter(s => {
-    if (period === "all") return true;
-    const days = PERIODS.find(x => x.key === period)!.days;
-    return new Date(s.published_at).getTime() > now - days * 86400_000;
+    const d = s.published_at.slice(0, 10);
+    if (dateFrom && d < dateFrom) return false;
+    if (dateTo && d > dateTo) return false;
+    return true;
   });
 
   const sorted = [...filtered].sort((a, b) => {
@@ -142,26 +134,29 @@ export default function StoriesTab({ businessId }: { businessId: string }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {/* Controls */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", gap: 3, background: "#F0EEE8", padding: 4, borderRadius: 10 }}>
-          {PERIODS.map(p => (
-            <button key={p.key} onClick={() => setPeriod(p.key)}
-              style={{
-                padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer",
-                fontSize: 12, fontWeight: period === p.key ? 600 : 400,
-                background: period === p.key ? "#fff" : "transparent",
-                color: period === p.key ? "#0D1B2A" : "#999",
-                boxShadow: period === p.key ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
-              }}>
-              {p.label}
-            </button>
-          ))}
+        {/* Date range */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8,
+          background: "#fff", border: "1px solid #E5E7EB", borderRadius: 10, padding: "6px 12px" }}>
+          <span style={{ fontSize: 12, color: "#9CA3AF", whiteSpace: "nowrap" }}>с</span>
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            style={{ border: "none", outline: "none", fontSize: 13, color: "#0D1B2A",
+              background: "transparent", cursor: "pointer" }} />
+          <span style={{ fontSize: 12, color: "#9CA3AF", whiteSpace: "nowrap" }}>по</span>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            style={{ border: "none", outline: "none", fontSize: 13, color: "#0D1B2A",
+              background: "transparent", cursor: "pointer" }} />
+          {(dateFrom || dateTo) && (
+            <button onClick={() => { setDateFrom(""); setDateTo(""); }}
+              style={{ background: "none", border: "none", cursor: "pointer",
+                fontSize: 14, color: "#9CA3AF", lineHeight: 1, padding: 0 }}>✕</button>
+          )}
         </div>
-
-        <div style={{ flex: 1 }} />
 
         <span style={{ fontSize: 12, color: "#9CA3AF" }}>
           {sorted.length} историй из {stories.length} сохранённых
         </span>
+
+        <div style={{ flex: 1 }} />
 
         <button onClick={() => collect(false)} disabled={collecting}
           style={{ padding: "7px 16px", background: collecting ? "#ccc" : "#3478F6",
@@ -169,7 +164,6 @@ export default function StoriesTab({ businessId }: { businessId: string }) {
             fontWeight: 600, cursor: collecting ? "not-allowed" : "pointer" }}>
           {collecting ? "Собираю..." : "⟳ Обновить"}
         </button>
-
       </div>
 
       {collectMsg && (
@@ -280,6 +274,11 @@ export default function StoriesTab({ businessId }: { businessId: string }) {
 }
 
 function StoryDetail({ story, onClose }: { story: TGStory; onClose: () => void }) {
+  const isValidUsername = (s: string) => /^[a-zA-Z0-9_]{3,}$/.test(s);
+  const storyUrl = isValidUsername(story.channel_name)
+    ? `https://t.me/${story.channel_name}/s/${story.story_id}`
+    : null;
+
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1000,
       display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -319,20 +318,29 @@ function StoryDetail({ story, onClose }: { story: TGStory; onClose: () => void }
           {/* Левая: медиа-плейсхолдер */}
           <div style={{ flex: "0 0 50%", borderRight: "1px solid #F3F4F6",
             display: "flex", alignItems: "center", justifyContent: "center",
-            flexDirection: "column", gap: 12, background: "#F9FAFB",
+            flexDirection: "column", gap: 14, background: "#F9FAFB",
             padding: 24, color: "#6B7280" }}>
             <span style={{ fontSize: 64 }}>
               {story.has_media ? (MEDIA_ICON[story.media_type] || "📎") : "📖"}
             </span>
-            <span style={{ fontSize: 15, fontWeight: 600 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: "#374151" }}>
               {story.has_media
                 ? (story.media_type === "photo" ? "Фото" : "Видео")
                 : "Без медиа"}
             </span>
             <span style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center",
               maxWidth: 260, lineHeight: 1.6 }}>
-              Предпросмотр историй Telegram недоступен — откройте канал напрямую
+              Telegram не предоставляет встраиваемый виджет для историй
             </span>
+            {storyUrl && (
+              <a href={storyUrl} target="_blank" rel="noopener noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "9px 20px", background: "#3478F6", color: "#fff",
+                  borderRadius: 10, fontSize: 13, fontWeight: 600,
+                  textDecoration: "none", marginTop: 4 }}>
+                ↗ Открыть в Telegram
+              </a>
+            )}
           </div>
 
           {/* Правая: метрики */}

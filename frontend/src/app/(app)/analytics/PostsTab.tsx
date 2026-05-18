@@ -21,15 +21,9 @@ type TGPost = {
   updated_at: string;
 };
 
-type Period = "week" | "month" | "3months" | "year" | "all";
-
-const PERIODS: { key: Period; label: string; days: number }[] = [
-  { key: "week",    label: "Неделя",   days: 7 },
-  { key: "month",   label: "Месяц",    days: 30 },
-  { key: "3months", label: "3 месяца", days: 90 },
-  { key: "year",    label: "Год",      days: 365 },
-  { key: "all",     label: "Всё время", days: 0 },
-];
+function toInputDate(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
 
 const MEDIA_ICON: Record<string, string> = {
   photo: "🖼",
@@ -66,7 +60,8 @@ export default function PostsTab({ businessId }: { businessId: string }) {
   const [loading, setLoading] = useState(true);
   const [collecting, setCollecting] = useState(false);
   const [collectMsg, setCollectMsg] = useState("");
-  const [period, setPeriod] = useState<Period>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [selected, setSelected] = useState<TGPost | null>(null);
   const [sortCol, setSortCol] = useState<keyof TGPost>("published_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -100,12 +95,11 @@ export default function PostsTab({ businessId }: { businessId: string }) {
     }
   };
 
-  // Period filter
-  const now = Date.now();
   const filtered = posts.filter(p => {
-    if (period === "all") return true;
-    const days = PERIODS.find(x => x.key === period)!.days;
-    return new Date(p.published_at).getTime() > now - days * 86400_000;
+    const d = p.published_at.slice(0, 10);
+    if (dateFrom && d < dateFrom) return false;
+    if (dateTo && d > dateTo) return false;
+    return true;
   });
 
   // Sort
@@ -152,27 +146,29 @@ export default function PostsTab({ businessId }: { businessId: string }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {/* Controls */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        {/* Period selector */}
-        <div style={{ display: "flex", gap: 3, background: "#F0EEE8", padding: 4, borderRadius: 10 }}>
-          {PERIODS.map(p => (
-            <button key={p.key} onClick={() => setPeriod(p.key)}
-              style={{
-                padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer",
-                fontSize: 12, fontWeight: period === p.key ? 600 : 400,
-                background: period === p.key ? "#fff" : "transparent",
-                color: period === p.key ? "#0D1B2A" : "#999",
-                boxShadow: period === p.key ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
-              }}>
-              {p.label}
-            </button>
-          ))}
+        {/* Date range */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8,
+          background: "#fff", border: "1px solid #E5E7EB", borderRadius: 10, padding: "6px 12px" }}>
+          <span style={{ fontSize: 12, color: "#9CA3AF", whiteSpace: "nowrap" }}>с</span>
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            style={{ border: "none", outline: "none", fontSize: 13, color: "#0D1B2A",
+              background: "transparent", cursor: "pointer" }} />
+          <span style={{ fontSize: 12, color: "#9CA3AF", whiteSpace: "nowrap" }}>по</span>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            style={{ border: "none", outline: "none", fontSize: 13, color: "#0D1B2A",
+              background: "transparent", cursor: "pointer" }} />
+          {(dateFrom || dateTo) && (
+            <button onClick={() => { setDateFrom(""); setDateTo(""); }}
+              style={{ background: "none", border: "none", cursor: "pointer",
+                fontSize: 14, color: "#9CA3AF", lineHeight: 1, padding: 0 }}>✕</button>
+          )}
         </div>
-
-        <div style={{ flex: 1 }} />
 
         <span style={{ fontSize: 12, color: "#9CA3AF" }}>
           {sorted.length} постов из {posts.length} сохранённых
         </span>
+
+        <div style={{ flex: 1 }} />
 
         <button onClick={() => collect(false)} disabled={collecting}
           style={{ padding: "7px 16px", background: collecting ? "#ccc" : "#3478F6",
@@ -180,7 +176,6 @@ export default function PostsTab({ businessId }: { businessId: string }) {
             fontWeight: 600, cursor: collecting ? "not-allowed" : "pointer" }}>
           {collecting ? "Собираю..." : "⟳ Обновить"}
         </button>
-
       </div>
 
       {collectMsg && (
