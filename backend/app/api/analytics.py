@@ -426,13 +426,44 @@ async def _save_tg_via_bot(db: AsyncSession, business_id: str, tg: PlatformConne
     return {"weeks": len(save_weeks), "mode": "basic", "subscribers": subscribers}
 
 
-# Поля, которые нельзя обнулять — если TG вернул 0, сохраняем предыдущее значение
-_TG_PROTECT_ZERO = {
-    "subscribers", "total_views", "avg_views", "median_views",
+# Только RAW-данные от Telegram защищены от обнуления.
+# Derived-метрики (ER, вираль) сюда НЕ входят — они всегда пересчитываются
+# из актуальных (возможно защищённых) сырых данных.
+_TG_PROTECT_RAW = {
+    "subscribers",
+    "total_views", "avg_views", "median_views",
     "avg_reactions", "avg_comments", "avg_reposts",
-    "er_reach_pct", "er_activity_pct", "virality_pct",
-    "engagement_per_post", "best_post_views", "worst_post_views",
+    "best_post_views", "worst_post_views",
 }
+
+
+def _recalc_derived(stats: dict) -> dict:
+    """Пересчитывает производные метрики из (защищённых) сырых данных."""
+    avg_views = stats.get("avg_views") or 0
+    subscribers = stats.get("subscribers") or 0
+    avg_reactions = stats.get("avg_reactions") or 0
+    avg_comments = stats.get("avg_comments") or 0
+    avg_reposts = stats.get("avg_reposts") or 0
+    total_views = stats.get("total_views") or 0
+    posts_count = stats.get("posts_count") or 1
+
+    engagement_per_post = avg_reactions + avg_comments + avg_reposts
+    stats["engagement_per_post"] = round(engagement_per_post, 1)
+
+    stats["er_activity_pct"] = (
+        round(engagement_per_post / avg_views * 100, 2) if avg_views > 0 else 0
+    )
+
+    # er_reach_pct только если есть subscriber-данные (только последняя неделя)
+    if subscribers > 0 and avg_views > 0:
+        stats["er_reach_pct"] = round(avg_views / subscribers * 100, 2)
+
+    total_reposts = avg_reposts * posts_count
+    stats["virality_pct"] = (
+        round(total_reposts / total_views * 100, 3) if total_views > 0 else 0
+    )
+
+    return stats
 
 
 async def _ai_week_status(week: dict, prev_week: dict | None) -> str:
@@ -541,8 +572,8 @@ async def _upsert_tg_weekly(
         existing = existing_map.get(w["week_start"])
         if existing:
             old_stats = dict(existing.stats or {})
-            # Защита: не обнуляем важные метрики
-            for k in _TG_PROTECT_ZERO:
+            # Защита: не обнуляем RAW-данные от Telegram (подписчики, просмотры и т.д.)
+            for k in _TG_PROTECT_RAW:
                 new_val = new_stats.get(k)
                 old_val = old_stats.get(k)
                 if old_val and not new_val:
@@ -550,12 +581,15 @@ async def _upsert_tg_weekly(
             # Сохраняем старый ai_status если новый пустой
             if not new_stats.get("ai_status") and old_stats.get("ai_status"):
                 new_stats["ai_status"] = old_stats["ai_status"]
+            # Всегда пересчитываем производные метрики из (защищённых) сырых данных
+            _recalc_derived(new_stats)
             existing.stats = new_stats
             existing.channel_name = channel_name
             existing.collected_at = datetime.utcnow()
             if week_posts:
                 existing.posts = week_posts
         else:
+            _recalc_derived(new_stats)
             db.add(TGWeeklyStats(
                 id=uuid.uuid4(),
                 business_id=biz_uuid,
