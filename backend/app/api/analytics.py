@@ -3,16 +3,17 @@ import uuid
 from io import BytesIO
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 
 from app.database import get_db
 from app.models.models import (
     User, Business, PlatformConnection,
     TGWeeklyStats, VKWeeklyStats, ContentSlot, PlanStatus, Platform,
+    TelegramPost,
 )
 from app.api.auth import get_current_user
 from app.services.publishers import decrypt_token, encrypt_token
@@ -735,3 +736,179 @@ async def export_vk_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=vk_analytics.xlsx"},
     )
+
+
+# ─── TG POSTS (per-post analytics) ───────────────────────────────────────────
+
+def _collect_posts_sync(api_id: int, api_hash: str, session_str: str,
+                        channel: str, max_id: int = 0) -> list[dict]:
+    """Собирает посты из Telegram-канала. max_id=0 → последние 500; max_id>0 → старше max_id."""
+    import asyncio as _aio
+    from telethon import TelegramClient
+    from telethon.sessions import StringSession
+
+    loop = _aio.new_event_loop()
+    _aio.set_event_loop(loop)
+
+    async def _do():
+        client = TelegramClient(StringSession(session_str or None), api_id, api_hash)
+        await client.connect()
+        posts = []
+        try:
+            entity = await client.get_entity(channel)
+            subscribers = getattr(entity, "participants_count", 0) or 0
+            ch_name = getattr(entity, "username", "") or getattr(entity, "title", "") or ""
+
+            kwargs: dict = {"limit": 500}
+            if max_id > 0:
+                kwargs["max_id"] = max_id  # уходим глубже в историю
+
+            async for msg in client.iter_messages(entity, **kwargs):
+                if not msg or getattr(msg, "service", False):
+                    continue
+
+                views = msg.views or 0
+                reacts = 0
+                if msg.reactions:
+                    reacts = sum(r.count for r in msg.reactions.results)
+                reposts = msg.forwards or 0
+                comments = (msg.replies.replies if msg.replies else 0)
+
+                er = ((reacts + comments + reposts) / views * 100) if views > 0 else 0.0
+                viral = (reposts / views * 100) if views > 0 else 0.0
+
+                text = msg.text or ""
+                mtype = "none"
+                if msg.photo:
+                    mtype = "photo"
+                elif getattr(msg, "video", None) or getattr(msg, "video_note", None):
+                    mtype = "video"
+                elif getattr(msg, "voice", None):
+                    mtype = "voice"
+                elif msg.document:
+                    mtype = "document"
+
+                posts.append({
+                    "post_id": msg.id,
+                    "published_at": msg.date.replace(tzinfo=None),
+                    "text": text,
+                    "views": views,
+                    "reactions": reacts,
+                    "comments": comments,
+                    "reposts": reposts,
+                    "has_media": mtype != "none",
+                    "media_type": mtype,
+                    "er_pct": round(er, 2),
+                    "virality_pct": round(viral, 4),
+                    "has_question": "?" in text,
+                    "subscribers": subscribers,
+                    "channel_name": ch_name,
+                })
+        finally:
+            await client.disconnect()
+        return posts
+
+    return loop.run_until_complete(_do())
+
+
+async def _upsert_posts(business_id: str, posts: list[dict], db: AsyncSession) -> int:
+    """Upsert TelegramPost rows — обновляет метрики если пост уже есть."""
+    if not posts:
+        return 0
+    biz_uuid = uuid.UUID(str(business_id))
+    for pd in posts:
+        res = await db.execute(
+            select(TelegramPost).where(
+                TelegramPost.business_id == biz_uuid,
+                TelegramPost.post_id == pd["post_id"],
+            )
+        )
+        existing = res.scalar_one_or_none()
+        if existing:
+            for k, v in pd.items():
+                setattr(existing, k, v)
+            existing.updated_at = datetime.utcnow()
+        else:
+            db.add(TelegramPost(id=uuid.uuid4(), business_id=biz_uuid, **pd))
+    await db.commit()
+    return len(posts)
+
+
+@router.get("/{business_id}/tg/posts")
+async def get_tg_posts(
+    business_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Возвращает все сохранённые посты (из БД, не из Telegram)."""
+    await _get_business(business_id, current_user, db)
+    result = await db.execute(
+        select(TelegramPost)
+        .where(TelegramPost.business_id == business_id)
+        .order_by(TelegramPost.published_at.desc())
+    )
+    rows = result.scalars().all()
+    return [
+        {
+            "post_id": r.post_id,
+            "channel_name": r.channel_name,
+            "published_at": r.published_at.isoformat(),
+            "text": r.text,
+            "views": r.views,
+            "reactions": r.reactions,
+            "comments": r.comments,
+            "reposts": r.reposts,
+            "has_media": r.has_media,
+            "media_type": r.media_type,
+            "er_pct": r.er_pct,
+            "virality_pct": r.virality_pct,
+            "has_question": r.has_question,
+            "subscribers": r.subscribers,
+            "updated_at": r.updated_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
+@router.post("/{business_id}/tg/posts/collect")
+async def collect_tg_posts(
+    business_id: str,
+    deeper: bool = Query(False, description="True — уходим глубже в историю"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Собирает/обновляет посты из Telegram. deeper=True → продолжает с самого старого."""
+    await _get_business(business_id, current_user, db)
+    conn = await _get_connection(business_id, "telegram", db)
+    if not conn or not conn.tg_session_encrypted:
+        raise HTTPException(400, "Telegram не авторизован. Войдите через вкладку Аналитика → Telegram.")
+
+    from app.config import settings
+    api_id = int(settings.TG_API_ID) if settings.TG_API_ID else 0
+    api_hash = settings.TG_API_HASH or ""
+    if not api_id:
+        raise HTTPException(400, "TG_API_ID / TG_API_HASH не настроены.")
+
+    session_str = decrypt_token(conn.tg_session_encrypted)
+    channel = conn.external_page_id or ""
+    if not channel:
+        raise HTTPException(400, "Идентификатор канала не найден. Переподключите Telegram в разделе Платформы.")
+
+    # Определяем max_id: для deeper берём минимальный post_id из уже сохранённых
+    max_id = 0
+    if deeper:
+        res = await db.execute(
+            select(func.min(TelegramPost.post_id)).where(TelegramPost.business_id == business_id)
+        )
+        min_stored = res.scalar()
+        if min_stored:
+            max_id = min_stored - 1  # уходим глубже (older)
+
+    try:
+        posts = await asyncio.to_thread(
+            _collect_posts_sync, api_id, api_hash, session_str, channel, max_id
+        )
+        count = await _upsert_posts(business_id, posts, db)
+        return {"status": "ok", "collected": count, "deeper": deeper}
+    except Exception as e:
+        raise HTTPException(400, f"Ошибка сбора постов: {str(e)}")

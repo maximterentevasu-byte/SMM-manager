@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 import uuid
 
-from sqlalchemy import String, Text, JSON, DateTime, ForeignKey, Enum, Boolean
+from sqlalchemy import String, Text, JSON, DateTime, ForeignKey, Enum, Boolean, Integer, Float, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.database import Base
@@ -210,6 +210,31 @@ class VKWeeklyStats(Base):
     stats: Mapped[dict] = mapped_column(JSON)
     posts: Mapped[list] = mapped_column(JSON)
     collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class TelegramPost(Base):
+    """Каждый пост Telegram-канала — хранится навсегда, обновляется при сборе."""
+    __tablename__ = "telegram_posts"
+    __table_args__ = (UniqueConstraint("business_id", "post_id", name="uq_tgpost_biz_post"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    business_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    post_id: Mapped[int] = mapped_column(Integer, index=True)
+    channel_name: Mapped[str] = mapped_column(String(200), default="")
+    published_at: Mapped[datetime] = mapped_column(DateTime)              # UTC
+    text: Mapped[str] = mapped_column(Text, default="")
+    views: Mapped[int] = mapped_column(Integer, default=0)
+    reactions: Mapped[int] = mapped_column(Integer, default=0)
+    comments: Mapped[int] = mapped_column(Integer, default=0)
+    reposts: Mapped[int] = mapped_column(Integer, default=0)
+    has_media: Mapped[bool] = mapped_column(Boolean, default=False)
+    media_type: Mapped[str] = mapped_column(String(20), default="none")   # none/photo/video/document/voice
+    er_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    virality_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    has_question: Mapped[bool] = mapped_column(Boolean, default=False)
+    subscribers: Mapped[int] = mapped_column(Integer, default=0)
+    collected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class Subscription(Base):

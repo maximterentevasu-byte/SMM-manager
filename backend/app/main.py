@@ -24,6 +24,8 @@ _MIGRATIONS = [
     "ALTER TABLE content_slots ADD COLUMN IF NOT EXISTS event_id UUID REFERENCES events(id) ON DELETE SET NULL",
     "ALTER TABLE content_slots ADD COLUMN IF NOT EXISTS event_post_type VARCHAR(50)",
     "ALTER TABLE email_verifications ADD COLUMN IF NOT EXISTS purpose VARCHAR(20) DEFAULT 'register'",
+    # telegram_posts — создаётся через Base.metadata.create_all; индекс добавляется вручную
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_tgpost_biz_post ON telegram_posts(business_id, post_id)",
 ]
 
 

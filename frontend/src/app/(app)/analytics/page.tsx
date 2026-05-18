@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import api from "@/lib/api";
+import PostsTab from "./PostsTab";
 
 type TGWeek = {
   week_start: string; week_end: string; channel_name: string;
@@ -366,12 +367,7 @@ export default function AnalyticsPage() {
                   </>
                 )}
 
-                {dashTab === "posts" && (
-                  <ComingSoonTab
-                    title="Статистика по постам"
-                    desc="Детальная аналитика по каждой публикации: охваты, реакции, ER поста — появится в следующем обновлении."
-                  />
-                )}
+                {dashTab === "posts" && <PostsTab businessId={businessId} />}
                 {dashTab === "stories" && (
                   <ComingSoonTab
                     title="Статистика Сториз"
