@@ -1172,10 +1172,20 @@ function LineChartSVG({ data, getValue, getLabel, color, title, suffix = "" }: {
   );
 }
 
+function filterByDateRange<T extends { week_start: string }>(
+  data: T[], numWeeks: number
+): T[] {
+  const asc = [...data].sort((a, b) => a.week_start.localeCompare(b.week_start));
+  if (numWeeks === 0 || asc.length === 0) return asc;
+  const latestMs = new Date(asc[asc.length - 1].week_start).getTime();
+  const cutoffMs = latestMs - numWeeks * 7 * 24 * 3600 * 1000;
+  return asc.filter(d => new Date(d.week_start).getTime() >= cutoffMs);
+}
+
 function TGDashboard({ data, numWeeks, onNumWeeksChange }: {
   data: TGWeek[]; numWeeks: number; onNumWeeksChange: (v: number) => void;
 }) {
-  const filtered = [...data].slice(0, numWeeks === 0 ? data.length : numWeeks).reverse();
+  const filtered = filterByDateRange(data, numWeeks);
   const last = filtered[filtered.length - 1];
   const prev = filtered[filtered.length - 2];
   if (!filtered.length || !last) return null;
@@ -1685,7 +1695,7 @@ function AIAnalyticsTab({ businessId, platform = "tg" }: { businessId: string; p
 function VKDashboard({ data, numWeeks, onNumWeeksChange }: {
   data: VKWeek[]; numWeeks: number; onNumWeeksChange: (v: number) => void;
 }) {
-  const filtered = [...data].slice(0, numWeeks === 0 ? data.length : numWeeks).reverse();
+  const filtered = filterByDateRange(data, numWeeks);
   const last = filtered[filtered.length - 1];
   const prev = filtered[filtered.length - 2];
   if (!filtered.length || !last) return null;
