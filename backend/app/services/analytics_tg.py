@@ -104,8 +104,9 @@ def _build_weekly(channel_id: str, subscribers: int, channel_name: str, posts: l
         if we < today:  # только завершённые недели
             week_posts[(ws, we)].append(p)
 
+    sorted_weeks = sorted(week_posts.items())
     results = []
-    for (ws, we), week in sorted(week_posts.items()):
+    for (ws, we), week in sorted_weeks:
         n = len(week)
         if n == 0:
             continue
@@ -123,9 +124,6 @@ def _build_weekly(channel_id: str, subscribers: int, channel_name: str, posts: l
 
         avg_views = total_views / len(views) if views else 0
         median_views = sorted(views)[len(views) // 2] if views else 0
-
-        # ER (просмотры)%: средний охват / подписчики * 100
-        er_reach_pct = avg_views / subscribers * 100 if subscribers > 0 else 0
 
         # ER (активности)%: вовлечённость на пост / средний просмотр * 100
         engagement_per_post = total_eng / n if n > 0 else 0
@@ -155,7 +153,10 @@ def _build_weekly(channel_id: str, subscribers: int, channel_name: str, posts: l
             "channel_name": channel_name,
             "week_start": ws.isoformat(),
             "week_end": we.isoformat(),
-            "subscribers": subscribers,
+            # Telegram хранит только текущее число подписчиков.
+            # Присваиваем его только последней (самой свежей) неделе.
+            # Для всех остальных ставим None — фронт покажет «—».
+            "subscribers": None,
             "posts_count": n,
             "total_views": total_views,
             "avg_views": round(avg_views, 1),
@@ -163,7 +164,8 @@ def _build_weekly(channel_id: str, subscribers: int, channel_name: str, posts: l
             "avg_reactions": round(total_reactions / n, 1),
             "avg_comments": round(total_comments / n, 1),
             "avg_reposts": round(total_reposts / n, 1),
-            "er_reach_pct": round(er_reach_pct, 2),
+            # ER по просмотрам считаем только для последней недели (там есть subscribers)
+            "er_reach_pct": None,
             "er_activity_pct": round(er_activity_pct, 2),
             "engagement_per_post": round(engagement_per_post, 1),
             "virality_pct": round(virality_pct, 3),
@@ -172,6 +174,14 @@ def _build_weekly(channel_id: str, subscribers: int, channel_name: str, posts: l
             "best_day": DAY_RU.get(best_day_en, best_day_en),
             "best_hour": f"{best_hour:02d}:00",
         })
+
+    # Последняя (самая свежая завершённая) неделя получает актуальное число подписчиков
+    if results and subscribers:
+        last = results[-1]
+        last["subscribers"] = subscribers
+        avg_views = last["avg_views"] or 0
+        if avg_views > 0:
+            last["er_reach_pct"] = round(avg_views / subscribers * 100, 2)
 
     return results
 
