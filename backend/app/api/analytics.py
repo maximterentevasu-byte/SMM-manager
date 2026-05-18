@@ -746,6 +746,7 @@ def _collect_posts_sync(api_id: int, api_hash: str, session_str: str,
     import asyncio as _aio
     from telethon import TelegramClient
     from telethon.sessions import StringSession
+    from app.services.analytics_tg import _parse_channel_id
 
     loop = _aio.new_event_loop()
     _aio.set_event_loop(loop)
@@ -755,7 +756,15 @@ def _collect_posts_sync(api_id: int, api_hash: str, session_str: str,
         await client.connect()
         posts = []
         try:
-            entity = await client.get_entity(channel)
+            # Нормализуем ID так же как _fetch_channel в analytics_tg.py
+            numeric_id = _parse_channel_id(channel)
+            full_id = int(f"-100{numeric_id}")
+
+            try:
+                entity = await client.get_entity(full_id)
+            except Exception:
+                await client.get_dialogs(limit=50)
+                entity = await client.get_entity(full_id)
             subscribers = getattr(entity, "participants_count", 0) or 0
             ch_name = getattr(entity, "username", "") or getattr(entity, "title", "") or ""
 
