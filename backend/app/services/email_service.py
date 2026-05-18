@@ -9,10 +9,10 @@ def send_email(to: str, subject: str, html_body: str) -> bool:
     """Отправляет письмо через Brevo API используя urllib"""
 
     if settings.BREVO_API_KEY:
-        sender_email = settings.SMTP_FROM or settings.SMTP_USER or "noreply@smm-platform.ru"
+        sender_email = settings.SMTP_FROM or "no-reply@smmplatform.pro"
 
         payload = json.dumps({
-            "sender": {"name": "SMM Platform", "email": sender_email},
+            "sender": {"name": "smmplatform", "email": sender_email},
             "to": [{"email": to}],
             "subject": subject,
             "htmlContent": html_body,
@@ -53,46 +53,86 @@ def send_email(to: str, subject: str, html_body: str) -> bool:
             print(f"[EMAIL ERROR] Brevo {type(e).__name__}: {e}")
             return False
 
-    # Mock режим
+    # Mock режим — BREVO_API_KEY не задан
     codes = re.findall(r'\d{6}', html_body)
     code_str = codes[0] if codes else '???'
     print(f"[EMAIL MOCK] BREVO_API_KEY not set. To: {to} | Code: {code_str}")
     return True
 
 
-def send_verification_code(to: str, code: str, name: str = "") -> bool:
-    print(f"[EMAIL] Sending code {code} to {to}")
-    subject = "Ваш код подтверждения — SMM Platform"
-    html = f"""<!DOCTYPE html>
+def _base_template(content: str) -> str:
+    return f"""<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#F8F7F4;font-family:'Segoe UI',Arial,sans-serif;">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#F5F7FA;font-family:'Segoe UI',Arial,sans-serif;">
   <div style="max-width:480px;margin:40px auto;background:#fff;border-radius:16px;
-              border:1px solid #EAE8E2;overflow:hidden;">
-    <div style="padding:28px 32px 0;">
-      <h1 style="font-size:20px;font-weight:700;color:#1a1a1a;margin:0 0 8px;">
-        Подтвердите email
-      </h1>
-      <p style="color:#888;font-size:14px;margin:0 0 24px;line-height:1.6;">
-        {'Привет, ' + name + '! Введите' if name else 'Введите'} этот код для входа в SMM Platform:
-      </p>
-    </div>
-    <div style="margin:0 32px;padding:24px;background:#F8F7F4;border-radius:12px;text-align:center;">
-      <span style="font-size:40px;font-weight:700;letter-spacing:12px;color:#1a1a1a;
-                   font-family:'Courier New',monospace;">
-        {code}
+              border:1px solid #E5E7EB;overflow:hidden;
+              box-shadow:0 4px 24px rgba(13,27,42,0.07);">
+    <div style="background:#0D1B2A;padding:20px 32px;text-align:center;">
+      <span style="font-size:22px;font-weight:800;color:#fff;letter-spacing:-0.5px;
+                   font-family:'Segoe UI',Arial,sans-serif;">
+        smm<span style="color:#3478F6;">platform</span>
       </span>
     </div>
-    <div style="padding:20px 32px 28px;">
-      <p style="color:#aaa;font-size:12px;margin:0;line-height:1.6;">
-        Код действителен <strong>15 минут</strong>.<br>
-        Если вы не запрашивали код — просто проигнорируйте это письмо.
+    {content}
+    <div style="padding:16px 32px;background:#F5F7FA;border-top:1px solid #E5E7EB;text-align:center;">
+      <p style="color:#9CA3AF;font-size:11px;margin:0;">
+        © 2026 smmplatform.pro · AI-платформа для системного SMM
       </p>
     </div>
   </div>
 </body>
 </html>"""
-    return send_email(to, subject, html)
+
+
+def send_verification_code(to: str, code: str, name: str = "") -> bool:
+    print(f"[EMAIL] Sending code {code} to {to}")
+    subject = "Ваш код подтверждения — smmplatform"
+    content = f"""
+    <div style="padding:32px;">
+      <h1 style="font-size:20px;font-weight:700;color:#0D1B2A;margin:0 0 8px;">
+        Подтвердите email
+      </h1>
+      <p style="color:#6B7280;font-size:14px;margin:0 0 24px;line-height:1.6;">
+        {'Привет, ' + name + '! Введите' if name else 'Введите'} этот код для входа в smmplatform:
+      </p>
+      <div style="background:#EAF4FF;border-radius:12px;padding:24px;text-align:center;margin-bottom:24px;">
+        <span style="font-size:40px;font-weight:800;letter-spacing:12px;color:#0D1B2A;
+                     font-family:'Courier New',monospace;">
+          {code}
+        </span>
+      </div>
+      <p style="color:#9CA3AF;font-size:12px;margin:0;line-height:1.6;">
+        Код действителен <strong>15 минут</strong>.<br>
+        Если вы не регистрировались — просто проигнорируйте это письмо.
+      </p>
+    </div>"""
+    return send_email(to, subject, _base_template(content))
+
+
+def send_password_reset_code(to: str, code: str) -> bool:
+    print(f"[EMAIL] Sending reset code {code} to {to}")
+    subject = "Сброс пароля — smmplatform"
+    content = f"""
+    <div style="padding:32px;">
+      <h1 style="font-size:20px;font-weight:700;color:#0D1B2A;margin:0 0 8px;">
+        Сброс пароля
+      </h1>
+      <p style="color:#6B7280;font-size:14px;margin:0 0 24px;line-height:1.6;">
+        Вы запросили смену пароля. Введите этот код на странице восстановления:
+      </p>
+      <div style="background:#EAF4FF;border-radius:12px;padding:24px;text-align:center;margin-bottom:24px;">
+        <span style="font-size:40px;font-weight:800;letter-spacing:12px;color:#0D1B2A;
+                     font-family:'Courier New',monospace;">
+          {code}
+        </span>
+      </div>
+      <p style="color:#9CA3AF;font-size:12px;margin:0;line-height:1.6;">
+        Код действителен <strong>15 минут</strong>.<br>
+        Если вы не запрашивали смену пароля — просто проигнорируйте это письмо.
+      </p>
+    </div>"""
+    return send_email(to, subject, _base_template(content))
 
 
 def send_welcome_email(to: str, plan: str) -> bool:
@@ -102,33 +142,25 @@ def send_welcome_email(to: str, plan: str) -> bool:
         "business": "Бизнес",
         "pro": "Про",
     }
-    subject = "Добро пожаловать в SMM Platform!"
-    html = f"""<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#F8F7F4;font-family:'Segoe UI',Arial,sans-serif;">
-  <div style="max-width:480px;margin:40px auto;background:#fff;border-radius:16px;
-              border:1px solid #EAE8E2;overflow:hidden;">
+    subject = "Добро пожаловать в smmplatform!"
+    content = f"""
     <div style="padding:32px;">
-      <h1 style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 12px;">
+      <h1 style="font-size:22px;font-weight:700;color:#0D1B2A;margin:0 0 12px;">
         Добро пожаловать!
       </h1>
-      <p style="color:#555;font-size:15px;margin:0 0 8px;">
+      <p style="color:#6B7280;font-size:15px;margin:0 0 8px;">
         Ваш аккаунт активирован.
       </p>
-      <p style="color:#555;font-size:15px;margin:0 0 24px;">
-        Тариф: <strong>{plan_names.get(plan, plan)}</strong>
+      <p style="color:#6B7280;font-size:15px;margin:0 0 24px;">
+        Тариф: <strong style="color:#0D1B2A;">{plan_names.get(plan, plan)}</strong>
       </p>
-      <a href="https://frontend-production-2875.up.railway.app/onboarding"
-         style="display:inline-block;padding:12px 28px;background:#1a1a1a;color:#fff;
+      <a href="https://smmplatform.pro/onboarding"
+         style="display:inline-block;padding:13px 28px;background:#3478F6;color:#fff;
                 border-radius:10px;text-decoration:none;font-weight:600;font-size:15px;">
-        Начать онбординг
+        Начать работу →
       </a>
-    </div>
-  </div>
-</body>
-</html>"""
-    return send_email(to, subject, html)
+    </div>"""
+    return send_email(to, subject, _base_template(content))
 
 
 def send_subscription_expiring(to: str, days_left: int) -> bool:
@@ -139,27 +171,19 @@ def send_subscription_expiring(to: str, days_left: int) -> bool:
     else:
         days_str = f"{days_left} дней"
 
-    subject = f"Подписка истекает через {days_str} — SMM Platform"
-    html = f"""<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#F8F7F4;font-family:'Segoe UI',Arial,sans-serif;">
-  <div style="max-width:480px;margin:40px auto;background:#fff;border-radius:16px;
-              border:1px solid #EAE8E2;overflow:hidden;">
+    subject = f"Подписка истекает через {days_str} — smmplatform"
+    content = f"""
     <div style="padding:32px;">
-      <h1 style="font-size:20px;font-weight:700;color:#1a1a1a;margin:0 0 12px;">
+      <h1 style="font-size:20px;font-weight:700;color:#0D1B2A;margin:0 0 12px;">
         Подписка истекает через {days_str}
       </h1>
-      <p style="color:#555;font-size:14px;margin:0 0 24px;line-height:1.6;">
-        Продлите подписку чтобы автопостинг продолжал работать без перерывов.
+      <p style="color:#6B7280;font-size:14px;margin:0 0 24px;line-height:1.6;">
+        Продлите подписку, чтобы автопостинг и аналитика продолжали работать без перерывов.
       </p>
-      <a href="https://frontend-production-2875.up.railway.app/plans"
-         style="display:inline-block;padding:12px 28px;background:#1a1a1a;color:#fff;
+      <a href="https://smmplatform.pro/plans"
+         style="display:inline-block;padding:13px 28px;background:#3478F6;color:#fff;
                 border-radius:10px;text-decoration:none;font-weight:600;font-size:15px;">
-        Продлить подписку
+        Продлить подписку →
       </a>
-    </div>
-  </div>
-</body>
-</html>"""
-    return send_email(to, subject, html)
+    </div>"""
+    return send_email(to, subject, _base_template(content))

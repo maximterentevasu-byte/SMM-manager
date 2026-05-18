@@ -97,8 +97,11 @@ async def _send_code(db: AsyncSession, email: str, purpose: str):
         expires_at=datetime.utcnow() + timedelta(minutes=15),
     ))
     await db.commit()
-    from app.services.email_service import send_verification_code
-    send_verification_code(email, code)
+    from app.services.email_service import send_verification_code, send_password_reset_code
+    if purpose == "reset":
+        send_password_reset_code(email, code)
+    else:
+        send_verification_code(email, code)
     return code
 
 
