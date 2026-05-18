@@ -426,6 +426,151 @@ async def _save_tg_via_bot(db: AsyncSession, business_id: str, tg: PlatformConne
     return {"weeks": len(save_weeks), "mode": "basic", "subscribers": subscribers}
 
 
+# Поля, которые нельзя обнулять — если TG вернул 0, сохраняем предыдущее значение
+_TG_PROTECT_ZERO = {
+    "subscribers", "total_views", "avg_views", "median_views",
+    "avg_reactions", "avg_comments", "avg_reposts",
+    "er_reach_pct", "er_activity_pct", "virality_pct",
+    "engagement_per_post", "best_post_views", "worst_post_views",
+}
+
+
+async def _ai_week_status(week: dict, prev_week: dict | None) -> str:
+    """Генерирует короткий AI-комментарий по неделе (Claude Haiku)."""
+    try:
+        from anthropic import AsyncAnthropic
+        changes = []
+        if prev_week:
+            for key, label in [
+                ("avg_views", "просмотры"), ("er_reach_pct", "ER просм."),
+                ("subscribers", "подписчики"), ("er_activity_pct", "ER акт."),
+            ]:
+                curr = week.get(key) or 0
+                prev = prev_week.get(key) or 0
+                if prev > 0:
+                    pct = (curr - prev) / prev * 100
+                    direction = "▲" if pct > 0 else "▼"
+                    changes.append(f"{label}: {direction}{abs(pct):.1f}%")
+
+        context = (
+            f"Неделя {week.get('week_start')}—{week.get('week_end')}\n"
+            f"Посты: {week.get('posts_count', 0)}, Подписчики: {week.get('subscribers', '?')}\n"
+            f"Ср. просмотр: {week.get('avg_views', 0):.0f}, "
+            f"Медиана: {week.get('median_views', 0)}\n"
+            f"ER просм.: {week.get('er_reach_pct', 0):.2f}%, "
+            f"ER акт.: {week.get('er_activity_pct', 0):.2f}%\n"
+            f"Лучший пост: {week.get('best_post_views', 0)} просм., "
+            f"Худший: {week.get('worst_post_views', 0)} просм.\n"
+            f"Виральность: {week.get('virality_pct', 0):.3f}%"
+        )
+        if changes:
+            context += "\nК прошлой неделе: " + ", ".join(changes)
+
+        client = AsyncAnthropic()
+        msg = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=120,
+            system=(
+                "Ты SMM-аналитик. Дай 1-2 предложения — короткое операционное заключение по неделе "
+                "на русском. Только факты, цифры, тренды. Без воды и рекомендаций."
+            ),
+            messages=[{"role": "user", "content": context}],
+        )
+        return msg.content[0].text.strip()
+    except Exception:
+        return ""
+
+
+async def _upsert_tg_weekly(
+    db: AsyncSession, business_id: str, channel_id: str,
+    channel_name: str, weekly: list[dict], posts: list[dict],
+) -> int:
+    """Upsert недельной статистики: обновляет существующие недели, вставляет новые.
+    Поля из _TG_PROTECT_ZERO не обнуляются если TG вернул 0."""
+    biz_uuid = uuid.UUID(business_id)
+
+    # Загружаем все существующие недели разом
+    res = await db.execute(
+        select(TGWeeklyStats).where(
+            TGWeeklyStats.business_id == biz_uuid,
+            TGWeeklyStats.channel_id == channel_id,
+        )
+    )
+    existing_map: dict[str, TGWeeklyStats] = {
+        row.week_start.date().isoformat(): row
+        for row in res.scalars().all()
+    }
+
+    # Определяем недели, которым нужен AI-статус:
+    # — новые (нет в БД) и последние 2 недели (данные свежие, статус мог устареть)
+    sorted_weekly = sorted(weekly, key=lambda w: w["week_start"])
+    recent_starts = {w["week_start"] for w in sorted_weekly[-2:]}
+    needs_ai: list[tuple[int, dict, dict | None]] = []
+    for i, w in enumerate(sorted_weekly):
+        ws = w["week_start"]
+        existing = existing_map.get(ws)
+        existing_status = (existing.stats or {}).get("ai_status", "") if existing else ""
+        if not existing_status or ws in recent_starts:
+            prev = sorted_weekly[i - 1] if i > 0 else None
+            needs_ai.append((i, w, prev))
+
+    # Генерируем AI статусы параллельно (с семафором 5)
+    sem = asyncio.Semaphore(5)
+
+    async def _gen(w: dict, prev: dict | None) -> str:
+        async with sem:
+            return await _ai_week_status(w, prev)
+
+    ai_results: list[str] = [""] * len(sorted_weekly)
+    if needs_ai:
+        statuses = await asyncio.gather(*[_gen(w, prev) for _, w, prev in needs_ai])
+        for (idx, _, _), status in zip(needs_ai, statuses):
+            ai_results[idx] = status
+
+    # Upsert
+    for i, w in enumerate(sorted_weekly):
+        ws_date = datetime.fromisoformat(w["week_start"])
+        we_date = datetime.fromisoformat(w["week_end"])
+        week_posts = [p for p in posts if w["week_start"] <= p["date"][:10] <= w["week_end"]]
+
+        new_stats = {k: v for k, v in w.items()
+                     if k not in ("channel_id", "channel_name", "week_start", "week_end")}
+        if ai_results[i]:
+            new_stats["ai_status"] = ai_results[i]
+
+        existing = existing_map.get(w["week_start"])
+        if existing:
+            old_stats = dict(existing.stats or {})
+            # Защита: не обнуляем важные метрики
+            for k in _TG_PROTECT_ZERO:
+                new_val = new_stats.get(k)
+                old_val = old_stats.get(k)
+                if old_val and not new_val:
+                    new_stats[k] = old_val
+            # Сохраняем старый ai_status если новый пустой
+            if not new_stats.get("ai_status") and old_stats.get("ai_status"):
+                new_stats["ai_status"] = old_stats["ai_status"]
+            existing.stats = new_stats
+            existing.channel_name = channel_name
+            existing.collected_at = datetime.utcnow()
+            if week_posts:
+                existing.posts = week_posts
+        else:
+            db.add(TGWeeklyStats(
+                id=uuid.uuid4(),
+                business_id=biz_uuid,
+                channel_id=channel_id,
+                channel_name=channel_name,
+                week_start=ws_date,
+                week_end=we_date,
+                stats=new_stats,
+                posts=week_posts,
+            ))
+
+    await db.commit()
+    return len(weekly)
+
+
 async def _save_tg(db: AsyncSession, business_id: str, tg: PlatformConnection) -> dict:
     """Собирает TG-аналитику. MTProto если настроен, иначе базовый Bot API режим."""
     from app.config import settings
@@ -446,7 +591,6 @@ async def _save_tg(db: AsyncSession, business_id: str, tg: PlatformConnection) -
             )
         except Exception as e:
             err_lower = str(e).lower()
-            # Auth error: session expired — clear from DB so user knows to re-auth
             if any(k in err_lower for k in _TG_AUTH_KEYWORDS):
                 tg.tg_session_encrypted = None
                 await db.commit()
@@ -454,40 +598,22 @@ async def _save_tg(db: AsyncSession, business_id: str, tg: PlatformConnection) -
                     "weeks": 0,
                     "error": f"Сессия Telegram устарела — переподключите аккаунт в настройках аналитики. ({e})",
                 }
-            # Connection error: EOF / network reset — fall back to Bot API
             if any(k in err_lower for k in ("eof", "connection", "reset", "broken pipe", "timed out", "incomplete")):
                 fallback = await _save_tg_via_bot(db, business_id, tg)
-                fallback["warning"] = f"MTProto временно недоступен (ошибка соединения), данные собраны через Bot API. ({e})"
+                fallback["warning"] = f"MTProto временно недоступен, данные собраны через Bot API. ({e})"
                 return fallback
             return {"weeks": 0, "error": str(e)}
 
         if not weekly:
             return {"weeks": 0, "error": "MTProto: постов не найдено"}
-        await db.execute(
-            delete(TGWeeklyStats).where(
-                TGWeeklyStats.business_id == business_id,
-                TGWeeklyStats.channel_id == tg.external_page_id,
-            )
-        )
-        for w in weekly:
-            ws_date = datetime.fromisoformat(w["week_start"])
-            we_date = datetime.fromisoformat(w["week_end"])
-            week_posts = [p for p in posts if w["week_start"] <= p["date"][:10] <= w["week_end"]]
-            db.add(TGWeeklyStats(
-                id=uuid.uuid4(),
-                business_id=uuid.UUID(business_id),
-                channel_id=tg.external_page_id,
-                channel_name=w.get("channel_name", tg.page_name),
-                week_start=ws_date,
-                week_end=we_date,
-                stats={k: v for k, v in w.items()
-                       if k not in ("channel_id", "channel_name", "week_start", "week_end")},
-                posts=week_posts,
-            ))
-        await db.commit()
-        return {"weeks": len(weekly), "mode": "full"}
 
-    # Fallback: базовый режим через бот-токен
+        count = await _upsert_tg_weekly(
+            db, business_id, tg.external_page_id,
+            weekly[0].get("channel_name", tg.page_name),
+            weekly, posts,
+        )
+        return {"weeks": count, "mode": "full"}
+
     return await _save_tg_via_bot(db, business_id, tg)
 
 

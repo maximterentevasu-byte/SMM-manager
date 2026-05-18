@@ -17,8 +17,13 @@ def collect_analytics_task(business_id: str):
 
 @celery_app.task(name="app.workers.analytics_tasks.collect_all_analytics_task")
 def collect_all_analytics_task():
-    """Еженедельный сбор для всех бизнесов."""
     asyncio.run(_collect_all())
+
+
+@celery_app.task(name="app.workers.analytics_tasks.collect_tg_weekly_daily_task")
+def collect_tg_weekly_daily_task():
+    """Ежедневный сбор TG недельной аналитики в 10:00 ЕКБ (05:00 UTC)."""
+    asyncio.run(_collect_tg_weekly_all())
 
 
 async def _collect_all():
@@ -137,6 +142,58 @@ async def _collect(business_id: str):
                 print(f"[analytics] VK ошибка для {business.name}: {e}")
         else:
             print(f"[analytics] VK: нет активного подключения для {business.name}")
+
+
+async def _collect_tg_weekly_all():
+    async with get_worker_db() as db:
+        result = await db.execute(select(Business))
+        businesses = result.scalars().all()
+    for biz in businesses:
+        try:
+            await _collect_tg_weekly_for(str(biz.id))
+        except Exception as e:
+            print(f"[tg-weekly] Ошибка для {biz.id}: {e}")
+
+
+async def _collect_tg_weekly_for(business_id: str):
+    async with get_worker_db() as db:
+        tg_res = await db.execute(
+            select(PlatformConnection).where(
+                PlatformConnection.business_id == business_id,
+                PlatformConnection.platform == "telegram",
+                PlatformConnection.is_active == True,
+            )
+        )
+        tg = tg_res.scalar_one_or_none()
+        if not tg:
+            return
+
+        from app.config import settings
+        api_id = int(tg.tg_api_id) if tg.tg_api_id else settings.TG_API_ID
+        api_hash = tg.tg_api_hash if tg.tg_api_hash else settings.TG_API_HASH
+        session = (
+            decrypt_token(tg.tg_session_encrypted)
+            if tg.tg_session_encrypted else settings.TG_STRING_SESSION
+        )
+        if not api_id or not session:
+            return
+
+        try:
+            from app.services.analytics_tg import collect_tg_weekly
+            from app.api.analytics import _upsert_tg_weekly
+            import asyncio as _aio
+
+            weekly, posts = await _aio.get_event_loop().run_in_executor(
+                None, collect_tg_weekly, api_id, api_hash, session, tg.external_page_id
+            )
+            if weekly:
+                channel_name = weekly[0].get("channel_name", tg.page_name)
+                count = await _upsert_tg_weekly(
+                    db, business_id, tg.external_page_id, channel_name, weekly, posts
+                )
+                print(f"[tg-weekly] Обновлено {count} недель для business_id={business_id}")
+        except Exception as e:
+            print(f"[tg-weekly] Ошибка сбора для {business_id}: {e}")
 
 
 @celery_app.task(name="app.workers.analytics_tasks.collect_stories_daily_task")

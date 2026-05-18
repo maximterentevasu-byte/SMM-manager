@@ -87,7 +87,6 @@ async def _fetch_channel(api_id: int, api_hash: str, session_str: str, chat_id: 
             last_exc = e
             continue
         except Exception as e:
-            # Auth errors — re-raise immediately, retry won't help
             if any(k in str(e).lower() for k in _TG_AUTH_KEYWORDS):
                 raise
             last_exc = e
@@ -102,7 +101,7 @@ def _build_weekly(channel_id: str, subscribers: int, channel_name: str, posts: l
 
     for p in posts:
         ws, we = _week_bounds(p["date"])
-        if we < today:
+        if we < today:  # только завершённые недели
             week_posts[(ws, we)].append(p)
 
     results = []
@@ -117,15 +116,27 @@ def _build_weekly(channel_id: str, subscribers: int, channel_name: str, posts: l
         f_list = [p["reposts"] for p in week]
 
         total_views = sum(views)
-        total_eng = sum(r_list) + sum(c_list) + sum(f_list)
+        total_reactions = sum(r_list)
+        total_comments = sum(c_list)
+        total_reposts = sum(f_list)
+        total_eng = total_reactions + total_comments + total_reposts
+
         avg_views = total_views / len(views) if views else 0
         median_views = sorted(views)[len(views) // 2] if views else 0
 
-        er_views = total_eng / total_views * 100 if total_views > 0 else 0
-        er_subs = total_eng / (subscribers * n) * 100 if subscribers > 0 else 0
-        virality = sum(f_list) / total_views * 100 if total_views > 0 else 0
-        eng_1000 = total_eng / total_views * 1000 if total_views > 0 else 0
-        quality = er_views * 0.4 + er_subs * 0.3 + virality * 0.2 + eng_1000 * 0.1
+        # ER (просмотры)%: средний охват / подписчики * 100
+        er_reach_pct = avg_views / subscribers * 100 if subscribers > 0 else 0
+
+        # ER (активности)%: вовлечённость на пост / средний просмотр * 100
+        engagement_per_post = total_eng / n if n > 0 else 0
+        er_activity_pct = engagement_per_post / avg_views * 100 if avg_views > 0 else 0
+
+        # Виральность: репосты / просмотры * 100
+        virality_pct = total_reposts / total_views * 100 if total_views > 0 else 0
+
+        # Лучший и худший пост по просмотрам
+        best_post_views = max(views) if views else 0
+        worst_post_views = min(views) if views else 0
 
         day_s: dict = defaultdict(lambda: {"v": 0, "n": 0})
         hour_s: dict = defaultdict(lambda: {"v": 0, "n": 0})
@@ -149,14 +160,15 @@ def _build_weekly(channel_id: str, subscribers: int, channel_name: str, posts: l
             "total_views": total_views,
             "avg_views": round(avg_views, 1),
             "median_views": median_views,
-            "avg_reactions": round(sum(r_list) / n, 1),
-            "avg_comments": round(sum(c_list) / n, 1),
-            "avg_reposts": round(sum(f_list) / n, 1),
-            "er_views_pct": round(er_views, 2),
-            "er_activity_pct": round(er_subs, 2),
-            "virality_pct": round(virality, 3),
-            "engagement_per_1000": round(eng_1000, 2),
-            "quality_index": round(quality, 2),
+            "avg_reactions": round(total_reactions / n, 1),
+            "avg_comments": round(total_comments / n, 1),
+            "avg_reposts": round(total_reposts / n, 1),
+            "er_reach_pct": round(er_reach_pct, 2),
+            "er_activity_pct": round(er_activity_pct, 2),
+            "engagement_per_post": round(engagement_per_post, 1),
+            "virality_pct": round(virality_pct, 3),
+            "best_post_views": best_post_views,
+            "worst_post_views": worst_post_views,
             "best_day": DAY_RU.get(best_day_en, best_day_en),
             "best_hour": f"{best_hour:02d}:00",
         })

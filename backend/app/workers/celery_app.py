@@ -34,10 +34,10 @@ celery_app.conf.update(
             "task": "app.workers.posting_tasks.check_publish_queue",
             "schedule": 60.0,
         },
-        # Сбор аналитики каждый понедельник в 06:00 МСК
-        "collect-analytics-weekly": {
-            "task": "app.workers.analytics_tasks.collect_all_analytics_task",
-            "schedule": crontab(hour=6, minute=0, day_of_week=1),
+        # Сбор недельной аналитики ежедневно в 10:00 ЕКБ (05:00 UTC)
+        "collect-tg-weekly-daily": {
+            "task": "app.workers.analytics_tasks.collect_tg_weekly_daily_task",
+            "schedule": crontab(hour=5, minute=0),
         },
         # Сбор историй Telegram ежедневно в 10:00 ЕКБ (UTC+5) = 05:00 UTC
         "collect-tg-stories-daily": {

@@ -7,12 +7,22 @@ import StoriesTab from "./StoriesTab";
 
 type TGWeek = {
   week_start: string; week_end: string; channel_name: string;
-  subscribers: number; posts_count: number;
-  total_views: number; avg_views: number; median_views: number;
-  avg_reactions: number; avg_comments: number; avg_reposts: number;
-  er_views_pct: number; er_activity_pct: number;
-  virality_pct: number; quality_index: number;
+  subscribers: number | null;
+  posts_count: number;
+  total_views: number | null;
+  avg_views: number | null;
+  median_views: number | null;
+  avg_reactions: number | null;
+  avg_comments: number | null;
+  avg_reposts: number | null;
+  er_reach_pct: number | null;
+  er_activity_pct: number | null;
+  engagement_per_post: number | null;
+  virality_pct: number | null;
+  best_post_views: number | null;
+  worst_post_views: number | null;
   best_day: string; best_hour: string;
+  ai_status: string | null;
   collected_at: string;
 };
 
@@ -215,17 +225,28 @@ export default function AnalyticsPage() {
 
   const isBasicMode = tgData.length > 0 && (tgData[0] as any)._mode === "basic";
 
+  const dash = (v: number | null | undefined, dec = 0) =>
+    v == null ? "—" : Number(v).toLocaleString("ru-RU", { maximumFractionDigits: dec });
+  const pct = (v: number | null | undefined, dec = 2) =>
+    v == null ? "—" : fmt(v, dec) + "%";
+
   const tg_cols_full = [
-    { key: "week_start", label: "Неделя", render: (r: TGWeek) => `${r.week_start} — ${r.week_end}`, w: 200 },
-    { key: "subscribers", label: "Подписчики", render: (r: TGWeek) => fmt(r.subscribers), w: 110 },
-    { key: "posts_count", label: "Постов", render: (r: TGWeek) => String(r.posts_count), w: 70 },
-    { key: "avg_views", label: "Ср. охват", render: (r: TGWeek) => fmt(r.avg_views, 0), w: 100 },
-    { key: "er_views_pct", label: "ER просм.", render: (r: TGWeek) => fmt(r.er_views_pct, 2) + "%", w: 90 },
-    { key: "er_activity_pct", label: "ER актив.", render: (r: TGWeek) => fmt(r.er_activity_pct, 2) + "%", w: 90 },
-    { key: "virality_pct", label: "Вирусность", render: (r: TGWeek) => fmt(r.virality_pct, 3) + "%", w: 100 },
-    { key: "avg_reactions", label: "Ср. реакции", render: (r: TGWeek) => fmt(r.avg_reactions, 1), w: 100 },
-    { key: "quality_index", label: "Индекс", render: (r: TGWeek) => fmt(r.quality_index, 2), w: 80 },
-    { key: "best_day", label: "Лучший день", render: (r: TGWeek) => `${r.best_day} ${r.best_hour}`, w: 110 },
+    { key: "week_start",        label: "Период",           render: (r: TGWeek) => `${r.week_start} — ${r.week_end}`, w: 200 },
+    { key: "subscribers",       label: "Подписчики",       render: (r: TGWeek) => dash(r.subscribers),               w: 110 },
+    { key: "avg_views",         label: "Ср. просмотр",     render: (r: TGWeek) => dash(r.avg_views, 0),              w: 120 },
+    { key: "median_views",      label: "Медиана просм.",   render: (r: TGWeek) => dash(r.median_views, 0),           w: 130 },
+    { key: "er_reach_pct",      label: "ER (просм.)%",     render: (r: TGWeek) => pct(r.er_reach_pct),               w: 115 },
+    { key: "er_activity_pct",   label: "ER (акт.)%",       render: (r: TGWeek) => pct(r.er_activity_pct),            w: 105 },
+    { key: "avg_reactions",     label: "Ср. реакции",      render: (r: TGWeek) => dash(r.avg_reactions, 1),          w: 105 },
+    { key: "avg_comments",      label: "Ср. комментарии",  render: (r: TGWeek) => dash(r.avg_comments, 1),           w: 140 },
+    { key: "avg_reposts",       label: "Ср. репосты",      render: (r: TGWeek) => dash(r.avg_reposts, 1),            w: 105 },
+    { key: "posts_count",       label: "Посты",            render: (r: TGWeek) => String(r.posts_count),             w: 70 },
+    { key: "total_views",       label: "Просмотры Σ",      render: (r: TGWeek) => dash(r.total_views),               w: 120 },
+    { key: "engagement_per_post", label: "Eng/пост",       render: (r: TGWeek) => dash(r.engagement_per_post, 1),    w: 95 },
+    { key: "virality_pct",      label: "Вираль %",         render: (r: TGWeek) => pct(r.virality_pct, 3),            w: 90 },
+    { key: "best_post_views",   label: "Лучший пост",      render: (r: TGWeek) => dash(r.best_post_views),           w: 115 },
+    { key: "worst_post_views",  label: "Худший пост",      render: (r: TGWeek) => dash(r.worst_post_views),          w: 115 },
+    { key: "ai_status",         label: "Статус недели",    render: (r: TGWeek) => r.ai_status || "—",                w: 300, wrap: true },
   ];
 
   const tg_cols_basic = [
@@ -464,8 +485,14 @@ function WeeklyTable({ rows, cols, emptyText }: { rows: any[]; cols: any[]; empt
             <tr key={i} style={{ borderBottom: "1px solid #F2F0EC",
               background: i === 0 ? "#FFFEF8" : "transparent" }}>
               {cols.map((c) => (
-                <td key={c.key} style={{ padding: "11px 14px", color: i === 0 ? "#1a1a1a" : "#444",
-                  fontWeight: i === 0 ? 500 : 400, whiteSpace: "nowrap" }}>
+                <td key={c.key} style={{
+                  padding: "11px 14px", color: i === 0 ? "#1a1a1a" : "#444",
+                  fontWeight: i === 0 ? 500 : 400,
+                  whiteSpace: c.wrap ? "normal" : "nowrap",
+                  lineHeight: c.wrap ? 1.5 : undefined,
+                  fontSize: c.wrap ? 12 : undefined,
+                  maxWidth: c.wrap ? c.w : undefined,
+                }}>
                   {c.render(row)}
                 </td>
               ))}
