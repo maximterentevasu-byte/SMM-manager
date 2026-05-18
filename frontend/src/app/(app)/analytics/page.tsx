@@ -34,6 +34,7 @@ type VKWeek = {
   total_views: number; avg_views: number; median_views: number;
   avg_likes: number; avg_comments: number; avg_reposts: number;
   er_subscribers_pct: number; er_views_pct: number;
+  reach_pct: number | null;
   virality_pct: number; engagement_index: number;
   engagement_per_post: number | null;
   subscribed: number | null;
@@ -288,7 +289,8 @@ export default function AnalyticsPage() {
     { key: "unsubscribed",        label: "Отписались",      render: (r: VKWeek) => r.unsubscribed != null ? <span style={{ color: "#A32D2D", fontWeight: 600 }}>−{r.unsubscribed}</span> : <span style={{ color: "#ccc" }}>н/д</span>, w: 105 },
     { key: "avg_views",           label: "Ср. просмотр",    render: (r: VKWeek) => dash(r.avg_views, 0),              w: 120 },
     { key: "median_views",        label: "Медиана просм.",  render: (r: VKWeek) => dash(r.median_views, 0),           w: 130 },
-    { key: "er_subscribers_pct",  label: "ER (подп.)%",     render: (r: VKWeek) => pct(r.er_subscribers_pct),         w: 115 },
+    { key: "reach_pct",           label: "Охват %",         render: (r: VKWeek) => pct(r.reach_pct),                  w: 90 },
+    { key: "er_subscribers_pct",  label: "ER (вовл.)%",    render: (r: VKWeek) => pct(r.er_subscribers_pct),         w: 105 },
     { key: "er_views_pct",        label: "ER (просм.)%",    render: (r: VKWeek) => pct(r.er_views_pct),              w: 105 },
     { key: "avg_likes",           label: "Ср. лайки",       render: (r: VKWeek) => dash(r.avg_likes, 1),              w: 95 },
     { key: "avg_comments",        label: "Ср. комментарии", render: (r: VKWeek) => dash(r.avg_comments, 1),           w: 140 },
@@ -1723,31 +1725,31 @@ function VKDashboard({ data, numWeeks, onNumWeeksChange }: {
         <DashCard compact label="Ср. охват" value={last.avg_views}
           trend={pctDelta(last.avg_views, prev?.avg_views)}
           sparkVals={filtered.map(d => d.avg_views || 0)} />
-        <DashCard compact label="ER (подп.)" value={last.er_subscribers_pct} suffix="%"
+        <DashCard compact label="Охват %" value={last.reach_pct} suffix="%"
+          trend={pctDelta(last.reach_pct || 0, prev?.reach_pct || undefined)}
+          sparkVals={filtered.map(d => d.reach_pct || 0)} />
+        <DashCard compact label="ER (вовл.)" value={last.er_subscribers_pct} suffix="%"
           trend={pctDelta(last.er_subscribers_pct, prev?.er_subscribers_pct)}
           sparkVals={filtered.map(d => d.er_subscribers_pct || 0)} />
-        <DashCard compact label="ER (просм.)" value={last.er_views_pct} suffix="%"
-          trend={pctDelta(last.er_views_pct, prev?.er_views_pct)}
-          sparkVals={filtered.map(d => d.er_views_pct || 0)} />
         <DashCard compact label="Постов" value={last.posts_count}
           trend={pctDelta(last.posts_count, prev?.posts_count)}
           sparkVals={filtered.map(d => d.posts_count || 0)} />
       </div>
 
-      {/* Ряд 1: охват + ER подписчики */}
+      {/* Ряд 1: средний охват + охват % (просмотры/участников) */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.avg_views || 0} getLabel={lbl}
-          color="#1a1a1a" title="Средний охват по неделям" />
-        <BarChartSVG data={filtered} getValue={d => d.er_subscribers_pct || 0} getLabel={lbl}
-          color="#0F6E56" title="ER (подписчики) %" suffix="%" />
+          color="#1a1a1a" title="Средний охват (просмотры)" />
+        <BarChartSVG data={filtered} getValue={d => d.reach_pct || 0} getLabel={lbl}
+          color="#0F6E56" title="Охват % (просм./участников)" suffix="%" />
       </div>
 
-      {/* Ряд 2: участники + ER просмотры */}
+      {/* Ряд 2: участники + ER вовлечённости */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.members || 0} getLabel={lbl}
           color="#3478F6" title="Участники" />
-        <BarChartSVG data={filtered} getValue={d => d.er_views_pct || 0} getLabel={lbl}
-          color="#7C5CBF" title="ER (просмотры) %" suffix="%" />
+        <BarChartSVG data={filtered} getValue={d => d.er_subscribers_pct || 0} getLabel={lbl}
+          color="#7C5CBF" title="ER вовлечённости %" suffix="%" />
       </div>
 
       {/* Ряд 3: подписались / отписались */}

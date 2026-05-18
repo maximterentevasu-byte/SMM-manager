@@ -319,9 +319,15 @@ def _recalc_derived_vk(stats: dict) -> dict:
 
     engagement_per_post = avg_likes + avg_comments + avg_reposts
     stats["engagement_per_post"] = round(engagement_per_post, 1)
+    # Охват: сколько % участников увидело пост (аналог er_reach_pct в TG)
+    stats["reach_pct"] = (
+        round(avg_views / members * 100, 2) if members > 0 else 0
+    )
+    # ER по просмотрам: вовлечённость / просмотры
     stats["er_views_pct"] = (
         round(engagement_per_post / avg_views * 100, 2) if avg_views > 0 else 0
     )
+    # ER по подписчикам: вовлечённость / участников
     stats["er_subscribers_pct"] = (
         round(engagement_per_post / members * 100, 2) if members > 0 else 0
     )
@@ -720,12 +726,20 @@ async def _upsert_tg_weekly(
         existing = existing_map.get(w["week_start"])
         if existing:
             old_stats = dict(existing.stats or {})
-            # Защита: не обнуляем RAW-данные от Telegram (подписчики, просмотры и т.д.)
+            # Защита RAW-данных от обнуления и перезаписи.
             for k in _TG_PROTECT_RAW:
                 new_val = new_stats.get(k)
                 old_val = old_stats.get(k)
-                if old_val and not new_val:
-                    new_stats[k] = old_val
+                if k == "subscribers":
+                    # Telegram знает только ТЕКУЩЕЕ число подписчиков.
+                    # Если значение уже сохранено — замораживаем его навсегда,
+                    # чтобы изменение числа подписчиков не перезаписывало историю.
+                    if old_val is not None:
+                        new_stats[k] = old_val
+                else:
+                    # Для остальных RAW-полей: защищаем от обнуления (TG иногда возвращает 0)
+                    if old_val and not new_val:
+                        new_stats[k] = old_val
             # Сохраняем старый ai_status если новый пустой
             if not new_stats.get("ai_status") and old_stats.get("ai_status"):
                 new_stats["ai_status"] = old_stats["ai_status"]
