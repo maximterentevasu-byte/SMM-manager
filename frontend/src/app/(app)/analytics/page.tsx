@@ -148,7 +148,14 @@ export default function AnalyticsPage() {
       setTgStep(1);
       setTgCode("");
     } catch (e: any) {
-      setTgPhoneMsg(e?.response?.data?.detail || "Ошибка входа");
+      const detail: string = e?.response?.data?.detail || "";
+      if (detail.toLowerCase().includes("expired") || detail.includes("истёк")) {
+        setTgPhoneMsg("Код истёк — нажмите «← Назад» и запросите новый код.");
+      } else if (detail.toLowerCase().includes("invalid") || detail.includes("неверн")) {
+        setTgPhoneMsg("Неверный код. Проверьте и попробуйте ещё раз.");
+      } else {
+        setTgPhoneMsg(detail || "Ошибка входа");
+      }
     } finally {
       setTgPhoneLoading(false);
     }
@@ -528,7 +535,7 @@ function TGPhoneForm({ step, phone, code, loading, msg, onPhoneChange, onCodeCha
           <button
             onClick={onSendCode}
             disabled={loading || !phone.trim()}
-            style={{ padding: "11px 28px", background: phone.trim() ? "#1a1a1a" : "#ccc",
+            style={{ padding: "11px 28px", background: phone.trim() ? "#3478F6" : "#ccc",
               color: "#fff", border: "none", borderRadius: 10, fontSize: 14,
               fontWeight: 600, cursor: phone.trim() ? "pointer" : "not-allowed" }}>
             {loading ? "Отправляю..." : "Получить код →"}
@@ -564,7 +571,7 @@ function TGPhoneForm({ step, phone, code, loading, msg, onPhoneChange, onCodeCha
             <button
               onClick={onSignIn}
               disabled={loading || !code.trim()}
-              style={{ padding: "11px 28px", background: code.trim() ? "#1a1a1a" : "#ccc",
+              style={{ padding: "11px 28px", background: code.trim() ? "#3478F6" : "#ccc",
                 color: "#fff", border: "none", borderRadius: 10, fontSize: 14,
                 fontWeight: 600, cursor: code.trim() ? "pointer" : "not-allowed", flex: 1 }}>
               {loading ? "Подключаю..." : "Подтвердить и подключить"}
@@ -575,7 +582,9 @@ function TGPhoneForm({ step, phone, code, loading, msg, onPhoneChange, onCodeCha
 
       {msg && (
         <div style={{ marginTop: 14, fontSize: 13,
-          color: msg.startsWith("✓") ? "#0F6E56" : msg.startsWith("Код") ? "#2D4A9A" : "#A32D2D" }}>
+          color: msg.startsWith("✓") ? "#059669"
+            : msg.startsWith("Код отправлен") ? "#2D4A9A"
+            : "#DC2626" }}>
           {msg}
         </div>
       )}
