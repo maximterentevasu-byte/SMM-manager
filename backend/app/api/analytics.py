@@ -296,6 +296,171 @@ async def save_tg_credentials(
     return {"status": "saved"}
 
 
+# ─── VK collect helpers ───────────────────────────────────────────────────────
+
+_VK_PROTECT_RAW = {
+    "members",
+    "total_views", "avg_views", "median_views",
+    "avg_likes", "avg_comments", "avg_reposts",
+    "best_post_views", "worst_post_views",
+}
+
+
+def _recalc_derived_vk(stats: dict) -> dict:
+    """Пересчитывает производные VK-метрики из сырых данных."""
+    avg_views = stats.get("avg_views") or 0
+    members = stats.get("members") or 0
+    avg_likes = stats.get("avg_likes") or 0
+    avg_comments = stats.get("avg_comments") or 0
+    avg_reposts = stats.get("avg_reposts") or 0
+    total_views = stats.get("total_views") or 0
+    posts_count = stats.get("posts_count") or 1
+
+    engagement_per_post = avg_likes + avg_comments + avg_reposts
+    stats["engagement_per_post"] = round(engagement_per_post, 1)
+    stats["er_views_pct"] = (
+        round(engagement_per_post / avg_views * 100, 2) if avg_views > 0 else 0
+    )
+    stats["er_subscribers_pct"] = (
+        round(engagement_per_post / members * 100, 2) if members > 0 else 0
+    )
+    stats["virality_pct"] = (
+        round((avg_reposts * posts_count) / total_views * 100, 3) if total_views > 0 else 0
+    )
+    return stats
+
+
+async def _ai_week_status_vk(week: dict, prev_week: dict | None) -> str:
+    """Генерирует короткий AI-комментарий по неделе ВКонтакте (Claude Haiku)."""
+    try:
+        from anthropic import AsyncAnthropic
+        changes = []
+        if prev_week:
+            for key, label in [
+                ("avg_views", "просмотры"), ("er_subscribers_pct", "ER подп."),
+                ("members", "участники"), ("er_views_pct", "ER просм."),
+            ]:
+                curr = week.get(key) or 0
+                prev = prev_week.get(key) or 0
+                if prev > 0:
+                    pct = (curr - prev) / prev * 100
+                    direction = "▲" if pct > 0 else "▼"
+                    changes.append(f"{label}: {direction}{abs(pct):.1f}%")
+
+        context = (
+            f"Неделя {week.get('week_start')}—{week.get('week_end')}\n"
+            f"ВКонтакте-сообщество\n"
+            f"Посты: {week.get('posts_count', 0)}, Участников: {week.get('members', '?')}\n"
+            f"Ср. просмотр: {week.get('avg_views', 0):.0f}, "
+            f"Медиана: {week.get('median_views', 0)}\n"
+            f"ER подп.: {week.get('er_subscribers_pct', 0):.2f}%, "
+            f"ER просм.: {week.get('er_views_pct', 0):.2f}%\n"
+            f"Лучший пост: {week.get('best_post_views', 0)} просм., "
+            f"Худший: {week.get('worst_post_views', 0)} просм.\n"
+            f"Виральность: {week.get('virality_pct', 0):.3f}%"
+        )
+        if changes:
+            context += "\nК прошлой неделе: " + ", ".join(changes)
+
+        client = AsyncAnthropic()
+        msg = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=120,
+            system=(
+                "Ты SMM-аналитик. Дай 1-2 предложения — короткое операционное заключение по неделе "
+                "на русском. Только факты, цифры, тренды. Без воды и рекомендаций."
+            ),
+            messages=[{"role": "user", "content": context}],
+        )
+        return msg.content[0].text.strip()
+    except Exception:
+        return ""
+
+
+async def _upsert_vk_weekly(
+    db: AsyncSession, business_id: str, group_id: str,
+    group_name: str, weekly: list[dict], posts: list[dict],
+) -> int:
+    """Upsert недельной VK-статистики: обновляет существующие недели, вставляет новые."""
+    biz_uuid = uuid.UUID(business_id)
+
+    res = await db.execute(
+        select(VKWeeklyStats).where(
+            VKWeeklyStats.business_id == biz_uuid,
+            VKWeeklyStats.group_id == group_id,
+        )
+    )
+    existing_map: dict[str, VKWeeklyStats] = {
+        row.week_start.date().isoformat(): row
+        for row in res.scalars().all()
+    }
+
+    sorted_weekly = sorted(weekly, key=lambda w: w["week_start"])
+    recent_starts = {w["week_start"] for w in sorted_weekly[-2:]}
+    needs_ai: list[tuple[int, dict, dict | None]] = []
+    for i, w in enumerate(sorted_weekly):
+        ws = w["week_start"]
+        existing = existing_map.get(ws)
+        existing_status = (existing.stats or {}).get("ai_status", "") if existing else ""
+        if not existing_status or ws in recent_starts:
+            prev = sorted_weekly[i - 1] if i > 0 else None
+            needs_ai.append((i, w, prev))
+
+    sem = asyncio.Semaphore(5)
+
+    async def _gen(w: dict, prev: dict | None) -> str:
+        async with sem:
+            return await _ai_week_status_vk(w, prev)
+
+    ai_results: list[str] = [""] * len(sorted_weekly)
+    if needs_ai:
+        statuses = await asyncio.gather(*[_gen(w, prev) for _, w, prev in needs_ai])
+        for (idx, _, _), status in zip(needs_ai, statuses):
+            ai_results[idx] = status
+
+    for i, w in enumerate(sorted_weekly):
+        ws_date = datetime.fromisoformat(w["week_start"])
+        we_date = datetime.fromisoformat(w["week_end"])
+        week_posts = [p for p in posts if w["week_start"] <= p["date"][:10] <= w["week_end"]]
+
+        new_stats = {k: v for k, v in w.items()
+                     if k not in ("group_id", "group_name", "week_start", "week_end")}
+        if ai_results[i]:
+            new_stats["ai_status"] = ai_results[i]
+
+        existing = existing_map.get(w["week_start"])
+        if existing:
+            old_stats = dict(existing.stats or {})
+            for k in _VK_PROTECT_RAW:
+                new_val = new_stats.get(k)
+                old_val = old_stats.get(k)
+                if old_val and not new_val:
+                    new_stats[k] = old_val
+            if not new_stats.get("ai_status") and old_stats.get("ai_status"):
+                new_stats["ai_status"] = old_stats["ai_status"]
+            _recalc_derived_vk(new_stats)
+            existing.stats = new_stats
+            existing.group_name = group_name
+            existing.collected_at = datetime.utcnow()
+            if week_posts:
+                existing.posts = week_posts
+        else:
+            _recalc_derived_vk(new_stats)
+            db.add(VKWeeklyStats(
+                id=uuid.uuid4(),
+                business_id=biz_uuid,
+                group_id=group_id,
+                group_name=group_name,
+                week_start=ws_date,
+                week_end=we_date,
+                stats=new_stats,
+                posts=week_posts,
+            ))
+
+    await db.commit()
+    return len(weekly)
+
+
 # ─── Collect: прямой вызов в рамках запроса через asyncio.to_thread ───────────
 
 async def _save_vk(db: AsyncSession, business_id: str, vk: PlatformConnection) -> dict:
@@ -303,7 +468,6 @@ async def _save_vk(db: AsyncSession, business_id: str, vk: PlatformConnection) -
     from app.services.analytics_vk import collect_vk_weekly
 
     community_token = decrypt_token(vk.token_encrypted)
-    # Используем отдельный user token если есть, иначе тот же токен что при подключении платформы
     user_token = (
         decrypt_token(vk.vk_user_token_encrypted)
         if vk.vk_user_token_encrypted
@@ -319,29 +483,10 @@ async def _save_vk(db: AsyncSession, business_id: str, vk: PlatformConnection) -
     if not weekly:
         return {"weeks": 0, "error": "Постов не найдено или VK API не вернул данных"}
 
-    await db.execute(
-        delete(VKWeeklyStats).where(
-            VKWeeklyStats.business_id == business_id,
-            VKWeeklyStats.group_id == vk.external_page_id.lstrip("-"),
-        )
-    )
-    for w in weekly:
-        ws_date = datetime.fromisoformat(w["week_start"])
-        we_date = datetime.fromisoformat(w["week_end"])
-        week_posts = [p for p in posts if w["week_start"] <= p["date"][:10] <= w["week_end"]]
-        db.add(VKWeeklyStats(
-            id=uuid.uuid4(),
-            business_id=uuid.UUID(business_id),
-            group_id=w["group_id"],
-            group_name=w["group_name"],
-            week_start=ws_date,
-            week_end=we_date,
-            stats={k: v for k, v in w.items()
-                   if k not in ("group_id", "group_name", "week_start", "week_end")},
-            posts=week_posts,
-        ))
-    await db.commit()
-    return {"weeks": len(weekly)}
+    group_id = vk.external_page_id.lstrip("-")
+    group_name = weekly[0].get("group_name", vk.page_name) if weekly else vk.page_name
+    count = await _upsert_vk_weekly(db, business_id, group_id, group_name, weekly, posts)
+    return {"weeks": count}
 
 
 async def _save_tg_via_bot(db: AsyncSession, business_id: str, tg: PlatformConnection) -> dict:
@@ -842,6 +987,46 @@ def _make_excel_vk(rows: list) -> bytes:
     buf = BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+class TGSubscribersUpdate(BaseModel):
+    weeks: list[dict]  # [{week_start: str, subscribers: int}, ...]
+
+
+@router.patch("/{business_id}/tg/subscribers")
+async def patch_tg_subscribers(
+    business_id: str,
+    body: TGSubscribersUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ручная правка количества подписчиков по неделям."""
+    await _get_business(business_id, current_user, db)
+
+    res = await db.execute(
+        select(TGWeeklyStats).where(TGWeeklyStats.business_id == business_id)
+    )
+    rows_by_week: dict[str, TGWeeklyStats] = {
+        r.week_start.date().isoformat(): r for r in res.scalars().all()
+    }
+
+    updated = 0
+    for item in body.weeks:
+        ws = item.get("week_start")
+        subs = item.get("subscribers")
+        if ws is None or subs is None:
+            continue
+        row = rows_by_week.get(ws)
+        if not row:
+            continue
+        stats = dict(row.stats or {})
+        stats["subscribers"] = int(subs)
+        _recalc_derived(stats)
+        row.stats = stats
+        updated += 1
+
+    await db.commit()
+    return {"updated": updated}
 
 
 @router.get("/{business_id}/tg/export")

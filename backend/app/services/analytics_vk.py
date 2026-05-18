@@ -179,6 +179,10 @@ def collect_vk_weekly(
         best_day_en = max(day_s, key=lambda d: day_s[d]["v"] / max(day_s[d]["n"], 1)) if day_s else ""
         best_hour = max(hour_s, key=lambda h: hour_s[h]["v"] / max(hour_s[h]["n"], 1)) if hour_s else 0
 
+        avg_likes = round(sum(l_list) / n, 1)
+        avg_comments = round(sum(c_list) / n, 1)
+        avg_reposts = round(sum(r_list) / n, 1)
+
         weekly.append({
             "group_id": group_id,
             "group_name": group_name,
@@ -189,9 +193,10 @@ def collect_vk_weekly(
             "total_views": total_views,
             "avg_views": round(avg_views, 1),
             "median_views": median_views,
-            "avg_likes": round(sum(l_list) / n, 1),
-            "avg_comments": round(sum(c_list) / n, 1),
-            "avg_reposts": round(sum(r_list) / n, 1),
+            "avg_likes": avg_likes,
+            "avg_comments": avg_comments,
+            "avg_reposts": avg_reposts,
+            "engagement_per_post": round(avg_likes + avg_comments + avg_reposts, 1),
             "er_subscribers_pct": round(er_subs, 2),
             "er_views_pct": round(er_views, 2),
             "virality_pct": round(virality, 3),
@@ -199,6 +204,8 @@ def collect_vk_weekly(
             "net_growth": net_growth,
             "best_day": DAY_RU.get(best_day_en, best_day_en),
             "best_hour": f"{best_hour:02d}:00",
+            "best_post_views": max(views_list) if views_list else 0,
+            "worst_post_views": min(views_list) if views_list else 0,
         })
 
     all_posts = [

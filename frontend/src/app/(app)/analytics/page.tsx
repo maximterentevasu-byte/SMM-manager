@@ -35,7 +35,11 @@ type VKWeek = {
   avg_likes: number; avg_comments: number; avg_reposts: number;
   er_subscribers_pct: number; er_views_pct: number;
   virality_pct: number; engagement_index: number;
+  engagement_per_post: number | null;
   net_growth: number | null; best_day: string; best_hour: string;
+  best_post_views: number | null;
+  worst_post_views: number | null;
+  ai_status: string | null;
   collected_at: string;
 };
 
@@ -85,6 +89,10 @@ export default function AnalyticsPage() {
   );
 
   const [aiModal, setAiModal] = useState<{ period: string; text: string } | null>(null);
+  const [subsEditor, setSubsEditor] = useState(false);
+  const [subsEdits, setSubsEdits] = useState<Record<string, string>>({});
+  const [savingSubs, setSavingSubs] = useState(false);
+  const [subsMsg, setSubsMsg] = useState("");
 
   useEffect(() => {
     if (!businessId) return;
@@ -272,16 +280,32 @@ export default function AnalyticsPage() {
   const tg_cols = isBasicMode ? tg_cols_basic : tg_cols_full;
 
   const vk_cols = [
-    { key: "week_start", label: "Неделя", render: (r: VKWeek) => `${r.week_start} — ${r.week_end}`, w: 200 },
-    { key: "members", label: "Участников", render: (r: VKWeek) => fmt(r.members), w: 110 },
-    { key: "posts_count", label: "Постов", render: (r: VKWeek) => String(r.posts_count), w: 70 },
-    { key: "avg_views", label: "Ср. охват", render: (r: VKWeek) => fmt(r.avg_views, 0), w: 100 },
-    { key: "er_subscribers_pct", label: "ER подп.", render: (r: VKWeek) => fmt(r.er_subscribers_pct, 2) + "%", w: 90 },
-    { key: "er_views_pct", label: "ER просм.", render: (r: VKWeek) => fmt(r.er_views_pct, 2) + "%", w: 90 },
-    { key: "virality_pct", label: "Вирусность", render: (r: VKWeek) => fmt(r.virality_pct, 3) + "%", w: 100 },
-    { key: "engagement_index", label: "Индекс", render: (r: VKWeek) => fmt(r.engagement_index, 2), w: 80 },
-    { key: "net_growth", label: "Прирост", render: (r: VKWeek) => r.net_growth != null ? (r.net_growth >= 0 ? "+" : "") + r.net_growth : "н/д", w: 80 },
-    { key: "best_day", label: "Лучший день", render: (r: VKWeek) => `${r.best_day} ${r.best_hour}`, w: 110 },
+    { key: "week_start",          label: "Период",          render: (r: VKWeek) => `${r.week_start} — ${r.week_end}`, w: 200 },
+    { key: "members",             label: "Участников",      render: (r: VKWeek) => dash(r.members),                   w: 110 },
+    { key: "avg_views",           label: "Ср. просмотр",    render: (r: VKWeek) => dash(r.avg_views, 0),              w: 120 },
+    { key: "median_views",        label: "Медиана просм.",  render: (r: VKWeek) => dash(r.median_views, 0),           w: 130 },
+    { key: "er_subscribers_pct",  label: "ER (подп.)%",     render: (r: VKWeek) => pct(r.er_subscribers_pct),         w: 115 },
+    { key: "er_views_pct",        label: "ER (просм.)%",    render: (r: VKWeek) => pct(r.er_views_pct),              w: 105 },
+    { key: "avg_likes",           label: "Ср. лайки",       render: (r: VKWeek) => dash(r.avg_likes, 1),              w: 95 },
+    { key: "avg_comments",        label: "Ср. комментарии", render: (r: VKWeek) => dash(r.avg_comments, 1),           w: 140 },
+    { key: "avg_reposts",         label: "Ср. репосты",     render: (r: VKWeek) => dash(r.avg_reposts, 1),            w: 105 },
+    { key: "posts_count",         label: "Посты",           render: (r: VKWeek) => String(r.posts_count),             w: 70 },
+    { key: "total_views",         label: "Просмотры Σ",     render: (r: VKWeek) => dash(r.total_views),               w: 120 },
+    { key: "engagement_per_post", label: "Eng/пост",        render: (r: VKWeek) => dash(r.engagement_per_post, 1),    w: 95 },
+    { key: "virality_pct",        label: "Вираль %",        render: (r: VKWeek) => pct(r.virality_pct, 3),            w: 90 },
+    { key: "best_post_views",     label: "Лучший пост",     render: (r: VKWeek) => dash(r.best_post_views),           w: 115 },
+    { key: "worst_post_views",    label: "Худший пост",     render: (r: VKWeek) => dash(r.worst_post_views),          w: 115 },
+    {
+      key: "ai_status", label: "Статус недели",
+      render: (r: VKWeek) => r.ai_status
+        ? <button onClick={() => setAiModal({ period: `${r.week_start} — ${r.week_end}`, text: r.ai_status! })}
+            style={{ background: "none", border: "none", padding: 0, cursor: "pointer",
+              color: "#3478F6", fontSize: 13, textDecoration: "underline", fontFamily: "inherit" }}>
+            Рекомендации
+          </button>
+        : <span style={{ color: "#ccc" }}>—</span>,
+      w: 130,
+    },
   ];
 
   return (
@@ -388,6 +412,104 @@ export default function AnalyticsPage() {
                         </div>
                       </div>
                     )}
+                    {/* Предупреждение про подписчиков */}
+                    {!isBasicMode && (
+                      <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A",
+                        borderRadius: 12, padding: "12px 16px", marginBottom: 16,
+                        display: "flex", gap: 12, alignItems: "flex-start" }}>
+                        <span style={{ fontSize: 16, flexShrink: 0 }}>⚠</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, color: "#92400E", lineHeight: 1.6 }}>
+                            <strong>Telegram не хранит исторические данные о количестве подписчиков.</strong>{" "}
+                            Данные будут актуальны с момента подключения к smmplatform.
+                            Если у вас есть исторические данные — вы можете внести их вручную.
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const init: Record<string, string> = {};
+                            tgData.forEach(w => { init[w.week_start] = w.subscribers != null ? String(w.subscribers) : ""; });
+                            setSubsEdits(init);
+                            setSubsEditor(v => !v);
+                            setSubsMsg("");
+                          }}
+                          style={{ flexShrink: 0, padding: "6px 14px", background: "#F59E0B",
+                            color: "#fff", border: "none", borderRadius: 8, fontSize: 12,
+                            fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+                          Редактировать
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Редактор подписчиков */}
+                    {subsEditor && !isBasicMode && (
+                      <div style={{ background: "#fff", border: "1px solid #EAE8E2",
+                        borderRadius: 16, padding: "20px 24px", marginBottom: 16 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#aaa",
+                          letterSpacing: 0.6, marginBottom: 14 }}>
+                          РУЧНАЯ КОРРЕКТИРОВКА ПОДПИСЧИКОВ
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+                          {tgData.map(w => (
+                            <div key={w.week_start} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                              <label style={{ fontSize: 11, color: "#888", fontWeight: 600 }}>
+                                {w.week_start} — {w.week_end}
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                value={subsEdits[w.week_start] ?? ""}
+                                onChange={e => setSubsEdits(prev => ({ ...prev, [w.week_start]: e.target.value }))}
+                                placeholder="—"
+                                style={{ padding: "7px 10px", border: "1px solid #E0DED8",
+                                  borderRadius: 8, fontSize: 13, fontFamily: "inherit",
+                                  background: "#FAFAF8", outline: "none", width: "100%",
+                                  boxSizing: "border-box" as any }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 16 }}>
+                          <button
+                            disabled={savingSubs}
+                            onClick={async () => {
+                              setSavingSubs(true); setSubsMsg("");
+                              try {
+                                const weeks = Object.entries(subsEdits)
+                                  .filter(([, v]) => v.trim() !== "")
+                                  .map(([week_start, v]) => ({ week_start, subscribers: parseInt(v, 10) }));
+                                await api.patch(`/analytics/${businessId}/tg/subscribers`, { weeks });
+                                const { data } = await api.get(`/analytics/${businessId}/tg`);
+                                setTgData(data);
+                                setSubsMsg("✓ Сохранено");
+                                setSubsEditor(false);
+                              } catch {
+                                setSubsMsg("⚠ Ошибка сохранения");
+                              } finally {
+                                setSavingSubs(false);
+                              }
+                            }}
+                            style={{ padding: "8px 20px", background: savingSubs ? "#888" : "#3478F6",
+                              color: "#fff", border: "none", borderRadius: 8, fontSize: 13,
+                              fontWeight: 600, cursor: savingSubs ? "not-allowed" : "pointer" }}>
+                            {savingSubs ? "Сохраняю..." : "Сохранить"}
+                          </button>
+                          <button
+                            onClick={() => { setSubsEditor(false); setSubsMsg(""); }}
+                            style={{ padding: "8px 16px", background: "#F0EEE8",
+                              color: "#444", border: "none", borderRadius: 8, fontSize: 13,
+                              cursor: "pointer" }}>
+                            Отмена
+                          </button>
+                          {subsMsg && (
+                            <span style={{ fontSize: 12, color: subsMsg.startsWith("✓") ? "#0F6E56" : "#A32D2D" }}>
+                              {subsMsg}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     <WeeklyTable rows={tgData} cols={tg_cols} emptyText="Нет данных по Telegram" />
                     {isBasicMode && (
                       <div style={{ marginTop: 24 }}>
@@ -1568,7 +1690,7 @@ function VKDashboard({ data, numWeeks, onNumWeeksChange }: {
   const prev = filtered[filtered.length - 2];
   if (!filtered.length || !last) return null;
 
-  const pct = (a: number, b: number | undefined) =>
+  const pctDelta = (a: number, b: number | undefined) =>
     b && b > 0 ? ((a - b) / b) * 100 : null;
   const lbl = (d: VKWeek) => d.week_start.slice(5).replace("-", ".");
 
@@ -1579,34 +1701,45 @@ function VKDashboard({ data, numWeeks, onNumWeeksChange }: {
         <PeriodFilter value={numWeeks} onChange={onNumWeeksChange} />
       </div>
 
-      {/* 4 карточки */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
-        <DashCard label="Участников" value={last.members}
-          trend={pct(last.members, prev?.members)}
+      {/* 5 карточек */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginBottom: 12 }}>
+        <DashCard compact label="Участников" value={last.members}
+          trend={pctDelta(last.members, prev?.members)}
           sparkVals={filtered.map(d => d.members || 0)} />
-        <DashCard label="Ср. охват" value={last.avg_views}
-          trend={pct(last.avg_views, prev?.avg_views)}
+        <DashCard compact label="Ср. охват" value={last.avg_views}
+          trend={pctDelta(last.avg_views, prev?.avg_views)}
           sparkVals={filtered.map(d => d.avg_views || 0)} />
-        <DashCard label="ER подписчики" value={last.er_subscribers_pct} suffix="%"
-          trend={pct(last.er_subscribers_pct, prev?.er_subscribers_pct)}
+        <DashCard compact label="ER (подп.)" value={last.er_subscribers_pct} suffix="%"
+          trend={pctDelta(last.er_subscribers_pct, prev?.er_subscribers_pct)}
           sparkVals={filtered.map(d => d.er_subscribers_pct || 0)} />
-        <DashCard label="ER просмотры" value={last.er_views_pct} suffix="%"
-          trend={pct(last.er_views_pct, prev?.er_views_pct)}
+        <DashCard compact label="ER (просм.)" value={last.er_views_pct} suffix="%"
+          trend={pctDelta(last.er_views_pct, prev?.er_views_pct)}
           sparkVals={filtered.map(d => d.er_views_pct || 0)} />
+        <DashCard compact label="Постов" value={last.posts_count}
+          trend={pctDelta(last.posts_count, prev?.posts_count)}
+          sparkVals={filtered.map(d => d.posts_count || 0)} />
       </div>
 
-      {/* 2 графика: охват + ER */}
+      {/* Ряд 1: охват + ER подписчики */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.avg_views || 0} getLabel={lbl}
           color="#1a1a1a" title="Средний охват по неделям" />
-        <LineChartSVG data={filtered} getValue={d => d.er_subscribers_pct || 0} getLabel={lbl}
-          color="#4680C2" title="ER по подписчикам %" suffix="%" />
+        <BarChartSVG data={filtered} getValue={d => d.er_subscribers_pct || 0} getLabel={lbl}
+          color="#0F6E56" title="ER (подписчики) %" suffix="%" />
       </div>
 
-      {/* 3 графика: лайки / комменты / репосты */}
+      {/* Ряд 2: участники + ER просмотры */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+        <BarChartSVG data={filtered} getValue={d => d.members || 0} getLabel={lbl}
+          color="#3478F6" title="Участники" />
+        <BarChartSVG data={filtered} getValue={d => d.er_views_pct || 0} getLabel={lbl}
+          color="#7C5CBF" title="ER (просмотры) %" suffix="%" />
+      </div>
+
+      {/* Ряд 3: лайки / комменты / репосты */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.avg_likes || 0} getLabel={lbl}
-          color="#0F6E56" title="Ср. лайки" />
+          color="#4680C2" title="Ср. лайки" />
         <BarChartSVG data={filtered} getValue={d => d.avg_comments || 0} getLabel={lbl}
           color="#7C5CBF" title="Ср. комментарии" />
         <BarChartSVG data={filtered} getValue={d => d.avg_reposts || 0} getLabel={lbl}
