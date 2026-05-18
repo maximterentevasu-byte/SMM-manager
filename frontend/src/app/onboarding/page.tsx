@@ -366,11 +366,11 @@ export default function OnboardingPage() {
   const lbl: React.CSSProperties = { fontSize: 13, fontWeight: 500, color: "#444", display: "block", marginBottom: 6 };
   const hint: React.CSSProperties = { fontSize: 12, color: "#999", marginTop: 4 };
   const btnBack: React.CSSProperties = {
-    flex: 1, padding: 13, background: "#F1EFE8", color: "#444",
-    border: "none", borderRadius: 12, cursor: "pointer", fontSize: 15,
+    flex: 1, padding: 13, background: "#F5F7FA", color: "#1F2937",
+    border: "1px solid #E5E7EB", borderRadius: 12, cursor: "pointer", fontSize: 15,
   };
   const btnNext = (disabled = false): React.CSSProperties => ({
-    flex: 2, padding: 13, background: disabled ? "#ccc" : "#0D1B2A", color: "#fff",
+    flex: 2, padding: 13, background: disabled ? "#D1D5DB" : "#3478F6", color: "#fff",
     border: "none", borderRadius: 12, cursor: disabled ? "not-allowed" : "pointer",
     fontSize: 15, fontWeight: 600,
   });
@@ -430,9 +430,9 @@ export default function OnboardingPage() {
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setImportFile(f); }}
               style={{
-                border: `2px dashed ${importFile ? "#00B5A6" : "#E0DED8"}`,
+                border: `2px dashed ${importFile ? "#00B5A6" : "#E5E7EB"}`,
                 borderRadius: 14, padding: "28px 20px", textAlign: "center",
-                cursor: "pointer", background: importFile ? "#F0FBF7" : "#FAFAF8",
+                cursor: "pointer", background: importFile ? "#F0FBF7" : "#F5F7FA",
                 transition: "all 0.2s", marginBottom: 16,
               }}>
               <input
@@ -461,8 +461,8 @@ export default function OnboardingPage() {
             </div>
 
             {importError && (
-              <div style={{ padding: "10px 14px", background: "#FCEBEB", borderRadius: 10,
-                fontSize: 13, color: "#A32D2D", marginBottom: 12 }}>
+              <div style={{ padding: "10px 14px", background: "#FEF2F2", borderRadius: 10,
+                fontSize: 13, color: "#DC2626", marginBottom: 12 }}>
                 {importError}
               </div>
             )}
@@ -472,7 +472,7 @@ export default function OnboardingPage() {
               disabled={!importFile || importLoading}
               style={{
                 width: "100%", padding: "13px", fontSize: 15, fontWeight: 600, color: "#fff",
-                background: !importFile || importLoading ? "#ccc" : "#0D1B2A",
+                background: !importFile || importLoading ? "#D1D5DB" : "#3478F6",
                 border: "none", borderRadius: 12, cursor: !importFile || importLoading ? "not-allowed" : "pointer",
                 marginBottom: 12,
               }}>
@@ -483,7 +483,7 @@ export default function OnboardingPage() {
               onClick={downloadTemplate}
               style={{
                 width: "100%", padding: "11px", fontSize: 13, fontWeight: 500,
-                color: "#444", background: "#F1EFE8",
+                color: "#444", background: "#F5F7FA",
                 border: "1px solid #E0DED8", borderRadius: 12, cursor: "pointer",
               }}>
               📥 Скачать шаблон заполнения (.xlsx)
@@ -495,7 +495,7 @@ export default function OnboardingPage() {
       {/* Loading overlay */}
       {(generatingStrategy || generatingRubrics) && (
         <div style={{
-          position: "fixed", inset: 0, background: "rgba(248,247,244,0.97)",
+          position: "fixed", inset: 0, background: "rgba(245,247,250,0.97)",
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
           zIndex: 100, gap: 16,
         }}>
@@ -509,7 +509,7 @@ export default function OnboardingPage() {
           <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
             {[0, 1, 2].map(i => (
               <div key={i} style={{
-                width: 12, height: 12, borderRadius: "50%", background: "#0D1B2A",
+                width: 12, height: 12, borderRadius: "50%", background: "#3478F6",
                 animation: `dot-pulse 1.4s ${i * 0.35}s infinite ease-in-out`,
               }} />
             ))}
@@ -520,8 +520,10 @@ export default function OnboardingPage() {
       {/* Header */}
       <div style={{ background: "#fff", borderBottom: "1px solid #E5E7EB", padding: "0 2rem" }}>
         <div style={{ maxWidth: 800, margin: "0 auto", display: "flex", alignItems: "center", height: 60, gap: 12 }}>
-          <span style={{ fontSize: 20, fontWeight: 700, color: "#0D1B2A" }}>🍕 SMM Platform</span>
-          <span style={{ fontSize: 13, color: "#aaa" }}>/ Настройка бизнеса</span>
+          <span style={{ fontFamily: "'Manrope', sans-serif", fontSize: 20, fontWeight: 800, color: "#0D1B2A", letterSpacing: -0.5 }}>
+            smm<span style={{ color: "#3478F6" }}>platform</span>
+          </span>
+          <span style={{ fontSize: 13, color: "#9CA3AF" }}>/ Настройка бизнеса</span>
         </div>
       </div>
 
@@ -531,8 +533,8 @@ export default function OnboardingPage() {
           {STEPS.map((s, i) => (
             <div key={s.id} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
               <div style={{ width: "100%", height: 3, borderRadius: 2,
-                background: i <= step ? "#0D1B2A" : "#E0DED8", transition: "background 0.3s" }} />
-              <span style={{ fontSize: 9, color: i <= step ? "#0D1B2A" : "#bbb",
+                background: i <= step ? "#3478F6" : "#E5E7EB", transition: "background 0.3s" }} />
+              <span style={{ fontSize: 9, color: i <= step ? "#3478F6" : "#9CA3AF",
                 fontWeight: i === step ? 600 : 400, textAlign: "center", lineHeight: 1.3 }}>
                 {s.icon} {s.label}
               </span>
@@ -546,7 +548,7 @@ export default function OnboardingPage() {
               <button onClick={() => { setShowImportModal(true); setImportError(""); setImportFile(null); }}
                 style={{
                   display: "flex", alignItems: "center", gap: 6, padding: "6px 14px",
-                  background: "#F1EFE8", border: "1px solid #E0DED8", borderRadius: 10,
+                  background: "#F5F7FA", border: "1px solid #E0DED8", borderRadius: 10,
                   cursor: "pointer", fontSize: 13, color: "#444", fontWeight: 500,
                 }}>
                 📊 Загрузить из Excel
@@ -615,7 +617,7 @@ export default function OnboardingPage() {
               <div style={{ display: "flex", gap: 10 }}>
                 {[{ v: true, l: "Да, хочу провести опрос" }, { v: false, l: "Нет, не нужно" }].map(opt => (
                   <div key={String(opt.v)} onClick={() => set("survey_clients", opt.v)}
-                    style={{ flex: 1, padding: "12px 16px", border: `1.5px solid ${form.survey_clients === opt.v ? "#0D1B2A" : "#E0DED8"}`,
+                    style={{ flex: 1, padding: "12px 16px", border: `1.5px solid ${form.survey_clients === opt.v ? "#0D1B2A" : "#E5E7EB"}`,
                       borderRadius: 10, cursor: "pointer", textAlign: "center",
                       background: form.survey_clients === opt.v ? "#F5F7FA" : "#fff",
                       fontWeight: form.survey_clients === opt.v ? 600 : 400, fontSize: 14 }}>
@@ -651,7 +653,7 @@ export default function OnboardingPage() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
                 {PRICE_SEGMENTS.map(ps => (
                   <div key={ps.value} onClick={() => set("price_segment", ps.value)}
-                    style={{ padding: 12, border: `1.5px solid ${form.price_segment === ps.value ? "#0D1B2A" : "#E0DED8"}`,
+                    style={{ padding: 12, border: `1.5px solid ${form.price_segment === ps.value ? "#0D1B2A" : "#E5E7EB"}`,
                       borderRadius: 10, cursor: "pointer", background: form.price_segment === ps.value ? "#F5F7FA" : "#fff" }}>
                     <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{ps.label}</div>
                     <div style={{ fontSize: 11, color: "#999" }}>{ps.desc}</div>
@@ -708,7 +710,7 @@ export default function OnboardingPage() {
                 {SMM_METRICS_OPTIONS.map(m => (
                   <button key={m} onClick={() => toggleMetric(m)}
                     style={{ padding: "8px 16px", borderRadius: 20, border: "1.5px solid", cursor: "pointer", fontSize: 13,
-                      borderColor: form.smm_metrics.includes(m) ? "#0D1B2A" : "#E0DED8",
+                      borderColor: form.smm_metrics.includes(m) ? "#0D1B2A" : "#E5E7EB",
                       background: form.smm_metrics.includes(m) ? "#0D1B2A" : "#fff",
                       color: form.smm_metrics.includes(m) ? "#fff" : "#555" }}>
                     {m}
@@ -740,7 +742,7 @@ export default function OnboardingPage() {
               { id: "instagram", label: "Instagram",    icon: "📷", desc: "Аккаунт / бизнес-профиль" },
               { id: "max",       label: "Max",          icon: "М",  desc: "Аккаунт / сообщество" },
             ].map(pl => (
-              <div key={pl.id} style={{ border: `1.5px solid ${form.platforms.includes(pl.id) ? "#0D1B2A" : "#E0DED8"}`,
+              <div key={pl.id} style={{ border: `1.5px solid ${form.platforms.includes(pl.id) ? "#0D1B2A" : "#E5E7EB"}`,
                 borderRadius: 12, overflow: "hidden" }}>
                 <div onClick={() => togglePlatform(pl.id)}
                   style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px",
@@ -768,7 +770,7 @@ export default function OnboardingPage() {
                         <button key={g.v}
                           onClick={() => set("platform_goals", { ...form.platform_goals, [pl.id]: g.v })}
                           style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid", cursor: "pointer", fontSize: 13,
-                            borderColor: form.platform_goals[pl.id] === g.v ? "#0D1B2A" : "#E0DED8",
+                            borderColor: form.platform_goals[pl.id] === g.v ? "#0D1B2A" : "#E5E7EB",
                             background: form.platform_goals[pl.id] === g.v ? "#0D1B2A" : "#fff",
                             color: form.platform_goals[pl.id] === g.v ? "#fff" : "#555" }}>
                           {g.l}
@@ -800,7 +802,7 @@ export default function OnboardingPage() {
                 {BRAND_VOICES.map(bv => (
                   <div key={bv.value} onClick={() => set("brand_voice", bv.value)}
                     style={{ padding: "12px 14px",
-                      border: `1.5px solid ${form.brand_voice === bv.value ? "#0D1B2A" : "#E0DED8"}`,
+                      border: `1.5px solid ${form.brand_voice === bv.value ? "#0D1B2A" : "#E5E7EB"}`,
                       borderRadius: 10, cursor: "pointer",
                       background: form.brand_voice === bv.value ? "#F5F7FA" : "#fff" }}>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{bv.label}</div>
@@ -819,9 +821,9 @@ export default function OnboardingPage() {
                       set("content_restrictions", curr.includes(r) ? curr.filter(x => x !== r) : [...curr, r]);
                     }}
                     style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid", cursor: "pointer", fontSize: 13,
-                      borderColor: form.content_restrictions.includes(r) ? "#A32D2D" : "#E0DED8",
-                      background: form.content_restrictions.includes(r) ? "#FCEBEB" : "#fff",
-                      color: form.content_restrictions.includes(r) ? "#A32D2D" : "#555" }}>
+                      borderColor: form.content_restrictions.includes(r) ? "#DC2626" : "#E5E7EB",
+                      background: form.content_restrictions.includes(r) ? "#FEF2F2" : "#fff",
+                      color: form.content_restrictions.includes(r) ? "#DC2626" : "#555" }}>
                     {r}
                   </button>
                 ))}
@@ -907,7 +909,7 @@ export default function OnboardingPage() {
                 style={{
                   border: "2px dashed #E0DED8", borderRadius: 12, padding: "20px",
                   textAlign: "center", cursor: brandAssets.length < 20 ? "pointer" : "default",
-                  background: "#FAFAF8", marginBottom: brandAssets.length > 0 ? 14 : 0,
+                  background: "#F5F7FA", marginBottom: brandAssets.length > 0 ? 14 : 0,
                 }}>
                 <div style={{ fontSize: 28, marginBottom: 8 }}>🖼</div>
                 <div style={{ fontSize: 14, color: "#555" }}>
@@ -993,7 +995,7 @@ export default function OnboardingPage() {
               <p style={hint}>Необязательно — можно указать 1–5 аккаунтов</p>
             </div>
 
-            {error && <p style={{ color: "#A32D2D", fontSize: 13 }}>{error}</p>}
+            {error && <p style={{ color: "#DC2626", fontSize: 13 }}>{error}</p>}
 
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setStep(3)} style={btnBack}>← Назад</button>
@@ -1031,11 +1033,11 @@ export default function OnboardingPage() {
                 </div>
               ))
             )}
-            {error && <p style={{ color: "#A32D2D", fontSize: 13 }}>{error}</p>}
+            {error && <p style={{ color: "#DC2626", fontSize: 13 }}>{error}</p>}
             <button onClick={launch} disabled={launching}
-              style={{ padding: 15, background: launching ? "#888" : "#0D1B2A", color: "#fff",
+              style={{ padding: 15, background: launching ? "#9CA3AF" : "#3478F6", color: "#fff",
                 border: "none", borderRadius: 12, cursor: "pointer", fontSize: 16, fontWeight: 700 }}>
-              {launching ? "Отправляю..." : "🚀 Сгенерировать стратегию"}
+              {launching ? "Отправляю..." : "Сгенерировать стратегию →"}
             </button>
           </div>
         )}
@@ -1108,7 +1110,7 @@ export default function OnboardingPage() {
                       </div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                         {ps.content_pillars.map((pillar, i) => (
-                          <span key={i} style={{ padding: "5px 12px", background: "#F1EFE8", borderRadius: 20, fontSize: 13, color: "#444" }}>
+                          <span key={i} style={{ padding: "5px 12px", background: "#F5F7FA", borderRadius: 20, fontSize: 13, color: "#444" }}>
                             {pillar}
                           </span>
                         ))}
@@ -1131,7 +1133,7 @@ export default function OnboardingPage() {
                       />
                       <div style={{ display: "flex", gap: 8 }}>
                         <button onClick={() => { setEditingPlatform(null); setEditMessage(""); }}
-                          style={{ flex: 1, padding: "10px 16px", background: "#F1EFE8", border: "none",
+                          style={{ flex: 1, padding: "10px 16px", background: "#F5F7FA", border: "none",
                             borderRadius: 10, cursor: "pointer", fontSize: 14, color: "#444" }}>
                           Отмена
                         </button>
@@ -1156,10 +1158,10 @@ export default function OnboardingPage() {
               </div>
             ))}
 
-            {error && <p style={{ color: "#A32D2D", fontSize: 13 }}>{error}</p>}
+            {error && <p style={{ color: "#DC2626", fontSize: 13 }}>{error}</p>}
 
             <button onClick={approveStrategy}
-              style={{ padding: 15, background: "#0D1B2A", color: "#fff",
+              style={{ padding: 15, background: "#3478F6", color: "#fff",
                 border: "none", borderRadius: 12, cursor: "pointer", fontSize: 16, fontWeight: 700 }}>
               Согласовать стратегию →
             </button>
@@ -1182,7 +1184,7 @@ export default function OnboardingPage() {
                 {strategy.map(ps => (
                   <button key={ps.platform} onClick={() => setSelectedPlatform(ps.platform)}
                     style={{ padding: "8px 20px", borderRadius: 20,
-                      border: `1.5px solid ${selectedPlatform === ps.platform ? "#0D1B2A" : "#E0DED8"}`,
+                      border: `1.5px solid ${selectedPlatform === ps.platform ? "#0D1B2A" : "#E5E7EB"}`,
                       background: selectedPlatform === ps.platform ? "#0D1B2A" : "#fff",
                       color: selectedPlatform === ps.platform ? "#fff" : "#555",
                       cursor: "pointer", fontSize: 14, fontWeight: selectedPlatform === ps.platform ? 600 : 400 }}>
@@ -1213,7 +1215,7 @@ export default function OnboardingPage() {
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                         <span style={{ fontWeight: 600, fontSize: 14, color: "#0D1B2A" }}>{rubric.name}</span>
                         <span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 11,
-                          background: RUBRIC_TYPE_COLORS[rubric.type] || "#F1EFE8", color: "#555" }}>
+                          background: RUBRIC_TYPE_COLORS[rubric.type] || "#F5F7FA", color: "#555" }}>
                           {RUBRIC_TYPE_LABELS[rubric.type] || rubric.type}
                         </span>
                       </div>
@@ -1247,7 +1249,7 @@ export default function OnboardingPage() {
                           <div style={{ fontSize: 11, fontWeight: 600, color: "#888", marginBottom: 4 }}>СТРУКТУРА ПОСТА</div>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                             {rubric.structure.map((s, j) => (
-                              <span key={j} style={{ padding: "3px 10px", background: "#F1EFE8", borderRadius: 12, fontSize: 12, color: "#555" }}>
+                              <span key={j} style={{ padding: "3px 10px", background: "#F5F7FA", borderRadius: 12, fontSize: 12, color: "#555" }}>
                                 {s}
                               </span>
                             ))}
@@ -1275,14 +1277,14 @@ export default function OnboardingPage() {
                     <div key={i} style={{
                       alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
                       padding: "8px 14px", borderRadius: 12, fontSize: 14, maxWidth: "85%",
-                      background: msg.role === "user" ? "#0D1B2A" : "#F1EFE8",
+                      background: msg.role === "user" ? "#3478F6" : "#F5F7FA",
                       color: msg.role === "user" ? "#fff" : "#333",
                     }}>
                       {msg.text}
                     </div>
                   ))}
                   {rubricsLoading && (
-                    <div style={{ alignSelf: "flex-start", padding: "8px 14px", borderRadius: 12, background: "#F1EFE8", display: "flex", gap: 6 }}>
+                    <div style={{ alignSelf: "flex-start", padding: "8px 14px", borderRadius: 12, background: "#F5F7FA", display: "flex", gap: 6 }}>
                       {[0, 1, 2].map(i => (
                         <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: "#888",
                           animation: `dot-pulse 1.2s ${i * 0.3}s infinite` }} />
@@ -1303,19 +1305,20 @@ export default function OnboardingPage() {
                   disabled={rubricsLoading}
                 />
                 <button onClick={chatRubrics} disabled={!rubricsChatInput.trim() || rubricsLoading}
-                  style={{ padding: "10px 18px", background: !rubricsChatInput.trim() || rubricsLoading ? "#E0DED8" : "#0D1B2A",
-                    border: "none", borderRadius: 10, cursor: "pointer", color: "#fff", fontSize: 14, fontWeight: 600 }}>
+                  style={{ padding: "10px 18px", border: "none", borderRadius: 10,
+                    cursor: "pointer", color: "#fff", fontSize: 14, fontWeight: 600,
+                    background: !rubricsChatInput.trim() || rubricsLoading ? "#D1D5DB" : "#3478F6" }}>
                   →
                 </button>
               </div>
             </div>
 
-            {error && <p style={{ color: "#A32D2D", fontSize: 13 }}>{error}</p>}
+            {error && <p style={{ color: "#DC2626", fontSize: 13 }}>{error}</p>}
 
             <button onClick={approveRubrics} disabled={launching}
-              style={{ padding: 15, background: launching ? "#888" : "#0D1B2A", color: "#fff",
+              style={{ padding: 15, background: launching ? "#9CA3AF" : "#3478F6", color: "#fff",
                 border: "none", borderRadius: 12, cursor: "pointer", fontSize: 16, fontWeight: 700 }}>
-              {launching ? "Запускаю..." : "✅ Согласовать рубрики"}
+              {launching ? "Запускаю..." : "Согласовать рубрики →"}
             </button>
           </div>
         )}
@@ -1367,7 +1370,7 @@ export default function OnboardingPage() {
             </div>
 
             <button onClick={() => router.push("/content")}
-              style={{ padding: "14px 40px", background: "#0D1B2A", color: "#fff", border: "none",
+              style={{ padding: "14px 40px", background: "#3478F6", color: "#fff", border: "none",
                 borderRadius: 12, cursor: "pointer", fontSize: 16, fontWeight: 700, marginBottom: 12 }}>
               Перейти в Контент-план →
             </button>
