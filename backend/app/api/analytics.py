@@ -158,8 +158,9 @@ class TGCodeIn(BaseModel):
     phone_code_hash: str
 
 
-def _tg_send_code_sync(api_id: int, api_hash: str, phone: str) -> str:
-    """Отправляет код и возвращает phone_code_hash. Клиент не сохраняется."""
+def _tg_send_code_sync(api_id: int, api_hash: str, phone: str) -> tuple[str, str]:
+    """Отправляет код, возвращает (phone_code_hash, session_str).
+    Сессию нужно передать в sign_in — иначе Telegram отклонит хэш как невалидный."""
     import asyncio as _aio
     from telethon import TelegramClient
     from telethon.sessions import StringSession
@@ -171,14 +172,15 @@ def _tg_send_code_sync(api_id: int, api_hash: str, phone: str) -> str:
         client = TelegramClient(StringSession(), api_id, api_hash)
         await client.connect()
         sent = await client.send_code_request(phone)
+        session_str = client.session.save()
         await client.disconnect()
-        return sent.phone_code_hash
+        return sent.phone_code_hash, session_str
 
     return loop.run_until_complete(_do())
 
 
-def _tg_sign_in_sync(api_id: int, api_hash: str, phone: str, code: str, phone_code_hash: str) -> str:
-    """Создаёт новый клиент и выполняет sign_in — stateless, работает с любой репликой."""
+def _tg_sign_in_sync(api_id: int, api_hash: str, phone: str, code: str, phone_code_hash: str, session_str: str = "") -> str:
+    """Выполняет sign_in, переиспользуя сессию от send_code (тот же auth_key)."""
     import asyncio as _aio
     from telethon import TelegramClient
     from telethon.sessions import StringSession
@@ -187,12 +189,12 @@ def _tg_sign_in_sync(api_id: int, api_hash: str, phone: str, code: str, phone_co
     _aio.set_event_loop(loop)
 
     async def _do():
-        client = TelegramClient(StringSession(), api_id, api_hash)
+        client = TelegramClient(StringSession(session_str or None), api_id, api_hash)
         await client.connect()
         await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
-        session_str = client.session.save()
+        new_session = client.session.save()
         await client.disconnect()
-        return session_str
+        return new_session
 
     return loop.run_until_complete(_do())
 
@@ -218,10 +220,10 @@ async def tg_send_code(
             "Добавь переменные окружения в Railway (получить на my.telegram.org → API development tools)."
         )
     try:
-        phone_code_hash = await asyncio.to_thread(
+        phone_code_hash, temp_session = await asyncio.to_thread(
             _tg_send_code_sync, api_id, api_hash, req.phone
         )
-        _pending_tg_meta[business_id] = {"api_id": api_id, "api_hash": api_hash}
+        _pending_tg_meta[business_id] = {"api_id": api_id, "api_hash": api_hash, "session": temp_session}
         return {"phone_code_hash": phone_code_hash, "status": "code_sent"}
     except Exception as e:
         raise HTTPException(400, f"Ошибка отправки кода: {str(e)}")
@@ -243,9 +245,10 @@ async def tg_sign_in(
     api_hash = settings.TG_API_HASH or ""
     if not api_id or not api_hash:
         raise HTTPException(400, "TG_API_ID / TG_API_HASH не настроены на сервере.")
+    temp_session = (_pending_tg_meta.get(business_id) or {}).get("session", "")
     try:
         session_str = await asyncio.to_thread(
-            _tg_sign_in_sync, api_id, api_hash, req.phone, req.code, req.phone_code_hash
+            _tg_sign_in_sync, api_id, api_hash, req.phone, req.code, req.phone_code_hash, temp_session
         )
         _pending_tg_meta.pop(business_id, None)
         conn.tg_api_id = str(api_id)
