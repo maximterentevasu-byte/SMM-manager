@@ -479,6 +479,7 @@ class ImageIn(BaseModel):
     prompt: Optional[str] = None
     prompt_ru: Optional[str] = None
     aspect_ratio: str = "1:1"
+    url: Optional[str] = None
 
 
 @router.post("/{business_id}/generate-image")
@@ -515,6 +516,15 @@ async def generate_image(
     except Exception:
         pass
 
+    # Получаем контент внешней ссылки если есть
+    url_context = ""
+    if body.url:
+        url_text = await _fetch_url_text(body.url, max_chars=1000)
+        if url_text and not url_text.startswith("["):
+            url_context = f"\n\nReference from URL: {url_text[:500]}"
+        elif url_text and url_text.startswith("["):
+            url_context = f"\n\nURL reference: {url_text}"
+
     prompt = body.prompt
 
     if body.prompt_ru:
@@ -524,11 +534,12 @@ async def generate_image(
             "Preserve all visual details, style, mood, and compositional elements exactly. "
             "If the prompt references brand style assets by name (e.g. 'логобук', 'брендбук'), "
             "incorporate their visual characteristics from the brand context provided. "
+            "If a URL reference is provided, use its content to inform the visual style. "
             "Return ONLY the English translation/prompt, no explanations or comments."
         )
         try:
             prompt, _ = await asyncio.wait_for(
-                _generate_text(translation_system, body.prompt_ru + brand_assets_context, 400),
+                _generate_text(translation_system, body.prompt_ru + brand_assets_context + url_context, 400),
                 timeout=10.0,
             )
         except Exception:

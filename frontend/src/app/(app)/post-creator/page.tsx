@@ -289,7 +289,7 @@ function UploadCarousel({ slots, carouselIdx, setCarouselIdx }: {
 
 function AiImagePreview({
   aiImageB64, imageHistory, currentImageIdx, setCurrentImageIdx,
-  loadingImage, inlineEditCount, showInlineEdit, setShowInlineEdit,
+  loadingImage, elapsed, inlineEditCount, showInlineEdit, setShowInlineEdit,
   inlineEditInstruction, setInlineEditInstruction,
   onInlineEdit, brandShortcutsNode,
 }: {
@@ -298,6 +298,7 @@ function AiImagePreview({
   currentImageIdx: number;
   setCurrentImageIdx: (i: number) => void;
   loadingImage: boolean;
+  elapsed?: number;
   inlineEditCount: number;
   showInlineEdit: boolean;
   setShowInlineEdit: (v: boolean) => void;
@@ -307,7 +308,12 @@ function AiImagePreview({
   brandShortcutsNode: React.ReactNode;
 }) {
   if (loadingImage && !aiImageB64) {
-    return <div style={{ marginTop: 20, padding: "28px", background: "#F8F7F4", borderRadius: 14, textAlign: "center", color: "#888" }}>⏳ Обрабатываю изображение...</div>;
+    return (
+      <div style={{ marginTop: 20, padding: "28px", background: "#F8F7F4", borderRadius: 14, textAlign: "center", color: "#888" }}>
+        <div>⏳ Генерирую изображение...</div>
+        {(elapsed ?? 0) > 0 && <div style={{ fontSize: 12, color: "#aaa", marginTop: 6 }}>Прошло: {elapsed}с — обычно занимает 20–60 секунд</div>}
+      </div>
+    );
   }
   if (!aiImageB64) return null;
 
@@ -318,7 +324,7 @@ function AiImagePreview({
           <span style={{ fontSize: 11, color: "#6B46C1", background: "#F0EBF8", borderRadius: 12, padding: "2px 9px", fontWeight: 600 }}>{imageHistory.length} версий</span>
         </div>
       )}
-      <img src={`data:image/png;base64,${aiImageB64}`} alt="generated" style={{ width: 280, height: 280, objectFit: "cover", borderRadius: 14, border: "1px solid #EAE8E2", display: "block" }} />
+      <img src={`data:image/png;base64,${aiImageB64}`} alt="generated" style={{ width: "100%", height: "auto", borderRadius: 14, border: "1px solid #EAE8E2", display: "block" }} />
       {imageHistory.length > 1 && (
         <HistoryNav
           current={currentImageIdx} total={imageHistory.length}
@@ -378,7 +384,10 @@ export default function PostCreatorPage() {
 
   // ── Block 3a: Prompt ──────────────────────────────────────────────────────
   const [imagePrompt, setImagePrompt] = useState("");
+  const [imagePromptUrl, setImagePromptUrl] = useState("");
   const [imageGenCount, setImageGenCount] = useState(0);
+  const [imgElapsed, setImgElapsed] = useState(0);
+  const [imageAspectRatio, setImageAspectRatio] = useState<"9:16" | "1:1" | "16:9">("9:16");
 
   // ── Block 3b: Upload Grid ─────────────────────────────────────────────────
   const [uploadSlots, setUploadSlots] = useState<Array<UploadSlot | null>>(Array(MAX_UPLOAD_SLOTS).fill(null));
@@ -427,6 +436,7 @@ export default function PostCreatorPage() {
 
   const multiFileRef = useRef<HTMLInputElement>(null);
   const editSlotInputRef = useRef<HTMLInputElement>(null);
+  const [isDraggingIdea, setIsDraggingIdea] = useState(false);
 
   // Derived
   const aiImageB64 = currentImageIdx >= 0 ? imageHistory[currentImageIdx] : "";
@@ -507,6 +517,16 @@ export default function PostCreatorPage() {
   const removeIdeaFile = (idx: number) => {
     setIdeaFiles(ideaFiles.filter((_, i) => i !== idx));
     setIdeaFilePreviews(ideaFilePreviews.filter((_, i) => i !== idx));
+  };
+
+  const handleIdeaDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingIdea(false);
+    const dropped = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
+    if (!dropped.length) return;
+    const all = [...ideaFiles, ...dropped].slice(0, MAX_FILES);
+    setIdeaFiles(all);
+    setIdeaFilePreviews(all.map(f => URL.createObjectURL(f)));
   };
 
   const onEditSlotFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -761,10 +781,13 @@ export default function PostCreatorPage() {
   const generateImage = async () => {
     if (!imagePrompt.trim() || imageGenCount >= MAX_IMAGE_ATTEMPTS) return;
     setLoadingImage(true);
+    setImgElapsed(0);
+    const timer = setInterval(() => setImgElapsed(s => s + 1), 1000);
     try {
       const { data: taskData } = await api.post(`/post-creator/${businessId}/generate-image`, {
         prompt_ru: imagePrompt.trim(),
-        aspect_ratio: "1:1",
+        aspect_ratio: imageAspectRatio,
+        url: imagePromptUrl.trim() || undefined,
       });
       const b64 = await pollImageTask(taskData.task_id);
       const newHistory = [...imageHistory, b64];
@@ -773,7 +796,7 @@ export default function PostCreatorPage() {
     } catch (e: any) {
       const detail = e?.response?.data?.detail || e?.message || "попробуй изменить промт";
       alert("Ошибка генерации: " + (typeof detail === "string" ? detail : JSON.stringify(detail)));
-    } finally { setLoadingImage(false); }
+    } finally { setLoadingImage(false); clearInterval(timer); }
   };
 
   const pollImageTask = async (taskId: string): Promise<string> => {
@@ -882,13 +905,21 @@ export default function PostCreatorPage() {
       const ok = results.filter(r => r.status === "published");
       const fail = results.filter(r => r.status === "error" || r.status === "no_connection");
       const warns = results.filter(r => r.warning).map(r => r.warning as string);
+      const isScheduled = !publishNow;
       if (ok.length > 0 && fail.length === 0 && warns.length === 0) {
-        setPublishMsg("✓ Опубликовано в " + ok.map(r => r.platform).join(", ") + "!");
+        setPublishMsg(isScheduled
+          ? `✓ Добавлен в контент план на ${publishDate} ${publishTime}`
+          : `✓ Пост опубликован`
+        );
         clearDraft(businessId); resetForm();
       } else if (ok.length > 0 && fail.length === 0) {
-        setPublishMsg("✓ Опубликовано. ⚠ " + warns.join(" ")); clearDraft(businessId);
+        setPublishMsg(isScheduled
+          ? `✓ Добавлен в контент план. ⚠ ${warns.join(" ")}`
+          : `✓ Пост опубликован. ⚠ ${warns.join(" ")}`
+        );
+        clearDraft(businessId);
       } else if (ok.length > 0) {
-        setPublishMsg(`✓ ${ok.map(r => r.platform).join(", ")} — OK. ⚠ ${fail.map(r => `${r.platform}: ${r.error}`).join("; ")}`);
+        setPublishMsg(`✓ ${ok.map(r => r.platform).join(", ")} — ОК. ⚠ ${fail.map(r => `${r.platform}: ${r.error}`).join("; ")}`);
       } else {
         setPublishMsg("⚠ " + fail.map(r => `${r.platform}: ${r.error}`).join("; "));
       }
@@ -926,10 +957,18 @@ export default function PostCreatorPage() {
               style={{ width: "100%", padding: "10px 14px", border: "1px solid #E0DED8", borderRadius: 10, fontSize: 13, background: "#FAFAF8", outline: "none", boxSizing: "border-box" }} />
           </div>
           <Textarea value={idea} onChange={setIdea} placeholder="Например: открываем новую точку 20 мая, адрес Ленина 15, скидка 20%..." rows={4} />
-          <div style={{ marginTop: 12 }}>
-            <button onClick={() => multiFileRef.current?.click()} style={{ background: "none", border: "1px solid #E0DED8", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, color: "#666", display: "inline-flex", alignItems: "center", gap: 6 }}>
-              📎 {ideaFiles.length > 0 ? `Прикреплено фото: ${ideaFiles.length}` : "Прикрепить фото (до 10)"}
-            </button>
+          <div
+            style={{ marginTop: 12, border: `2px dashed ${isDraggingIdea ? "#3478F6" : "#E0DED8"}`, borderRadius: 10, padding: "12px 14px", background: isDraggingIdea ? "#EFF6FF" : "transparent", transition: "border-color 0.15s, background 0.15s" }}
+            onDragOver={e => { e.preventDefault(); setIsDraggingIdea(true); }}
+            onDragLeave={() => setIsDraggingIdea(false)}
+            onDrop={handleIdeaDrop}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <button onClick={() => multiFileRef.current?.click()} style={{ background: "none", border: "1px solid #E0DED8", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, color: "#666", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                📎 {ideaFiles.length > 0 ? `Прикреплено фото: ${ideaFiles.length}` : "Прикрепить фото (до 10)"}
+              </button>
+              <span style={{ fontSize: 12, color: "#aaa" }}>или перетащите изображения сюда</span>
+            </div>
             <input ref={multiFileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onMultiFileChange} />
             <div style={{ marginTop: 6, fontSize: 12, color: "#D97706", fontWeight: 600 }}>
               !Фото используется только для описания идеи поста (не используется для генерации фото к посту)
@@ -1000,9 +1039,32 @@ export default function PostCreatorPage() {
             <SectionTitle n={3} label="Промт для изображения" done={!!imagePrompt.trim()} />
             <p style={{ color: "#888", fontSize: 13, margin: "0 0 14px" }}>Напишите промт — опишите что должно быть на изображении.</p>
             <BrandContextPanel brand={brandContext} onInsert={appendToPrompt} />
+            {postText.trim() && (
+              <div style={{ marginBottom: 10 }}>
+                <button onClick={() => appendToPrompt(postText.slice(0, 500))}
+                  style={{ padding: "5px 14px", background: "#EFF6FF", border: "1.5px solid #BFDBFE", borderRadius: 20, color: "#1D4ED8", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
+                  + Текст поста
+                </button>
+              </div>
+            )}
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, color: "#888", display: "block", marginBottom: 6 }}>🔗 Ссылка на референс (ИИ попробует прочитать и учесть при генерации)</label>
+              <input type="text" value={imagePromptUrl} onChange={e => setImagePromptUrl(e.target.value)}
+                placeholder="https://example.com/image или страница с примером стиля..."
+                style={{ width: "100%", padding: "10px 14px", border: "1px solid #E0DED8", borderRadius: 10, fontSize: 13, background: "#FAFAF8", outline: "none", boxSizing: "border-box" }} />
+            </div>
             <Textarea value={imagePrompt} onChange={setImagePrompt} placeholder="A professional product photo of a coffee cup on a wooden table, warm lighting, bokeh background, photorealistic..." rows={4} />
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, flexWrap: "wrap" }}>
-              {imagePrompt.trim() && <Btn label={loadingImage ? "Генерирую..." : "🖼 Сгенерировать изображение"} onClick={generateImage} disabled={loadingImage || imageGenCount >= MAX_IMAGE_ATTEMPTS} loading={loadingImage} color="#4680C2" />}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, color: "#888", fontWeight: 600 }}>Формат:</span>
+              {(["9:16", "1:1", "16:9"] as const).map(r => (
+                <button key={r} onClick={() => setImageAspectRatio(r)}
+                  style={{ padding: "4px 12px", borderRadius: 20, border: `1.5px solid ${imageAspectRatio === r ? "#4680C2" : "#E0DED8"}`, background: imageAspectRatio === r ? "#EFF6FF" : "#fff", color: imageAspectRatio === r ? "#4680C2" : "#888", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                  {r}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10, flexWrap: "wrap" }}>
+              {imagePrompt.trim() && <Btn label={loadingImage ? `Генерирую... ${imgElapsed}с` : "🖼 Сгенерировать изображение"} onClick={generateImage} disabled={loadingImage || imageGenCount >= MAX_IMAGE_ATTEMPTS} loading={loadingImage} color="#4680C2" />}
               {imageGenCount > 0 && <AttemptBadge current={imageGenCount} max={MAX_IMAGE_ATTEMPTS} label="Генераций" />}
             </div>
             {imageGenCount >= MAX_IMAGE_ATTEMPTS && <div style={{ marginTop: 8, fontSize: 12, color: "#DC2626" }}>Достигнут лимит генераций ({MAX_IMAGE_ATTEMPTS}).</div>}
@@ -1014,6 +1076,7 @@ export default function PostCreatorPage() {
               currentImageIdx={currentImageIdx}
               setCurrentImageIdx={setCurrentImageIdx}
               loadingImage={loadingImage}
+              elapsed={imgElapsed}
               inlineEditCount={inlineEditCount}
               showInlineEdit={showInlineEdit}
               setShowInlineEdit={setShowInlineEdit}
@@ -1110,6 +1173,7 @@ export default function PostCreatorPage() {
               currentImageIdx={currentImageIdx}
               setCurrentImageIdx={setCurrentImageIdx}
               loadingImage={loadingImage}
+              elapsed={imgElapsed}
               inlineEditCount={inlineEditCount}
               showInlineEdit={showInlineEdit}
               setShowInlineEdit={setShowInlineEdit}
@@ -1330,9 +1394,16 @@ export default function PostCreatorPage() {
               {publishing ? "⏳ Публикую..." : "🚀 Отправить на публикацию"}
             </button>
             {publishMsg && (
-              <div style={{ marginTop: 14, padding: "14px 20px", borderRadius: 12, background: publishMsg.startsWith("✓") ? "#E1F5EE" : "#FFF3CD", color: publishMsg.startsWith("✓") ? "#0F6E56" : "#856404", fontSize: 14, fontWeight: 600, textAlign: "center" }}>
-                {publishMsg}
-                {publishMsg.startsWith("✓") && <a href="/content" style={{ marginLeft: 12, color: "#0F6E56", textDecoration: "underline", fontWeight: 700 }}>Открыть контент-план →</a>}
+              <div style={{ marginTop: 14, padding: "18px 24px", borderRadius: 14, textAlign: "center",
+                background: publishMsg.startsWith("✓") ? "#0F6E56" : "#FFF3CD",
+                color: publishMsg.startsWith("✓") ? "#fff" : "#856404",
+                fontSize: 15, fontWeight: 700, boxShadow: publishMsg.startsWith("✓") ? "0 4px 20px rgba(15,110,86,0.25)" : "none" }}>
+                <div>{publishMsg}</div>
+                {publishMsg.startsWith("✓") && (
+                  <a href="/content" style={{ display: "inline-block", marginTop: 10, color: "#fff", textDecoration: "underline", fontSize: 13, fontWeight: 600, opacity: 0.9 }}>
+                    Открыть контент-план →
+                  </a>
+                )}
               </div>
             )}
           </div>

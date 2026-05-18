@@ -440,6 +440,9 @@ export default function ContentPage() {
   const [quickPostPlatforms, setQuickPostPlatforms] = useState<Array<{platform: string; page_name: string}>>([]);
 
   const [brandAssetsLabels, setBrandAssetsLabels] = useState<Array<{name: string; label: string}>>([]);
+  const [modalPromptUrl, setModalPromptUrl] = useState("");
+  const [modalImgElapsed, setModalImgElapsed] = useState(0);
+  const [modalAspectRatio, setModalAspectRatio] = useState<"9:16" | "1:1" | "16:9">("9:16");
 
   // Events
   const [calEvents, setCalEvents] = useState<CalEvent[]>([]);
@@ -893,8 +896,14 @@ export default function ContentPage() {
   const generateImageModal = async () => {
     if (!expanded || !modalGenPrompt.trim() || modalImageGenCount >= 3) return;
     setEditingModalImg(true);
+    setModalImgElapsed(0);
+    const timer = setInterval(() => setModalImgElapsed(s => s + 1), 1000);
     try {
-      const { data } = await api.post(`/content/slot/${expanded.id}/generate-image`, { prompt: modalGenPrompt });
+      const { data } = await api.post(`/content/slot/${expanded.id}/generate-image`, {
+        prompt: modalGenPrompt,
+        url: modalPromptUrl.trim() || undefined,
+        aspect_ratio: modalAspectRatio,
+      });
       const b64 = data.image_base64 || null;
       if (b64) {
         const newH = [...modalImageHistory, b64];
@@ -902,7 +911,7 @@ export default function ContentPage() {
         setModalImageGenCount(c => c + 1);
       }
     } catch (e: any) { alert(e?.response?.data?.detail || "Ошибка генерации"); }
-    finally { setEditingModalImg(false); }
+    finally { setEditingModalImg(false); clearInterval(timer); }
   };
 
   const editImageFromModalSlots = async () => {
@@ -1841,24 +1850,52 @@ export default function ContentPage() {
                           </div>
                         </div>
                       )}
+                      {expanded?.post_text && (
+                        <div style={{ marginBottom: 8 }}>
+                          <button onClick={() => setModalGenPrompt(p => p ? `${p}\n${expanded.post_text!.slice(0, 500)}` : expanded.post_text!.slice(0, 500))}
+                            style={{ padding: "4px 12px", background: "#EFF6FF", border: "1.5px solid #BFDBFE", borderRadius: 16, color: "#1D4ED8", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
+                            + Текст поста
+                          </button>
+                        </div>
+                      )}
+                      <div style={{ marginBottom: 8 }}>
+                        <input type="text" value={modalPromptUrl} onChange={e => setModalPromptUrl(e.target.value)}
+                          placeholder="🔗 Ссылка на референс (стиль, пример изображения)..."
+                          style={{ width: "100%", padding: "8px 12px", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12, outline: "none", boxSizing: "border-box", background: "#FAFAF8" }} />
+                      </div>
                       <textarea value={modalGenPrompt} onChange={e => setModalGenPrompt(e.target.value)}
                         placeholder="Опишите желаемое изображение на русском или английском..."
                         style={{ ...inp13, minHeight: 80 }}
                         onFocus={e => (e.target.style.borderColor = "#3478F6")}
                         onBlur={e => (e.target.style.borderColor = "#E5E7EB")} />
-                      <p style={{ margin: "6px 0 12px", fontSize: 11, color: "#aaa" }}>Можно писать на русском — модель понимает оба языка</p>
+                      <p style={{ margin: "6px 0 10px", fontSize: 11, color: "#aaa" }}>Можно писать на русском — модель понимает оба языка</p>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+                        <span style={{ fontSize: 11, color: "#888", marginRight: 2 }}>Формат:</span>
+                        {(["9:16", "1:1", "16:9"] as const).map(r => (
+                          <button key={r} onClick={() => setModalAspectRatio(r)}
+                            style={{ padding: "4px 10px", borderRadius: 6, border: `1.5px solid ${modalAspectRatio === r ? "#3478F6" : "#E5E7EB"}`,
+                              background: modalAspectRatio === r ? "#EAF4FF" : "#fff",
+                              color: modalAspectRatio === r ? "#3478F6" : "#666",
+                              fontSize: 11, fontWeight: modalAspectRatio === r ? 700 : 400, cursor: "pointer" }}>
+                            {r}
+                          </button>
+                        ))}
+                      </div>
                       <button onClick={generateImageModal}
                         disabled={editingModalImg || !modalGenPrompt.trim() || modalImageGenCount >= 3}
                         style={{ padding: "9px 20px",
                           background: editingModalImg || !modalGenPrompt.trim() || modalImageGenCount >= 3 ? "#ccc" : "#3478F6",
                           color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
-                        {editingModalImg ? "Генерирую..." : modalAiImageB64 ? "🔄 Перегенерировать" : "✨ Сгенерировать"}
+                        {editingModalImg ? `Генерирую... ${modalImgElapsed}с` : modalAiImageB64 ? "🔄 Перегенерировать" : "✨ Сгенерировать"}
                       </button>
                       {modalImageGenCount >= 3 && <div style={{ marginTop: 6, fontSize: 12, color: "#DC2626" }}>Достигнут лимит генераций (3).</div>}
 
                       {/* Результат + история + инлайн правки */}
                       {(editingModalImg && !modalAiImageB64) && (
-                        <div style={{ marginTop: 16, padding: 20, background: "#fff", borderRadius: 12, textAlign: "center", color: "#888" }}>⏳ Генерирую изображение...</div>
+                        <div style={{ marginTop: 16, padding: 20, background: "#fff", borderRadius: 12, textAlign: "center", color: "#888" }}>
+                          <div>⏳ Генерирую изображение...</div>
+                          {modalImgElapsed > 0 && <div style={{ fontSize: 11, color: "#aaa", marginTop: 4 }}>Прошло: {modalImgElapsed}с — обычно 20–60 секунд</div>}
+                        </div>
                       )}
                       {modalAiImageB64 && (
                         <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #E8E6E0" }}>

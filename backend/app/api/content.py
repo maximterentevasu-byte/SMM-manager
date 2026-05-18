@@ -38,6 +38,8 @@ class ProvideInfoRequest(BaseModel):
 
 class GenerateImageRequest(BaseModel):
     prompt: Optional[str] = None
+    url: Optional[str] = None
+    aspect_ratio: str = "9:16"
 
 
 @router.post("/{business_id}/generate-plan")
@@ -311,6 +313,16 @@ async def generate_image_for_slot(
         else:
             raise HTTPException(400, "Нет данных для генерации промта")
 
+    # Добавляем контент из URL-референса если передан
+    if body.url:
+        try:
+            from app.api.post_creator import _fetch_url_text
+            url_text = await _fetch_url_text(body.url, max_chars=500)
+            if url_text and not url_text.startswith("["):
+                prompt = f"{prompt}. Visual reference context: {url_text[:300]}"
+        except Exception:
+            pass
+
     # Сохраняем обновлённый промт
     if prompt != slot.image_prompt:
         slot.image_prompt = prompt
@@ -318,7 +330,7 @@ async def generate_image_for_slot(
 
     from app.services.gemini_image import generate_image
     try:
-        b64 = await generate_image(prompt, "1:1")
+        b64 = await generate_image(prompt, body.aspect_ratio or "9:16")
     except ValueError as e:
         raise HTTPException(400, f"Ошибка генерации: {str(e)}")
 
