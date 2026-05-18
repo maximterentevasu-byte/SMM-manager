@@ -23,6 +23,7 @@ _MIGRATIONS = [
     "ALTER TABLE slot_notifications ADD COLUMN IF NOT EXISTS notification_type VARCHAR(50) DEFAULT 'needs_info'",
     "ALTER TABLE content_slots ADD COLUMN IF NOT EXISTS event_id UUID REFERENCES events(id) ON DELETE SET NULL",
     "ALTER TABLE content_slots ADD COLUMN IF NOT EXISTS event_post_type VARCHAR(50)",
+    "ALTER TABLE email_verifications ADD COLUMN IF NOT EXISTS purpose VARCHAR(20) DEFAULT 'register'",
 ]
 
 

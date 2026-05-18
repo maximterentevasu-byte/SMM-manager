@@ -3,57 +3,49 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 
-type Step = "form" | "verify";
+type Step = "email" | "code";
 
-export default function RegisterPage() {
+export default function ForgotPasswordPage() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("form");
+  const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPass, setShowPass] = useState(false);
   const [code, setCode] = useState(["", "", "", "", "", ""]);
+  const [newPassword, setNewPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const codeRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  const register = async () => {
-    if (!email || !password) { setError("Заполните все поля"); return; }
-    if (password.length < 8) { setError("Пароль минимум 8 символов"); return; }
+  const sendCode = async () => {
+    if (!email) { setError("Введите email"); return; }
     setLoading(true);
     setError("");
     try {
-      await api.post("/auth/register", { email, password });
-      setStep("verify");
-    } catch (e: any) {
-      setError(e.response?.data?.detail || "Ошибка регистрации");
+      await api.post("/auth/forgot-password", { email });
+      setStep("code");
+    } catch {
+      setError("Ошибка отправки. Попробуйте снова.");
     } finally {
       setLoading(false);
     }
   };
 
-  const verify = async () => {
+  const resetPassword = async () => {
     const fullCode = code.join("");
     if (fullCode.length < 6) { setError("Введите 6-значный код"); return; }
+    if (newPassword.length < 8) { setError("Пароль минимум 8 символов"); return; }
     setLoading(true);
     setError("");
     try {
-      const { data } = await api.post("/auth/verify-email", { email, code: fullCode });
-      localStorage.setItem("token", data.access_token);
-      router.push("/plans");
+      await api.post("/auth/reset-password", { email, code: fullCode, new_password: newPassword });
+      setSuccess("Пароль успешно изменён");
+      setTimeout(() => router.push("/login"), 2000);
     } catch (e: any) {
-      setError(e.response?.data?.detail || "Неверный код");
+      setError(e.response?.data?.detail || "Неверный код или ошибка");
     } finally {
       setLoading(false);
     }
-  };
-
-  const resend = async () => {
-    setError("");
-    try {
-      await api.post("/auth/register", { email, password });
-      setCode(["", "", "", "", "", ""]);
-      codeRefs.current[0]?.focus();
-    } catch {}
   };
 
   const handleCodeInput = (i: number, val: string) => {
@@ -65,10 +57,8 @@ export default function RegisterPage() {
   };
 
   const handleCodeKey = (i: number, e: React.KeyboardEvent) => {
-    if (e.key === "Backspace" && !code[i] && i > 0) {
-      codeRefs.current[i - 1]?.focus();
-    }
-    if (e.key === "Enter") verify();
+    if (e.key === "Backspace" && !code[i] && i > 0) codeRefs.current[i - 1]?.focus();
+    if (e.key === "Enter") resetPassword();
   };
 
   const inp: React.CSSProperties = {
@@ -77,7 +67,7 @@ export default function RegisterPage() {
     boxSizing: "border-box", background: "#fff", color: "#1F2937",
   };
 
-  const passStrength = password.length >= 12 ? 4 : password.length >= 10 ? 3 : password.length >= 8 ? 2 : password.length > 0 ? 1 : 0;
+  const passStrength = newPassword.length >= 12 ? 4 : newPassword.length >= 10 ? 3 : newPassword.length >= 8 ? 2 : newPassword.length > 0 ? 1 : 0;
   const strengthColors = ["#E5E7EB", "#FF6B5E", "#F59E0B", "#00B5A6", "#0D9488"];
 
   return (
@@ -95,63 +85,23 @@ export default function RegisterPage() {
           </div>
           <h1 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 18, fontWeight: 700,
             margin: "0 0 4px", color: "#0D1B2A" }}>
-            {step === "form" ? "Создать аккаунт" : "Подтвердите email"}
+            {step === "email" ? "Восстановление пароля" : "Новый пароль"}
           </h1>
           <p style={{ color: "#9CA3AF", fontSize: 13, margin: 0 }}>
-            {step === "form"
-              ? "AI-платформа для системного SMM"
+            {step === "email"
+              ? "Введите email и мы отправим код"
               : `Код отправлен на ${email}`}
           </p>
         </div>
 
-        {step === "form" ? (
+        {step === "email" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
               <label style={{ fontSize: 13, fontWeight: 500, color: "#374151",
                 display: "block", marginBottom: 6 }}>Email</label>
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com" style={inp}
-                onKeyDown={(e) => e.key === "Enter" && register()} />
-            </div>
-
-            <div>
-              <label style={{ fontSize: 13, fontWeight: 500, color: "#374151",
-                display: "block", marginBottom: 6 }}>Пароль</label>
-              <div style={{ position: "relative" }}>
-                <input type={showPass ? "text" : "password"} value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Минимум 8 символов"
-                  style={{ ...inp, paddingRight: 44 }}
-                  onKeyDown={(e) => e.key === "Enter" && register()} />
-                <button
-                  type="button"
-                  onClick={() => setShowPass(!showPass)}
-                  style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
-                    background: "none", border: "none", cursor: "pointer", padding: 0,
-                    display: "flex", alignItems: "center", color: "#9CA3AF" }}>
-                  {showPass ? (
-                    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/>
-                      <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/>
-                      <line x1="1" y1="1" x2="23" y2="23"/>
-                    </svg>
-                  ) : (
-                    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                      <circle cx="12" cy="12" r="3"/>
-                    </svg>
-                  )}
-                </button>
-              </div>
-              {password && (
-                <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} style={{ flex: 1, height: 3, borderRadius: 2,
-                      background: i <= passStrength ? strengthColors[passStrength] : "#E5E7EB",
-                      transition: "background 0.2s" }} />
-                  ))}
-                </div>
-              )}
+                onKeyDown={(e) => e.key === "Enter" && sendCode()} />
             </div>
 
             {error && (
@@ -160,21 +110,14 @@ export default function RegisterPage() {
                 border: "1px solid #FECACA" }}>{error}</div>
             )}
 
-            <button onClick={register} disabled={loading}
+            <button onClick={sendCode} disabled={loading}
               style={{ padding: "13px", background: loading ? "#9CA3AF" : "#3478F6",
                 color: "#fff", border: "none", borderRadius: 10,
                 cursor: loading ? "not-allowed" : "pointer",
-                fontSize: 15, fontWeight: 600, marginTop: 4,
-                fontFamily: "'Inter', sans-serif",
-                transition: "background 0.15s" }}>
-              {loading ? "Создаём аккаунт..." : "Зарегистрироваться →"}
+                fontSize: 15, fontWeight: 600,
+                fontFamily: "'Inter', sans-serif" }}>
+              {loading ? "Отправляем..." : "Отправить код"}
             </button>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ flex: 1, height: 1, background: "#E5E7EB" }} />
-              <span style={{ fontSize: 12, color: "#D1D5DB" }}>уже есть аккаунт?</span>
-              <div style={{ flex: 1, height: 1, background: "#E5E7EB" }} />
-            </div>
 
             <a href="/login" style={{ display: "block", textAlign: "center", padding: "11px",
               background: "#F5F7FA", border: "1px solid #E5E7EB", borderRadius: 10,
@@ -183,11 +126,11 @@ export default function RegisterPage() {
             </a>
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div>
               <label style={{ fontSize: 13, fontWeight: 500, color: "#374151",
                 display: "block", marginBottom: 12, textAlign: "center" }}>
-                Введите 6-значный код из письма
+                Код из письма
               </label>
               <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
                 {code.map((digit, i) => (
@@ -212,33 +155,81 @@ export default function RegisterPage() {
               </div>
             </div>
 
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 500, color: "#374151",
+                display: "block", marginBottom: 6 }}>Новый пароль</label>
+              <div style={{ position: "relative" }}>
+                <input
+                  type={showPass ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Минимум 8 символов"
+                  style={{ ...inp, paddingRight: 44 }}
+                  onKeyDown={(e) => e.key === "Enter" && resetPassword()}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass(!showPass)}
+                  style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
+                    background: "none", border: "none", cursor: "pointer", padding: 0,
+                    display: "flex", alignItems: "center", color: "#9CA3AF" }}>
+                  {showPass ? (
+                    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/>
+                      <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/>
+                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    </svg>
+                  ) : (
+                    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  )}
+                </button>
+              </div>
+              {newPassword && (
+                <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} style={{ flex: 1, height: 3, borderRadius: 2,
+                      background: i <= passStrength ? strengthColors[passStrength] : "#E5E7EB",
+                      transition: "background 0.2s" }} />
+                  ))}
+                </div>
+              )}
+            </div>
+
             {error && (
               <div style={{ padding: "10px 14px", background: "#FEF2F2",
                 borderRadius: 8, fontSize: 13, color: "#DC2626",
-                border: "1px solid #FECACA", textAlign: "center" }}>{error}</div>
+                border: "1px solid #FECACA" }}>{error}</div>
             )}
 
-            <button onClick={verify} disabled={loading}
+            {success && (
+              <div style={{ padding: "10px 14px", background: "#E0F7F5",
+                borderRadius: 8, fontSize: 13, color: "#00B5A6",
+                border: "1px solid #99E6DF", textAlign: "center" }}>{success}</div>
+            )}
+
+            <button onClick={resetPassword} disabled={loading}
               style={{ padding: "13px", background: loading ? "#9CA3AF" : "#3478F6",
                 color: "#fff", border: "none", borderRadius: 10,
                 cursor: loading ? "not-allowed" : "pointer",
                 fontSize: 15, fontWeight: 600,
-                fontFamily: "'Inter', sans-serif",
-                transition: "background 0.15s" }}>
-              {loading ? "Проверяем..." : "Подтвердить"}
+                fontFamily: "'Inter', sans-serif" }}>
+              {loading ? "Сохраняем..." : "Сохранить новый пароль"}
             </button>
 
             <div style={{ textAlign: "center" }}>
-              <button onClick={resend}
+              <button onClick={sendCode}
                 style={{ background: "none", border: "none", cursor: "pointer",
                   fontSize: 13, color: "#3478F6", textDecoration: "underline" }}>
                 Отправить код снова
               </button>
               <span style={{ fontSize: 13, color: "#9CA3AF", margin: "0 8px" }}>·</span>
-              <button onClick={() => { setStep("form"); setError(""); setCode(["","","","","",""]); }}
+              <button onClick={() => { setStep("email"); setError(""); setCode(["","","","","",""]); }}
                 style={{ background: "none", border: "none", cursor: "pointer",
                   fontSize: 13, color: "#6B7280" }}>
-                Изменить email
+                Другой email
               </button>
             </div>
           </div>

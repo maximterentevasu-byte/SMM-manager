@@ -52,6 +52,7 @@ class EmailVerification(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(255), index=True)
     code: Mapped[str] = mapped_column(String(6))
+    purpose: Mapped[str] = mapped_column(String(20), default="register")  # register | reset
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     is_used: Mapped[bool] = mapped_column(Boolean, default=False)
