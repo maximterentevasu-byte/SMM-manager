@@ -367,26 +367,6 @@ function PostDetail({ post, onClose }: { post: TGPost; onClose: () => void }) {
           </div>
         ) : null}
 
-        {/* Text section — always shown separately */}
-        {post.text ? (
-          <div style={{ padding: "14px 16px", borderBottom: "1px solid #F3F4F6" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF",
-              letterSpacing: 0.6, marginBottom: 8 }}>ТЕКСТ ПОСТА</div>
-            <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.6, margin: 0,
-              whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 200,
-              overflowY: "auto" }}>
-              {post.text}
-            </p>
-          </div>
-        ) : (
-          <div style={{ padding: "14px 16px", borderBottom: "1px solid #F3F4F6" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF",
-              letterSpacing: 0.6, marginBottom: 8 }}>ТЕКСТ ПОСТА</div>
-            <p style={{ fontSize: 13, color: "#9CA3AF", fontStyle: "italic", margin: 0 }}>
-              [Без текста]
-            </p>
-          </div>
-        )}
 
         {/* Metrics */}
         <div style={{ padding: "14px 16px" }}>
@@ -394,7 +374,7 @@ function PostDetail({ post, onClose }: { post: TGPost; onClose: () => void }) {
             letterSpacing: 0.6, marginBottom: 12 }}>ПОКАЗАТЕЛИ</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {[
-              { emoji: "👁", label: "Просмотры", value: post.views.toLocaleString("ru-RU"), big: true },
+              { emoji: "👁", label: "Просмотры", value: post.views.toLocaleString("ru-RU") },
               { emoji: "❤️", label: "Реакции", value: String(post.reactions) },
               { emoji: "💬", label: "Комментарии", value: String(post.comments) },
               { emoji: "🔁", label: "Репосты", value: String(post.reposts) },
@@ -402,36 +382,19 @@ function PostDetail({ post, onClose }: { post: TGPost; onClose: () => void }) {
               <div key={m.label} style={{ background: "#F9FAFB", borderRadius: 10,
                 padding: "10px 12px" }}>
                 <div style={{ fontSize: 16, marginBottom: 2 }}>{m.emoji}</div>
-                <div style={{ fontSize: m.big ? 18 : 16, fontWeight: 700, color: "#0D1B2A" }}>
-                  {m.value}
-                </div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#0D1B2A" }}>{m.value}</div>
                 <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 1 }}>{m.label}</div>
               </div>
             ))}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 8 }}>
-            <div style={{ background: post.er_pct > 5 ? "#ECFDF5" : "#F9FAFB",
-              borderRadius: 10, padding: "10px 12px" }}>
-              <div style={{ fontSize: 16, fontWeight: 700,
-                color: post.er_pct > 5 ? "#059669" : post.er_pct > 2 ? "#D97706" : "#0D1B2A" }}>
-                {post.er_pct.toFixed(2)}%
-              </div>
-              <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 1 }}>ER поста</div>
-            </div>
-            <div style={{ background: "#F9FAFB", borderRadius: 10, padding: "10px 12px" }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#0D1B2A" }}>
-                {post.virality_pct.toFixed(2)}%
-              </div>
-              <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 1 }}>Вирал</div>
-            </div>
-            <div style={{ background: post.has_question ? "#EEF4FF" : "#F9FAFB",
-              borderRadius: 10, padding: "10px 12px" }}>
-              <div style={{ fontSize: 16, fontWeight: 700,
-                color: post.has_question ? "#3478F6" : "#9CA3AF" }}>
-                {post.has_question ? "да" : "нет"}
-              </div>
-              <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 1 }}>Вопрос</div>
+          <div style={{ marginTop: 8, background: post.er_pct > 5 ? "#ECFDF5" : "#F9FAFB",
+            borderRadius: 10, padding: "10px 16px", display: "flex", alignItems: "center",
+            justifyContent: "space-between" }}>
+            <div style={{ fontSize: 12, color: "#6B7280" }}>ER поста</div>
+            <div style={{ fontSize: 18, fontWeight: 700,
+              color: post.er_pct > 5 ? "#059669" : post.er_pct > 2 ? "#D97706" : "#0D1B2A" }}>
+              {post.er_pct.toFixed(2)}%
             </div>
           </div>
         </div>
