@@ -162,10 +162,14 @@ def collect_vk_weekly(
         virality = sum(r_list) / total_views * 100 if total_views > 0 else 0
         eng_idx = (sum(l_list) + 2 * sum(c_list) + 3 * sum(r_list)) / total_views * 100 if total_views > 0 else 0
 
+        subscribed = None
+        unsubscribed = None
         net_growth = None
         stat = stats_map.get(ws.isoformat())
         if stat:
-            net_growth = (stat.get("subscribed") or 0) - (stat.get("unsubscribed") or 0)
+            subscribed = int(stat.get("subscribed") or 0)
+            unsubscribed = int(stat.get("unsubscribed") or 0)
+            net_growth = subscribed - unsubscribed
 
         day_s: dict = defaultdict(lambda: {"v": 0, "n": 0})
         hour_s: dict = defaultdict(lambda: {"v": 0, "n": 0})
@@ -201,6 +205,8 @@ def collect_vk_weekly(
             "er_views_pct": round(er_views, 2),
             "virality_pct": round(virality, 3),
             "engagement_index": round(eng_idx, 2),
+            "subscribed": subscribed,
+            "unsubscribed": unsubscribed,
             "net_growth": net_growth,
             "best_day": DAY_RU.get(best_day_en, best_day_en),
             "best_hour": f"{best_hour:02d}:00",

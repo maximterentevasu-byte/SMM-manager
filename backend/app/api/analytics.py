@@ -303,6 +303,7 @@ _VK_PROTECT_RAW = {
     "total_views", "avg_views", "median_views",
     "avg_likes", "avg_comments", "avg_reposts",
     "best_post_views", "worst_post_views",
+    "subscribed", "unsubscribed",
 }
 
 

@@ -36,6 +36,8 @@ type VKWeek = {
   er_subscribers_pct: number; er_views_pct: number;
   virality_pct: number; engagement_index: number;
   engagement_per_post: number | null;
+  subscribed: number | null;
+  unsubscribed: number | null;
   net_growth: number | null; best_day: string; best_hour: string;
   best_post_views: number | null;
   worst_post_views: number | null;
@@ -282,6 +284,8 @@ export default function AnalyticsPage() {
   const vk_cols = [
     { key: "week_start",          label: "Период",          render: (r: VKWeek) => `${r.week_start} — ${r.week_end}`, w: 200 },
     { key: "members",             label: "Участников",      render: (r: VKWeek) => dash(r.members),                   w: 110 },
+    { key: "subscribed",          label: "Подписались",     render: (r: VKWeek) => r.subscribed != null ? <span style={{ color: "#0F6E56", fontWeight: 600 }}>+{r.subscribed}</span> : <span style={{ color: "#ccc" }}>н/д</span>, w: 105 },
+    { key: "unsubscribed",        label: "Отписались",      render: (r: VKWeek) => r.unsubscribed != null ? <span style={{ color: "#A32D2D", fontWeight: 600 }}>−{r.unsubscribed}</span> : <span style={{ color: "#ccc" }}>н/д</span>, w: 105 },
     { key: "avg_views",           label: "Ср. просмотр",    render: (r: VKWeek) => dash(r.avg_views, 0),              w: 120 },
     { key: "median_views",        label: "Медиана просм.",  render: (r: VKWeek) => dash(r.median_views, 0),           w: 130 },
     { key: "er_subscribers_pct",  label: "ER (подп.)%",     render: (r: VKWeek) => pct(r.er_subscribers_pct),         w: 115 },
@@ -1746,7 +1750,17 @@ function VKDashboard({ data, numWeeks, onNumWeeksChange }: {
           color="#7C5CBF" title="ER (просмотры) %" suffix="%" />
       </div>
 
-      {/* Ряд 3: лайки / комменты / репосты */}
+      {/* Ряд 3: подписались / отписались */}
+      {filtered.some(d => d.subscribed != null) && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+          <BarChartSVG data={filtered} getValue={d => d.subscribed ?? 0} getLabel={lbl}
+            color="#0F6E56" title="Подписались" />
+          <BarChartSVG data={filtered} getValue={d => d.unsubscribed ?? 0} getLabel={lbl}
+            color="#A32D2D" title="Отписались" />
+        </div>
+      )}
+
+      {/* Ряд 4: лайки / комменты / репосты */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.avg_likes || 0} getLabel={lbl}
           color="#4680C2" title="Ср. лайки" />
