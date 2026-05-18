@@ -1241,6 +1241,193 @@ async def get_tg_stories(
     ]
 
 
+def _rate_vk_posts_for_analysis(posts: list[dict], avg_views: float, avg_er: float) -> list[dict]:
+    """Рейтинг VK-постов с поправкой на возраст."""
+    from datetime import datetime as _dt
+    now = _dt.utcnow()
+    rated = []
+    for p in posts:
+        date_str = str(p.get("date", ""))
+        try:
+            pub = _dt.fromisoformat(date_str[:19].replace("T", " ").replace("Z", ""))
+        except Exception:
+            pub = now
+        age_days = max((now - pub).days, 0)
+
+        views    = p.get("views", 0) or 0
+        likes    = p.get("likes", 0) or 0
+        comments = p.get("comments", 0) or 0
+        reposts  = p.get("reposts", 0) or 0
+        er       = (likes + comments + reposts) / views * 100 if views > 0 else 0
+        viral    = reposts / views * 100 if views > 0 else 0
+
+        if age_days < 1:
+            age_factor, age_label = 0.08, "опубликован сегодня — данных слишком мало"
+        elif age_days < 3:
+            age_factor, age_label = 0.30, f"{age_days} дн. назад — ещё набирает просмотры"
+        elif age_days < 7:
+            age_factor, age_label = 0.65, f"{age_days} дн. назад — статистика неполная"
+        elif age_days < 14:
+            age_factor, age_label = 0.90, None
+        else:
+            age_factor, age_label = 1.0, None
+
+        adj_views   = views / age_factor if age_factor > 0 else views
+        views_score = min((adj_views / max(avg_views, 1)) * 50, 100)
+        er_score    = min((er / max(avg_er, 0.01)) * 30, 60)
+        viral_score = min(viral * 5, 20)
+        score = round(views_score + er_score + viral_score, 1)
+
+        rated.append({**p, "score": score, "age_days": age_days,
+                      "age_label": age_label, "adj_views": round(adj_views),
+                      "er_pct": round(er, 2)})
+
+    return sorted(rated, key=lambda x: x["score"], reverse=True)
+
+
+@router.post("/{business_id}/vk/ai-analysis")
+async def vk_ai_analysis(
+    business_id: str,
+    weeks: int = Query(8, description="0 = всё время"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Полный AI-разбор VK-сообщества: динамика, рейтинг постов, рекомендации."""
+    await _get_business(business_id, current_user, db)
+
+    from datetime import date, timedelta
+
+    wq = select(VKWeeklyStats).where(VKWeeklyStats.business_id == business_id)
+    if weeks > 0:
+        cutoff = date.today() - timedelta(weeks=weeks)
+        wq = wq.where(VKWeeklyStats.week_start >= cutoff)
+    wq = wq.order_by(VKWeeklyStats.week_start.asc())
+    weekly_rows = (await db.execute(wq)).scalars().all()
+
+    if not weekly_rows:
+        raise HTTPException(404, "Нет данных ВКонтакте. Сначала соберите аналитику.")
+
+    all_posts: list[dict] = []
+    for r in weekly_rows:
+        for p in (r.posts or []):
+            all_posts.append(p)
+
+    avg_views = sum(p.get("views", 0) or 0 for p in all_posts) / len(all_posts) if all_posts else 0
+    avg_er = (
+        sum((p.get("likes", 0) + p.get("comments", 0) + p.get("reposts", 0)) / max(p.get("views", 1), 1) * 100
+            for p in all_posts) / len(all_posts)
+    ) if all_posts else 0
+
+    rated  = _rate_vk_posts_for_analysis(all_posts, avg_views, avg_er)
+    mature = [p for p in rated if p["age_days"] >= 7]
+    top5   = rated[:5]
+    worst5 = list(reversed(mature[-5:])) if mature else []
+
+    week_lines = []
+    for r in weekly_rows:
+        s = r.stats or {}
+        week_lines.append(
+            f"  {r.week_start.date()} — {r.week_end.date()}: "
+            f"постов={s.get('posts_count',0)}, участников={s.get('members','?')}, "
+            f"ср.просм.={s.get('avg_views','?')}, медиана={s.get('median_views','?')}, "
+            f"ER подп={s.get('er_subscribers_pct','?')}%, ER просм={s.get('er_views_pct','?')}%, "
+            f"лайки={s.get('avg_likes',0):.1f}, репосты={s.get('avg_reposts',0):.1f}, "
+            f"вираль={s.get('virality_pct',0):.3f}%"
+        )
+
+    def _fmt_post(p: dict, rank: int) -> str:
+        age_note = f" [{p['age_label']}]" if p.get("age_label") else ""
+        preview  = (p.get("text") or "").replace("\n", " ")[:140] or "(без текста)"
+        return (
+            f"  #{rank}. id={p.get('id','?')}, рейтинг={p['score']}, "
+            f"просм={p.get('views',0)} (расч.~{p['adj_views']}), ER={p['er_pct']:.2f}%{age_note}\n"
+            f"     {preview}\n"
+            f"     лайки={p.get('likes',0)}, репосты={p.get('reposts',0)}, комм={p.get('comments',0)}"
+        )
+
+    top_txt   = "\n".join(_fmt_post(p, i + 1) for i, p in enumerate(top5))   or "  Нет данных"
+    worst_txt = "\n".join(_fmt_post(p, i + 1) for i, p in enumerate(worst5)) or "  Нет данных"
+
+    group_name   = weekly_rows[-1].group_name or "ВКонтакте"
+    period_label = f"последние {weeks} нед." if weeks > 0 else "всё время"
+
+    prompt = f"""Ты опытный SMM-аналитик. Проведи развёрнутый разбор сообщества ВКонтакте «{group_name}» за {period_label}.
+
+## Недельная статистика (хронологически):
+{chr(10).join(week_lines)}
+
+## Топ-5 лучших постов (рейтинг учитывает возраст поста):
+{top_txt}
+
+## Топ-5 слабых постов (только зрелые, 7+ дней):
+{worst_txt}
+
+Сводка: {len(all_posts)} постов за период, ср. просмотры = {avg_views:.1f}, ср. ER = {avg_er:.2f}%
+
+---
+
+Напиши аналитический отчёт на русском. Структура обязательна:
+
+## 1. Общая оценка сообщества
+2-3 предложения — общий вывод о состоянии, тональность честная.
+
+## 2. Динамика метрик
+Что растёт, что падает, переломные моменты. Конкретные цифры и недели.
+
+## 3. Анализ контента
+Почему топ-посты зашли. Почему слабые провалились. Паттерны.
+
+## 4. Что повторить
+Конкретные форматы, темы, подходы — с обоснованием из данных.
+
+## 5. Что исключить
+Антипаттерны, форматы с низким ER/просмотрами.
+
+## 6. Рекомендации на следующие 4 недели
+Минимум 5 конкретных действий с ожидаемым эффектом.
+
+Пиши честно. Если данных мало — скажи. Не придумывай цифры которых нет в условии."""
+
+    try:
+        from anthropic import AsyncAnthropic
+        msg = await AsyncAnthropic().messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=4000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        analysis_text = msg.content[0].text.strip()
+    except Exception as e:
+        raise HTTPException(500, f"Ошибка AI-анализа: {e}")
+
+    def _post_out(p: dict) -> dict:
+        return {
+            "post_id": p.get("id", 0),
+            "published_at": p.get("date", ""),
+            "text": p.get("text", ""),
+            "views": p.get("views", 0),
+            "adj_views": p["adj_views"],
+            "reactions": p.get("likes", 0),
+            "comments": p.get("comments", 0),
+            "reposts": p.get("reposts", 0),
+            "er_pct": p["er_pct"],
+            "score": p["score"],
+            "age_days": p["age_days"],
+            "age_label": p.get("age_label"),
+            "media_type": "none",
+        }
+
+    return {
+        "analysis": analysis_text,
+        "top_posts": [_post_out(p) for p in top5],
+        "worst_posts": [_post_out(p) for p in worst5],
+        "period": period_label,
+        "channel_name": group_name,
+        "total_posts": len(all_posts),
+        "avg_views": round(avg_views, 1),
+        "avg_er": round(avg_er, 2),
+    }
+
+
 def _rate_posts_for_analysis(posts: list[dict], avg_views: float, avg_er: float) -> list[dict]:
     """Рейтинг постов с поправкой на возраст — свежие посты ещё не набрали полную аудиторию."""
     from datetime import datetime as _dt

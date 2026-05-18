@@ -448,6 +448,7 @@ export default function AnalyticsPage() {
                   />
                 )}
                 {dashTab === "timing" && <BestTimingView data={vkData} />}
+                {dashTab === "ai" && <AIAnalyticsTab businessId={businessId} platform="vk" />}
               </>
             ) : vkCredsStatus?.has_connection ? (
               <VKUserTokenForm
@@ -1427,7 +1428,7 @@ function AIPostCard({ post, rank, type }: { post: AIPost; rank: number; type: "t
   );
 }
 
-function AIAnalyticsTab({ businessId }: { businessId: string }) {
+function AIAnalyticsTab({ businessId, platform = "tg" }: { businessId: string; platform?: "tg" | "vk" }) {
   const [weeks, setWeeks] = useState(8);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AIResult | null>(null);
@@ -1436,7 +1437,7 @@ function AIAnalyticsTab({ businessId }: { businessId: string }) {
   const run = async () => {
     setLoading(true); setError(""); setResult(null);
     try {
-      const { data } = await api.post(`/analytics/${businessId}/tg/ai-analysis?weeks=${weeks}`);
+      const { data } = await api.post(`/analytics/${businessId}/${platform}/ai-analysis?weeks=${weeks}`);
       setResult(data);
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Ошибка анализа");
