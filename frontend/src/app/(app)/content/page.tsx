@@ -442,7 +442,16 @@ export default function ContentPage() {
   const [quickPostOpen, setQuickPostOpen] = useState(false);
   const [quickPostPlatforms, setQuickPostPlatforms] = useState<Array<{platform: string; page_name: string}>>([]);
 
-  const [brandAssetsLabels, setBrandAssetsLabels] = useState<Array<{name: string; label: string}>>([]);
+  const [brandAssetsLabels, setBrandAssetsLabels] = useState<Array<{name: string; label: string; data?: string; mime?: string}>>([]);
+  const [modalEditBrandRefs, setModalEditBrandRefs] = useState<Map<number, {data: string; mime: string}>>(new Map());
+  const toggleModalEditBrandRef = (idx: number, asset: {data?: string; mime?: string}) => {
+    setModalEditBrandRefs(prev => {
+      const next = new Map(prev);
+      if (next.has(idx)) { next.delete(idx); }
+      else if (asset.data) { next.set(idx, { data: asset.data, mime: asset.mime || "image/jpeg" }); }
+      return next;
+    });
+  };
   const [modalPromptUrl, setModalPromptUrl] = useState("");
   const [modalImgElapsed, setModalImgElapsed] = useState(0);
   const [modalAspectRatio, setModalAspectRatio] = useState<"9:16" | "1:1" | "16:9">("9:16");
@@ -941,7 +950,7 @@ export default function ContentPage() {
     setEditingModalImg(true);
     try {
       const baseImage = modalEditFilled[0];
-      const refImages = modalEditFilled.slice(1);
+      const refImages = [...modalEditFilled.slice(1), ...Array.from(modalEditBrandRefs.values())];
       const { data: taskData } = await api.post(`/post-creator/${businessId}/edit-image`, {
         base_image: baseImage,
         reference_images: refImages.length > 0 ? refImages : undefined,
@@ -2091,14 +2100,40 @@ export default function ContentPage() {
                         </div>
                       )}
                       <div style={{ marginTop: 14, fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 6 }}>Инструкция по редактированию</div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                        {modalEditAttemptCount > 0 && (
-                          <span style={{ fontSize: 11, color: modalEditAttemptCount >= 3 ? "#DC2626" : "#00B5A6",
-                            background: (modalEditAttemptCount >= 3 ? "#DC2626" : "#00B5A6") + "15",
-                            border: `1px solid ${(modalEditAttemptCount >= 3 ? "#DC2626" : "#00B5A6")}30`,
-                            borderRadius: 12, padding: "2px 8px", fontWeight: 600 }}>Правок: {modalEditAttemptCount}/3</span>
-                        )}
-                      </div>
+                      {modalEditAttemptCount > 0 && (
+                        <span style={{ fontSize: 11, color: modalEditAttemptCount >= 3 ? "#DC2626" : "#00B5A6",
+                          background: (modalEditAttemptCount >= 3 ? "#DC2626" : "#00B5A6") + "15",
+                          border: `1px solid ${(modalEditAttemptCount >= 3 ? "#DC2626" : "#00B5A6")}30`,
+                          borderRadius: 12, padding: "2px 8px", fontWeight: 600, display: "inline-block", marginBottom: 8 }}>Правок: {modalEditAttemptCount}/3</span>
+                      )}
+                      {brandAssetsLabels.length > 0 && (
+                        <div style={{ marginBottom: 10, padding: "10px 12px", background: "#FFF8F0", border: "1px solid #FED7AA", borderRadius: 10 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: "#C2410C", marginBottom: 4 }}>Фирменный стиль — референс для изображения:</div>
+                          <div style={{ fontSize: 11, color: "#92400E", marginBottom: 6 }}>Выберите — ИИ учтёт визуальный стиль при редактировании</div>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            {brandAssetsLabels.map((a, i) => {
+                              const nm = a.label || a.name;
+                              const selected = modalEditBrandRefs.has(i);
+                              const hasData = !!a.data;
+                              return (
+                                <button key={i} onClick={() => toggleModalEditBrandRef(i, a)}
+                                  style={{ padding: "4px 10px", borderRadius: 16, cursor: hasData ? "pointer" : "default",
+                                    fontSize: 11, fontWeight: 600, opacity: hasData ? 1 : 0.5,
+                                    background: selected ? "#C2410C" : "#fff",
+                                    color: selected ? "#fff" : (hasData ? "#C2410C" : "#aaa"),
+                                    border: `1.5px solid ${selected ? "#C2410C" : (hasData ? "#FED7AA" : "#E5E7EB")}` }}>
+                                  {selected ? "✓ " : "+ "}{nm}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {modalEditBrandRefs.size > 0 && (
+                            <div style={{ marginTop: 6, fontSize: 11, color: "#92400E", fontWeight: 600 }}>
+                              ✓ {modalEditBrandRefs.size} референс{modalEditBrandRefs.size > 1 ? "а" : ""} будут переданы
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <textarea value={modalEditInstruction} onChange={e => setModalEditInstruction(e.target.value)}
                         placeholder="Например: замени фон на белый, добавь тёплые цвета, сохрани общую композицию..."
                         style={{ ...inp13, minHeight: 70 }}
