@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
 
 _CLAUDE_MODEL = "claude-sonnet-4-6"
-_GPT_MODEL = "gpt-5.4"
+_GPT_MODEL = "gpt-4o"
 
 
 async def _gpt_strategy(messages: list, max_tokens: int) -> str:
@@ -99,44 +99,64 @@ def _extract_chat_response(raw: str) -> str:
 async def strategy_chat(user_message: str, strategy: list | None, profile: dict) -> dict:
     """Разговорный AI-чат по стратегии. Работает с профилем и без стратегии."""
     has_strategy = bool(strategy)
-    has_profile = bool(profile)
 
-    context_lines = []
-    if has_profile:
+    # --- Строим контекст ---
+    ctx: list[str] = []
+
+    if profile:
         name = profile.get("name", "")
         niche = profile.get("niche", "")
-        platforms = profile.get("platforms", [])
-        context_lines.append(f"Бизнес: {name or 'не указан'}, ниша: {niche or 'не указана'}, платформы: {', '.join(platforms) or 'не выбраны'}")
+        audience = profile.get("target_audience", "")
+        voice = profile.get("brand_voice", "")
+        ctx.append(f"Бизнес: «{name}», ниша: {niche or 'не указана'}")
+        if audience:
+            ctx.append(f"Целевая аудитория: {audience}")
+        if voice:
+            ctx.append(f"Тональность бренда: {voice}")
     else:
-        context_lines.append("Профиль бизнеса: не заполнен")
+        ctx.append("Профиль бизнеса: не заполнен")
 
     if has_strategy:
-        plats = [s.get("platform", "") for s in strategy]
-        context_lines.append(f"Стратегия: создана для {', '.join(plats)}")
+        for ps in strategy:
+            platform = ps.get("platform", "?").upper()
+            rubrics = ps.get("rubrics", [])
+            goal = ps.get("goal", "")
+            lines = [f"\nПлатформа {platform}" + (f" (цель: {goal})" if goal else "") + ":"]
+            for r in rubrics:
+                rname = r.get("name", "")
+                rtype = r.get("type", "")
+                rfreq = r.get("frequency", "")
+                lines.append(f"  • [{rtype}] {rname}" + (f" — {rfreq}" if rfreq else ""))
+            ctx.append("\n".join(lines))
     else:
-        context_lines.append("Стратегия: ещё не создана")
+        ctx.append("Стратегия: ещё не создана")
 
-    system = """Ты АИСТ — AI-помощник SMM-платформы smmplatform. Помогаешь пользователям с контент-стратегией.
+    context = "\n".join(ctx)
 
-Отвечай на русском, кратко (2-4 предложения), по-деловому, без лишних слов.
+    system = """Ты АИСТ — AI-помощник SMM-платформы smmplatform. Помогаешь с контент-стратегией.
 
-Если стратегии нет — объясни что нужно:
-1. Перейти на вкладку «Профиль бизнеса» и заполнить данные
-2. Вернуться в онбординг для генерации стратегии
+Типы рубрик в системе:
+• sales — продающий контент (акции, товары, цены, кейсы)
+• educational — обучающий (советы, инструкции, FAQ, лайфхаки)
+• entertainment — развлекательный (юмор, истории, мемы, тренды)
+• ugc_triggers — провокации к UGC: конкурсы, опросы, «покажи как ты используешь», просьбы поделиться опытом, марафоны, челленджи
 
-Если стратегия есть и пользователь хочет её изменить — опиши что именно изменишь (1-2 предложения), затем скажи что под ответом появится кнопка «Применить изменение» для сохранения.
-Если стратегия есть и пользователь задаёт вопрос — ответь на вопрос.
-Всегда возвращай ТОЛЬКО валидный JSON: {"response": "текст ответа"}"""
+Правила ответа:
+— Если просят добавить рубрику определённого типа — предложи 2-3 конкретных варианта с названием, форматом и примером темы. Учитывай нишу бизнеса.
+— Если просят изменить стратегию — кратко (1-2 предложения) опиши что именно изменишь, затем добавь: «Нажми "Применить изменение" под этим сообщением — и стратегия обновится.»
+— Если задают вопрос по SMM — отвечай кратко и конкретно.
+— Если стратегии нет — объясни: нужно заполнить профиль бизнеса и пройти онбординг.
 
-    context = "\n".join(context_lines)
-    full_msg = f"{context}\n\nСообщение: {user_message}"
+Отвечай только на русском. Максимум 5 предложений. Без воды.
+Верни ТОЛЬКО валидный JSON: {"response": "текст ответа"}"""
+
+    full_msg = f"{context}\n\nЗапрос пользователя: {user_message}"
     messages = [{"role": "user", "content": full_msg}]
 
-    # Пробуем Claude
     try:
         resp = await client.messages.create(
             model=_CLAUDE_MODEL,
-            max_tokens=512,
+            max_tokens=800,
             system=system,
             messages=messages,
         )
@@ -146,10 +166,9 @@ async def strategy_chat(user_message: str, strategy: list | None, profile: dict)
     except Exception as e:
         log.error("[Claude strategy_chat] failed: %s", e)
 
-    # GPT fallback
     try:
         gpt_messages = [{"role": "system", "content": system}] + messages
-        text = await _gpt_strategy(gpt_messages, 512)
+        text = await _gpt_strategy(gpt_messages, 800)
         extracted = _extract_chat_response(text)
         if extracted:
             return {"response": extracted}
@@ -157,7 +176,7 @@ async def strategy_chat(user_message: str, strategy: list | None, profile: dict)
         log.error("[GPT strategy_chat] fallback failed: %s", e)
 
     if not has_strategy:
-        return {"response": "Стратегия ещё не создана. Перейдите на вкладку «Профиль бизнеса», заполните данные о бизнесе и сохраните — после этого можно вернуться в онбординг для генерации стратегии."}
+        return {"response": "Стратегия ещё не создана. Заполните профиль бизнеса и пройдите онбординг — после этого здесь появятся рубрики, которые можно корректировать."}
     return {"response": "Не удалось получить ответ. Попробуйте ещё раз."}
 
 
