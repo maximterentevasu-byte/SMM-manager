@@ -21,12 +21,12 @@ METRIC_ALIASES: dict = {
 
 SMM_METRIC_CONFIG: dict = {
     "Подписчики":            {"vk": "members",              "tg": "subscribers",      "agg": "latest", "fmt": "int",   "icon": "👥", "label": "Подписчики"},
-    "Охваты/Показы":         {"vk": "total_views",          "tg": "total_views",      "agg": "sum",    "fmt": "int",   "icon": "👁",  "label": "Охваты"},
+    "Охваты/Показы":         {"vk": "total_views",          "tg": "total_views",      "agg": "avg",    "fmt": "int",   "icon": "👁",  "label": "Ср. охват/нед"},
     "ER вовлечённость ЦА":   {"vk": "er_subscribers_pct",  "tg": "er_activity_pct",  "agg": "avg",    "fmt": "pct",   "icon": "💡", "label": "ER"},
     "Комментарии":           {"vk": "avg_comments",         "tg": "avg_comments",     "agg": "avg",    "fmt": "float", "icon": "💬", "label": "Комм./пост"},
     "Лайки/Реакции":         {"vk": "avg_likes",            "tg": "avg_reactions",    "agg": "avg",    "fmt": "float", "icon": "❤️", "label": "Лайки/пост"},
     "Репосты":               {"vk": "avg_reposts",          "tg": "avg_reposts",      "agg": "avg",    "fmt": "float", "icon": "🔄", "label": "Репосты/пост"},
-    "Количество постов":     {"vk": "posts_count",          "tg": "posts_count",      "agg": "sum",    "fmt": "int",   "icon": "📝", "label": "Постов"},
+    "Количество постов":     {"vk": "posts_count",          "tg": "posts_count",      "agg": "avg",    "fmt": "float", "icon": "📝", "label": "Постов/нед"},
     "Виральность":           {"vk": "virality_pct",         "tg": "virality_pct",     "agg": "avg",    "fmt": "pct",   "icon": "🚀", "label": "Виральность"},
 }
 
