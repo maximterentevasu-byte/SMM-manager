@@ -763,9 +763,13 @@ async def publish_to_plan(
     if not body.platforms:
         raise HTTPException(400, "Выбери хотя бы одну платформу")
 
+    now = datetime.utcnow()
     scheduled = (
-        datetime.fromisoformat(body.scheduled_at) if body.scheduled_at else datetime.utcnow()
+        datetime.fromisoformat(body.scheduled_at.replace("Z", "+00:00")).replace(tzinfo=None)
+        if body.scheduled_at else now
     )
+    # Если дата публикации в будущем — просто сохраняем слот, Celery опубликует по расписанию
+    is_future = scheduled > now
 
     from app.services.publishers import decrypt_token
     results = []
@@ -798,6 +802,15 @@ async def publish_to_plan(
                 status=PlanStatus.content_ready,
             )
             db.add(slot)
+
+            if is_future:
+                # Только сохраняем слот — Celery-планировщик опубликует вовремя
+                if not connection:
+                    results.append({"platform": platform_str, "status": "scheduled",
+                                     "warning": "Площадка не подключена — пост не будет опубликован"})
+                else:
+                    results.append({"platform": platform_str, "status": "published"})
+                continue
 
             if not connection:
                 results.append({"platform": platform_str, "status": "no_connection",

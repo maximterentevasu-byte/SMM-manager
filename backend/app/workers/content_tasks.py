@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date as date_type
 
 from app.workers.celery_app import celery_app
 from app.workers.db import get_worker_db
@@ -50,7 +50,7 @@ async def _generate_plan(business_id: str):
             print(f"✗ Бизнес {business_id} не найден или нет стратегии")
             return
 
-        # Определяем уже существующие будущие слоты, чтобы не дублировать
+        # Существующие будущие слоты
         existing_result = await db.execute(
             select(ContentSlot).where(
                 ContentSlot.business_id == business_id,
@@ -58,23 +58,58 @@ async def _generate_plan(business_id: str):
             )
         )
         existing_slots = existing_result.scalars().all()
-        existing_keys = {
-            (s.platform.value, s.scheduled_at.date())
-            for s in existing_slots
+
+        # Для каждой пары (платформа, понедельник_недели) считаем занятые даты
+        def _week_monday(d: date_type) -> date_type:
+            return d - timedelta(days=d.weekday())
+
+        # existing_by_week: (platform, week_monday) -> set[date]
+        existing_by_week: dict[tuple, set] = {}
+        for s in existing_slots:
+            d = s.scheduled_at.date()
+            key = (s.platform.value, _week_monday(d))
+            existing_by_week.setdefault(key, set()).add(d)
+
+        # Целевое кол-во постов в неделю для каждой платформы из стратегии
+        target_ppw: dict[str, int] = {
+            ps["platform"]: ps.get("posts_per_week", 3)
+            for ps in (business.strategy or [])
+            if ps.get("platform")
         }
 
         all_slots_meta = build_content_plan(business.strategy, business.profile, start_date=start_date)
 
-        # Оставляем только слоты на даты, которых ещё нет в БД
-        slots_meta = [
-            s for s in all_slots_meta
-            if (s["platform"], datetime.fromisoformat(s["scheduled_at"]).date()) not in existing_keys
-        ]
-        skipped = len(all_slots_meta) - len(slots_meta)
-        print(f"→ Новых слотов: {len(slots_meta)}, пропущено существующих: {skipped} для {business.name}")
+        # Группируем новые слоты по (platform, week_monday)
+        new_by_week: dict[tuple, list] = {}
+        for slot in all_slots_meta:
+            slot_date = datetime.fromisoformat(slot["scheduled_at"]).date()
+            key = (slot["platform"], _week_monday(slot_date))
+            new_by_week.setdefault(key, []).append(slot)
+
+        # Для каждой недели добавляем только дефицит (target - existing)
+        slots_meta: list = []
+        for key, new_week_slots in new_by_week.items():
+            platform, _ = key
+            existing_dates = set(existing_by_week.get(key, set()))
+            existing_count = len(existing_dates)
+            target = target_ppw.get(platform, 3)
+            deficit = target - existing_count
+            if deficit <= 0:
+                continue
+            added = 0
+            for slot in new_week_slots:
+                if added >= deficit:
+                    break
+                slot_date = datetime.fromisoformat(slot["scheduled_at"]).date()
+                if slot_date not in existing_dates:
+                    slots_meta.append(slot)
+                    existing_dates.add(slot_date)
+                    added += 1
+
+        print(f"→ Новых слотов: {len(slots_meta)} для {business.name}")
 
         if not slots_meta:
-            print("✓ Все слоты уже существуют, ничего не добавляем")
+            print("✓ Контент-план актуален, ничего не добавляем")
             return
 
         # Аналитика компании и рыночные инсайты для улучшения идей
