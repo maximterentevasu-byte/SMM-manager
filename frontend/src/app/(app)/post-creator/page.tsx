@@ -1010,16 +1010,6 @@ export default function PostCreatorPage() {
               ))}
             </div>
           )}
-          {(brandContext.brand_assets_labels || []).length > 0 && (
-            <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11, color: "#999", fontWeight: 600 }}>Промт учитывает:</span>
-              {(brandContext.brand_assets_labels || []).map((a, i) => (
-                <span key={i} style={{ fontSize: 11, color: "#6B7280", background: "#F3F4F6", border: "1px solid #E5E7EB", borderRadius: 20, padding: "2px 10px", fontWeight: 500 }}>
-                  {a.label || a.name}
-                </span>
-              ))}
-            </div>
-          )}
           <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <Btn label={loadingText ? "Генерирую текст..." : "✨ Сгенерировать текст"} onClick={generateText} disabled={!idea.trim() || loadingText || textGenCount >= MAX_TEXT_ATTEMPTS} loading={loadingText} />
             {textGenCount > 0 && <AttemptBadge current={textGenCount} max={MAX_TEXT_ATTEMPTS} label="Попыток" />}
