@@ -229,24 +229,37 @@ export default function OnboardingPage() {
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
-  const compressBrandAsset = (file: File, maxPx = 512): Promise<{ data: string; mime: string } | null> =>
-    new Promise(resolve => {
-      if (!file.type.startsWith("image/")) { resolve(null); return; }
-      const img = new window.Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        const scale = Math.min(maxPx / img.width, maxPx / img.height, 1);
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
-        URL.revokeObjectURL(url);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
-        resolve({ data: dataUrl.split(",")[1], mime: "image/jpeg" });
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
-      img.src = url;
-    });
+  const compressBrandAsset = async (file: File, maxPx = 512): Promise<{ data: string; mime: string } | null> => {
+    if (!file.type.startsWith("image/")) return null;
+    try {
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(maxPx / bitmap.width, maxPx / bitmap.height, 1);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { bitmap.close(); throw new Error("no ctx"); }
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+      const b64 = dataUrl.split(",")[1];
+      if (b64 && b64.length > 100) return { data: b64, mime: "image/jpeg" };
+      throw new Error("empty canvas output");
+    } catch {
+      // fallback: FileReader без сжатия (надёжнее, но больше размер)
+      return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const s = e.target?.result as string;
+          if (!s) { resolve(null); return; }
+          const parts = s.split(",");
+          resolve(parts[1] ? { data: parts[1], mime: file.type } : null);
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(file);
+      });
+    }
+  };
 
   const saveAndClarify = async () => {
     setLoading(true);
