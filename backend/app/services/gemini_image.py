@@ -3,6 +3,7 @@
 Каскад генерации:   Gemini Flash Image → gpt-image-2 → gpt-image-1-mini
 Каскад редактирования: Gemini Flash Image (img2img) → gpt-image-2 edit
 """
+import asyncio
 import io
 import base64
 import logging
@@ -49,13 +50,30 @@ def _to_png_buf(img_dict: dict) -> io.BytesIO:
 
 # ─── Генерация изображений ───────────────────────────────────────────────────
 
-async def _gemini_generate(prompt: str) -> str:
+async def _gemini_generate(prompt: str, reference_images: list[dict] | None = None) -> str:
     url = f"{_GEMINI_BASE}/{_GEMINI_MODEL}:generateContent?key={settings.GEMINI_API_KEY}"
+
+    if reference_images:
+        norm_refs = await asyncio.to_thread(
+            lambda: [_normalize_to_jpeg(r) for r in reference_images[:4]]
+        )
+        parts: list = []
+        for img in norm_refs:
+            parts.append({"inlineData": {"mimeType": img["mime"], "data": img["data"]}})
+        style_instruction = (
+            "These images above are brand style references. "
+            "Generate a new image that matches their visual style, color palette, and aesthetic. "
+            f"Prompt: {prompt}"
+        )
+        parts.append({"text": style_instruction})
+    else:
+        parts = [{"text": prompt}]
+
     async with httpx.AsyncClient(timeout=_GEMINI_TIMEOUT) as client:
         r = await client.post(
             url,
             json={
-                "contents": [{"parts": [{"text": prompt}]}],
+                "contents": [{"parts": parts}],
                 "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
             },
         )
@@ -93,13 +111,13 @@ async def _openai_generate(prompt: str, aspect_ratio: str, model: str) -> str:
     return b64
 
 
-async def generate_image(prompt: str, aspect_ratio: str = "1:1") -> str:
+async def generate_image(prompt: str, aspect_ratio: str = "1:1", reference_images: list[dict] | None = None) -> str:
     """Каскад: Gemini Flash Image → gpt-image-2 → gpt-image-1-mini."""
     errors: list[str] = []
 
     if settings.GEMINI_API_KEY:
         try:
-            return await _gemini_generate(prompt)
+            return await _gemini_generate(prompt, reference_images or [])
         except Exception as e:
             log.error("[Gemini generate] failed, falling through to OpenAI: %s", e)
             errors.append(f"Gemini: {e}")

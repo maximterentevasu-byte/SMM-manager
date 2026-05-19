@@ -229,15 +229,40 @@ export default function OnboardingPage() {
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
+  const compressBrandAsset = (file: File, maxPx = 512): Promise<{ data: string; mime: string } | null> =>
+    new Promise(resolve => {
+      if (!file.type.startsWith("image/")) { resolve(null); return; }
+      const img = new window.Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const scale = Math.min(maxPx / img.width, maxPx / img.height, 1);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+        resolve({ data: dataUrl.split(",")[1], mime: "image/jpeg" });
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+      img.src = url;
+    });
+
   const saveAndClarify = async () => {
     setLoading(true);
     setError("");
     try {
+      const compressedAssets = await Promise.all(
+        brandAssets.map(async a => {
+          const compressed = await compressBrandAsset(a.file);
+          return { name: a.file.name, label: a.label, ...(compressed || {}) };
+        })
+      );
       const payload = {
         ...form,
         products: [],
         active_promotions: "",
-        brand_assets_labels: brandAssets.map(a => ({ name: a.file.name, label: a.label })),
+        brand_assets_labels: compressedAssets,
         audience_pains: form.audience_pains.filter(Boolean),
         audience_objections: form.audience_objections.filter(Boolean),
         competitors: form.competitors.filter(c => c.name || c.url).map(c => ({ name: c.name, url: c.url, pros: "", cons: "" })),

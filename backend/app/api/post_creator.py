@@ -480,6 +480,7 @@ class ImageIn(BaseModel):
     prompt_ru: Optional[str] = None
     aspect_ratio: str = "1:1"
     url: Optional[str] = None
+    brand_ref_images: Optional[list[ImageData]] = None
 
 
 @router.post("/{business_id}/generate-image")
@@ -548,7 +549,8 @@ async def generate_image(
     if not prompt:
         raise HTTPException(400, "Укажите prompt или prompt_ru")
 
-    task = generate_image_task.apply_async(args=[prompt, body.aspect_ratio])
+    brand_refs = [{"data": img.data, "mime": img.mime} for img in (body.brand_ref_images or [])]
+    task = generate_image_task.apply_async(args=[prompt, body.aspect_ratio, brand_refs])
     return {"task_id": task.id, "prompt_en": prompt}
 
 

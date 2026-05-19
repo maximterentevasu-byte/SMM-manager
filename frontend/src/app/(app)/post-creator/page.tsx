@@ -21,7 +21,7 @@ const MAX_UPLOAD_SLOTS = 10;
 const MAX_FILES = 10;
 const DRAFT_KEY_PREFIX = "qp_draft_v1_";
 
-interface BrandAssetLabel { name: string; label: string }
+interface BrandAssetLabel { name: string; label: string; data?: string; mime?: string }
 interface BrandContext { visual_style: string; brand_colors: string[]; brand_voice: string; niche: string; usp: string; brand_assets_labels?: BrandAssetLabel[] }
 
 interface Draft {
@@ -121,24 +121,45 @@ const PLATFORM_META: Record<Platform, { label: string; color: string; icon: stri
 
 // ── Brand Context Panel ────────────────────────────────────────────────────────
 
-function BrandContextPanel({ brand, onInsert }: { brand: BrandContext; onInsert: (t: string) => void }) {
+function BrandContextPanel({
+  brand, selectedRefs, onToggleRef,
+}: {
+  brand: BrandContext;
+  selectedRefs: Map<number, { data: string; mime: string }>;
+  onToggleRef: (idx: number, asset: BrandAssetLabel) => void;
+}) {
   const assets = brand.brand_assets_labels || [];
   if (assets.length === 0) return null;
 
   return (
     <div style={{ marginBottom: 12, padding: "12px 14px", background: "#FFF8F0", border: "1px solid #FED7AA", borderRadius: 12 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#C2410C", marginBottom: 8 }}>Добавить в промт элемент фирменного стиля:</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#C2410C", marginBottom: 4 }}>Фирменный стиль — референс для изображения:</div>
+      <div style={{ fontSize: 11, color: "#92400E", marginBottom: 8 }}>Выберите один или несколько файлов — ИИ учтёт их визуальный стиль при генерации</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {assets.map((a, i) => {
           const name = a.label || a.name;
+          const selected = selectedRefs.has(i);
+          const hasData = !!a.data;
           return (
-            <button key={i} onClick={() => onInsert(`учитывай элемент фирменного стиля «${name}»`)}
-              style={{ padding: "5px 12px", background: "#fff", border: "1.5px solid #FED7AA", borderRadius: 20, color: "#C2410C", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
-              + {name}
+            <button key={i} onClick={() => onToggleRef(i, a)}
+              title={hasData ? (selected ? "Снять выбор" : "Добавить как референс") : "Нет данных изображения — переройдите онбординг"}
+              style={{
+                padding: "5px 12px", borderRadius: 20, cursor: "pointer", fontSize: 11, fontWeight: 600,
+                background: selected ? "#C2410C" : "#fff",
+                color: selected ? "#fff" : (hasData ? "#C2410C" : "#999"),
+                border: `1.5px solid ${selected ? "#C2410C" : (hasData ? "#FED7AA" : "#E5E7EB")}`,
+                opacity: hasData ? 1 : 0.6,
+              }}>
+              {selected ? "✓ " : "+ "}{name}
             </button>
           );
         })}
       </div>
+      {selectedRefs.size > 0 && (
+        <div style={{ marginTop: 8, fontSize: 11, color: "#92400E", fontWeight: 600 }}>
+          ✓ {selectedRefs.size} референс{selectedRefs.size > 1 ? "а" : ""} будут переданы в генерацию изображения
+        </div>
+      )}
     </div>
   );
 }
@@ -355,6 +376,17 @@ export default function PostCreatorPage() {
 
   // ── Image mode ────────────────────────────────────────────────────────────
   const [imageMode, setImageMode] = useState<ImageMode>(null);
+
+  // ── Brand style references for image generation ───────────────────────────
+  const [brandRefImages, setBrandRefImages] = useState<Map<number, { data: string; mime: string }>>(new Map());
+  const toggleBrandRef = (idx: number, asset: BrandAssetLabel) => {
+    setBrandRefImages(prev => {
+      const next = new Map(prev);
+      if (next.has(idx)) { next.delete(idx); }
+      else if (asset.data) { next.set(idx, { data: asset.data, mime: asset.mime || "image/jpeg" }); }
+      return next;
+    });
+  };
 
   // ── Block 3a: Prompt ──────────────────────────────────────────────────────
   const [imagePrompt, setImagePrompt] = useState("");
@@ -758,10 +790,12 @@ export default function PostCreatorPage() {
     setImgElapsed(0);
     const timer = setInterval(() => setImgElapsed(s => s + 1), 1000);
     try {
+      const brandRefs = Array.from(brandRefImages.values());
       const { data: taskData } = await api.post(`/post-creator/${businessId}/generate-image`, {
         prompt_ru: imagePrompt.trim(),
         aspect_ratio: imageAspectRatio,
         url: imagePromptUrl.trim() || undefined,
+        brand_ref_images: brandRefs.length > 0 ? brandRefs : undefined,
       });
       const b64 = await pollImageTask(taskData.task_id);
       const newHistory = [...imageHistory, b64];
@@ -1035,7 +1069,7 @@ export default function PostCreatorPage() {
           <div style={card}>
             <SectionTitle n={3} label="Промт для изображения" done={!!imagePrompt.trim()} />
             <p style={{ color: "#888", fontSize: 13, margin: "0 0 14px" }}>Напишите промт — опишите что должно быть на изображении.</p>
-            <BrandContextPanel brand={brandContext} onInsert={appendToPrompt} />
+            <BrandContextPanel brand={brandContext} selectedRefs={brandRefImages} onToggleRef={toggleBrandRef} />
             {postText.trim() && (
               <div style={{ marginBottom: 10 }}>
                 <button onClick={() => appendToPrompt(postText.slice(0, 500))}
