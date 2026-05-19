@@ -258,8 +258,12 @@ export default function OnboardingPage() {
       const { data: qs } = await api.post(`/onboarding/clarify/${bId}`);
       setClarifyQs(qs.questions || []);
       setStep(5);
-    } catch {
-      setError("Ошибка сохранения. Проверьте что все поля заполнены.");
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      const msg = Array.isArray(detail)
+        ? detail.map((d: any) => `${d.loc?.join(".")}: ${d.msg}`).join("; ")
+        : typeof detail === "string" ? detail : err?.message || "Неизвестная ошибка";
+      setError(`Ошибка сохранения: ${msg}`);
     } finally {
       setLoading(false);
     }
