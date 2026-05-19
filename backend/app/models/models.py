@@ -80,7 +80,7 @@ class PlatformConnection(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     business_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("businesses.id"))
-    platform: Mapped[Platform] = mapped_column(Enum(Platform))
+    platform: Mapped[Platform] = mapped_column(Enum(Platform, name="platform", create_type=False))
     token_encrypted: Mapped[str] = mapped_column(Text)
     external_page_id: Mapped[str] = mapped_column(String(255))
     page_name: Mapped[str] = mapped_column(String(255))
@@ -109,7 +109,7 @@ class ContentSlot(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     business_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("businesses.id"))
-    platform: Mapped[Platform] = mapped_column(Enum(Platform))
+    platform: Mapped[Platform] = mapped_column(Enum(Platform, name="platform", create_type=False))
     scheduled_at: Mapped[datetime] = mapped_column(DateTime, index=True)
     rubric: Mapped[dict] = mapped_column(JSON)
 
@@ -119,7 +119,7 @@ class ContentSlot(Base):
     image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     image_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    status: Mapped[PlanStatus] = mapped_column(Enum(PlanStatus), default=PlanStatus.planned)
+    status: Mapped[PlanStatus] = mapped_column(Enum(PlanStatus, name="planstatus", create_type=False), default=PlanStatus.planned)
     external_post_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -287,7 +287,7 @@ class Subscription(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID, ForeignKey("users.id"))
-    plan: Mapped[SubscriptionPlan] = mapped_column(Enum(SubscriptionPlan))
+    plan: Mapped[SubscriptionPlan] = mapped_column(Enum(SubscriptionPlan, name="subscriptionplan", create_type=False))
     status: Mapped[str] = mapped_column(String(50))  # active / cancelled / past_due / trialing
     current_period_start: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     current_period_end: Mapped[datetime] = mapped_column(DateTime)
