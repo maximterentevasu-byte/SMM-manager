@@ -16,7 +16,7 @@ type PlatformStrategy = {
   content_pillars: string[]; rubrics: Rubric[];
 };
 
-type ChatMessage = { role: "user" | "ai"; text: string };
+type ChatMessage = { role: "user" | "ai"; text: string; applyMsg?: string };
 
 const PLATFORM_LABEL: Record<string, string> = { telegram: "✈ Telegram", vk: "ВК ВКонтакте", ok: "О Одноклассники" };
 const MIX_LABELS: Record<string, string> = { sales: "Продажи", educational: "Обучение", entertainment: "Развлечение", ugc_triggers: "UGC" };
@@ -42,6 +42,7 @@ export default function StrategyPage() {
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const [applyingMsg, setApplyingMsg] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const [businessId] = useState(() =>
@@ -99,11 +100,29 @@ export default function StrategyPage() {
     setChatLoading(true);
     try {
       const { data } = await api.post(`/businesses/${businessId}/strategy-chat`, { message: msg });
-      setChat((prev) => [...prev, { role: "ai", text: data.response }]);
+      setChat((prev) => [...prev, { role: "ai", text: data.response, applyMsg: msg }]);
     } catch {
       setChat((prev) => [...prev, { role: "ai", text: "Не удалось получить ответ. Попробуйте ещё раз." }]);
     } finally {
       setChatLoading(false);
+    }
+  };
+
+  const applyChange = async (msg: string) => {
+    setApplyingMsg(msg);
+    try {
+      const { data } = await api.post(`/businesses/${businessId}/refine-strategy`, { message: msg });
+      setStrategy(data.strategy);
+      const updated: Record<string, number> = {};
+      data.strategy?.forEach((ps: PlatformStrategy) => { updated[ps.platform] = ps.posts_per_week; });
+      setEditingPostsPerWeek(updated);
+      setChat(prev => prev.map(m =>
+        m.applyMsg === msg ? { ...m, applyMsg: undefined } : m
+      ));
+    } catch {
+      alert("Не удалось применить изменения. Попробуйте ещё раз.");
+    } finally {
+      setApplyingMsg(null);
     }
   };
 
@@ -404,13 +423,26 @@ export default function StrategyPage() {
                 <div style={{ maxHeight: 300, overflowY: "auto", padding: "16px 20px",
                   display: "flex", flexDirection: "column", gap: 12 }}>
                   {chat.map((m, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+                    <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start", gap: 6 }}>
                       <div style={{
                         maxWidth: "75%", padding: "10px 14px", borderRadius: 12,
                         fontSize: 13, lineHeight: 1.5,
                         background: m.role === "user" ? "#0D1B2A" : "#F1EFE8",
                         color: m.role === "user" ? "#fff" : "#333",
                       }}>{m.text}</div>
+                      {m.role === "ai" && m.applyMsg && (
+                        <button
+                          onClick={() => applyChange(m.applyMsg!)}
+                          disabled={applyingMsg === m.applyMsg}
+                          style={{
+                            padding: "6px 16px", background: applyingMsg === m.applyMsg ? "#E5E7EB" : "#3478F6",
+                            color: applyingMsg === m.applyMsg ? "#9CA3AF" : "#fff",
+                            border: "none", borderRadius: 20, cursor: applyingMsg === m.applyMsg ? "not-allowed" : "pointer",
+                            fontSize: 12, fontWeight: 600,
+                          }}>
+                          {applyingMsg === m.applyMsg ? "Применяю..." : "✓ Применить изменение"}
+                        </button>
+                      )}
                     </div>
                   ))}
                   {chatLoading && (
