@@ -163,6 +163,7 @@ class BusinessProfileRequest(BaseModel):
     business_goals: Optional[str] = None
     new_directions: Optional[str] = None
     smm_metrics: list[str] = []
+    brand_assets_labels: list[dict] = []
 
 
 @router.post("/save-profile/{business_id}")
