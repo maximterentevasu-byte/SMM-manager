@@ -325,32 +325,65 @@ function StoryDetail({ story, onClose }: { story: TGStory; onClose: () => void }
         {/* Body — две колонки */}
         <div style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
 
-          {/* Левая: медиа-плейсхолдер */}
-          <div style={{ flex: "0 0 50%", borderRight: "1px solid #F3F4F6",
+          {/* Левая: медиа-плейсхолдер в стиле истории */}
+          <div style={{
+            flex: "0 0 50%", borderRight: "1px solid #F3F4F6",
             display: "flex", alignItems: "center", justifyContent: "center",
-            flexDirection: "column", gap: 14, background: "#F9FAFB",
-            padding: 24, color: "#6B7280" }}>
-            <span style={{ fontSize: 64 }}>
-              {story.has_media ? (MEDIA_ICON[story.media_type] || "📎") : "📖"}
-            </span>
-            <span style={{ fontSize: 15, fontWeight: 600, color: "#374151" }}>
-              {story.has_media
-                ? (story.media_type === "photo" ? "Фото" : "Видео")
-                : "Без медиа"}
-            </span>
-            <span style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center",
-              maxWidth: 260, lineHeight: 1.6 }}>
-              Telegram не предоставляет встраиваемый виджет для историй
-            </span>
-            {storyUrl && (
-              <a href={storyUrl} target="_blank" rel="noopener noreferrer"
-                style={{ display: "inline-flex", alignItems: "center", gap: 6,
-                  padding: "9px 20px", background: "#3478F6", color: "#fff",
-                  borderRadius: 10, fontSize: 13, fontWeight: 600,
-                  textDecoration: "none", marginTop: 4 }}>
-                ↗ Открыть в Telegram
-              </a>
+            flexDirection: "column", position: "relative", overflow: "hidden",
+            minHeight: 280,
+            background: story.media_type === "video"
+              ? "linear-gradient(160deg, #1a0a2e 0%, #2d1b4e 50%, #4a2080 100%)"
+              : story.media_type === "photo"
+              ? "linear-gradient(160deg, #0a1628 0%, #0f2d4e 50%, #0f4060 100%)"
+              : "linear-gradient(160deg, #1a1a1a 0%, #2d2d2d 100%)",
+          }}>
+            {/* Фоновые круги — имитация глубины */}
+            <div style={{ position: "absolute", width: 200, height: 200, borderRadius: "50%",
+              background: "rgba(255,255,255,0.04)", top: -40, right: -40, pointerEvents: "none" }} />
+            <div style={{ position: "absolute", width: 140, height: 140, borderRadius: "50%",
+              background: "rgba(255,255,255,0.03)", bottom: 20, left: -30, pointerEvents: "none" }} />
+
+            {/* Иконка */}
+            <div style={{ fontSize: 72, lineHeight: 1, marginBottom: 12,
+              filter: "drop-shadow(0 4px 16px rgba(0,0,0,0.4))" }}>
+              {story.has_media ? (story.media_type === "video" ? "🎬" : "🖼") : "📖"}
+            </div>
+
+            {/* Бейдж типа */}
+            <div style={{ background: "rgba(255,255,255,0.15)", backdropFilter: "blur(8px)",
+              borderRadius: 20, padding: "4px 16px", fontSize: 12, fontWeight: 600,
+              color: "#fff", marginBottom: story.caption ? 16 : 0 }}>
+              {story.has_media ? (story.media_type === "photo" ? "Фото" : "Видео") : "Без медиа"}
+            </div>
+
+            {/* Подпись истории */}
+            {story.caption && (
+              <div style={{ background: "rgba(0,0,0,0.35)", backdropFilter: "blur(4px)",
+                borderRadius: 12, padding: "10px 16px", maxWidth: "calc(100% - 48px)",
+                fontSize: 13, color: "rgba(255,255,255,0.9)", lineHeight: 1.6,
+                textAlign: "center", marginTop: 4 }}>
+                {story.caption.length > 140 ? story.caption.slice(0, 140) + "…" : story.caption}
+              </div>
             )}
+
+            {/* Нижняя строка */}
+            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0,
+              padding: "12px 16px", display: "flex", flexDirection: "column",
+              alignItems: "center", gap: 8,
+              background: "linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 100%)" }}>
+              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>
+                Медиа недоступно — история истекла
+              </span>
+              {storyUrl && (
+                <a href={storyUrl} target="_blank" rel="noopener noreferrer"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "7px 18px", background: "#3478F6", color: "#fff",
+                    borderRadius: 10, fontSize: 12, fontWeight: 600,
+                    textDecoration: "none" }}>
+                  ↗ Открыть в Telegram
+                </a>
+              )}
+            </div>
           </div>
 
           {/* Правая: метрики */}
