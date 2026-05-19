@@ -1,6 +1,9 @@
 import uuid
 import io
+import logging
 from urllib.parse import quote
+
+log = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -212,8 +215,14 @@ async def save_profile(
         )
         db.add(business)
 
-    await db.commit()
-    return {"business_id": str(business.id), "status": "saved"}
+    biz_id = str(business.id) if business.id else None
+    try:
+        await db.commit()
+    except Exception as e:
+        import traceback
+        log.error("[save_profile] commit failed: %s\n%s", e, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"DB error: {e}")
+    return {"business_id": biz_id, "status": "saved"}
 
 
 @router.post("/clarify/{business_id}")
