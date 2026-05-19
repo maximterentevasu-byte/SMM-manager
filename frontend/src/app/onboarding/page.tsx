@@ -229,37 +229,20 @@ export default function OnboardingPage() {
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
-  const compressBrandAsset = async (file: File, maxPx = 512): Promise<{ data: string; mime: string } | null> => {
-    if (!file.type.startsWith("image/")) return null;
-    try {
-      const bitmap = await createImageBitmap(file);
-      const scale = Math.min(maxPx / bitmap.width, maxPx / bitmap.height, 1);
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-      const ctx = canvas.getContext("2d");
-      if (!ctx) { bitmap.close(); throw new Error("no ctx"); }
-      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      bitmap.close();
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
-      const b64 = dataUrl.split(",")[1];
-      if (b64 && b64.length > 100) return { data: b64, mime: "image/jpeg" };
-      throw new Error("empty canvas output");
-    } catch {
-      // fallback: FileReader без сжатия (надёжнее, но больше размер)
-      return new Promise(resolve => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const s = e.target?.result as string;
-          if (!s) { resolve(null); return; }
-          const parts = s.split(",");
-          resolve(parts[1] ? { data: parts[1], mime: file.type } : null);
-        };
-        reader.onerror = () => resolve(null);
-        reader.readAsDataURL(file);
-      });
-    }
-  };
+  const readBrandAsset = (file: File): Promise<{ data: string; mime: string } | null> =>
+    new Promise(resolve => {
+      const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|gif|webp|bmp)$/i.test(file.name);
+      if (!isImage) { resolve(null); return; }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const s = e.target?.result as string;
+        if (!s) { resolve(null); return; }
+        const parts = s.split(",");
+        resolve(parts[1] ? { data: parts[1], mime: file.type || "image/jpeg" } : null);
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
 
   const saveAndClarify = async () => {
     setLoading(true);
@@ -267,8 +250,8 @@ export default function OnboardingPage() {
     try {
       const compressedAssets = await Promise.all(
         brandAssets.map(async a => {
-          const compressed = await compressBrandAsset(a.file);
-          return { name: a.file.name, label: a.label, ...(compressed || {}) };
+          const fileData = await readBrandAsset(a.file);
+          return { name: a.file.name, label: a.label, ...(fileData || {}) };
         })
       );
       const payload = {
