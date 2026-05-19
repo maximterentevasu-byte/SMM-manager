@@ -229,31 +229,15 @@ export default function OnboardingPage() {
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
-  const readBrandAsset = (file: File): Promise<{ data: string; mime: string } | null> =>
-    new Promise(resolve => {
-      const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|gif|webp|bmp)$/i.test(file.name);
-      if (!isImage) { resolve(null); return; }
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const s = e.target?.result as string;
-        if (!s) { resolve(null); return; }
-        const parts = s.split(",");
-        resolve(parts[1] ? { data: parts[1], mime: file.type || "image/jpeg" } : null);
-      };
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(file);
-    });
-
   const saveAndClarify = async () => {
     setLoading(true);
     setError("");
     try {
-      const compressedAssets = await Promise.all(
-        brandAssets.map(async a => {
-          const fileData = await readBrandAsset(a.file);
-          return { name: a.file.name, label: a.label, ...(fileData || {}) };
-        })
-      );
+      const compressedAssets = brandAssets.map(a => {
+        const mime = a.file.type || "image/jpeg";
+        const data = a.preview && a.preview.includes(",") ? a.preview.split(",")[1] : undefined;
+        return { name: a.file.name, label: a.label, ...(data ? { data, mime } : {}) };
+      });
       const payload = {
         ...form,
         products: [],
