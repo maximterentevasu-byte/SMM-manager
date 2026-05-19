@@ -176,7 +176,7 @@ async def save_profile(
     profile = profile_data.model_dump()
     business = None
 
-    # Если business_id не "new" — ищем существующий
+    # Если business_id не "new" — ищем по конкретному ID
     if business_id != "new":
         try:
             result = await db.execute(
@@ -186,6 +186,17 @@ async def save_profile(
                 )
             )
             business = result.scalar_one_or_none()
+        except Exception:
+            business = None
+
+    # Если не нашли по ID (или "new") — ищем любой существующий бизнес пользователя.
+    # Это предотвращает создание дублирующего бизнеса при потере localStorage.
+    if business is None:
+        try:
+            result = await db.execute(
+                select(Business).where(Business.user_id == current_user.id)
+            )
+            business = result.scalars().first()
         except Exception:
             business = None
 
