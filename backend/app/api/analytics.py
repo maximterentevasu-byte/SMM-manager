@@ -159,6 +159,10 @@ class TGCodeIn(BaseModel):
     phone_code_hash: str
 
 
+class TG2FAIn(BaseModel):
+    password: str
+
+
 def _tg_send_code_sync(api_id: int, api_hash: str, phone: str) -> tuple[str, str]:
     """Отправляет код, возвращает (phone_code_hash, session_str).
     Сессию нужно передать в sign_in — иначе Telegram отклонит хэш как невалидный."""
@@ -180,8 +184,38 @@ def _tg_send_code_sync(api_id: int, api_hash: str, phone: str) -> tuple[str, str
     return loop.run_until_complete(_do())
 
 
+_2FA_MARKER = "__2fa_required__"
+
+
 def _tg_sign_in_sync(api_id: int, api_hash: str, phone: str, code: str, phone_code_hash: str, session_str: str = "") -> str:
-    """Выполняет sign_in, переиспользуя сессию от send_code (тот же auth_key)."""
+    """Выполняет sign_in. Если включена 2FA — возвращает маркер _2FA_MARKER вместо сессии."""
+    import asyncio as _aio
+    from telethon import TelegramClient
+    from telethon.sessions import StringSession
+    from telethon.errors import SessionPasswordNeededError
+
+    loop = _aio.new_event_loop()
+    _aio.set_event_loop(loop)
+
+    async def _do():
+        client = TelegramClient(StringSession(session_str or None), api_id, api_hash)
+        await client.connect()
+        try:
+            await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
+        except SessionPasswordNeededError:
+            # Сохраняем сессию для последующего ввода пароля 2FA
+            partial_session = client.session.save()
+            await client.disconnect()
+            return f"{_2FA_MARKER}:{partial_session}"
+        new_session = client.session.save()
+        await client.disconnect()
+        return new_session
+
+    return loop.run_until_complete(_do())
+
+
+def _tg_sign_in_2fa_sync(api_id: int, api_hash: str, password: str, session_str: str) -> str:
+    """Завершает авторизацию с паролем двухэтапной проверки."""
     import asyncio as _aio
     from telethon import TelegramClient
     from telethon.sessions import StringSession
@@ -190,9 +224,9 @@ def _tg_sign_in_sync(api_id: int, api_hash: str, phone: str, code: str, phone_co
     _aio.set_event_loop(loop)
 
     async def _do():
-        client = TelegramClient(StringSession(session_str or None), api_id, api_hash)
+        client = TelegramClient(StringSession(session_str), api_id, api_hash)
         await client.connect()
-        await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
+        await client.sign_in(password=password)
         new_session = client.session.save()
         await client.disconnect()
         return new_session
@@ -248,8 +282,46 @@ async def tg_sign_in(
         raise HTTPException(400, "TG_API_ID / TG_API_HASH не настроены на сервере.")
     temp_session = (_pending_tg_meta.get(business_id) or {}).get("session", "")
     try:
-        session_str = await asyncio.to_thread(
+        result = await asyncio.to_thread(
             _tg_sign_in_sync, api_id, api_hash, req.phone, req.code, req.phone_code_hash, temp_session
+        )
+        if result.startswith(_2FA_MARKER):
+            # Двухэтапная проверка — нужен пароль
+            partial_session = result[len(_2FA_MARKER) + 1:]
+            _pending_tg_meta[business_id] = {
+                "api_id": api_id, "api_hash": api_hash, "session": partial_session
+            }
+            return {"status": "password_required"}
+        _pending_tg_meta.pop(business_id, None)
+        conn.tg_api_id = str(api_id)
+        conn.tg_api_hash = api_hash
+        conn.tg_session_encrypted = encrypt_token(result)
+        await db.commit()
+        return {"status": "connected"}
+    except Exception as e:
+        raise HTTPException(400, f"Ошибка входа: {str(e)}")
+
+
+@router.post("/{business_id}/tg-sign-in-2fa")
+async def tg_sign_in_2fa(
+    business_id: str,
+    req: TG2FAIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_business(business_id, current_user, db)
+    conn = await _get_connection(business_id, "telegram", db)
+    if not conn:
+        raise HTTPException(400, "Telegram-канал не подключён.")
+    pending = _pending_tg_meta.get(business_id)
+    if not pending:
+        raise HTTPException(400, "Сессия устарела. Начните авторизацию заново.")
+    api_id = pending["api_id"]
+    api_hash = pending["api_hash"]
+    partial_session = pending["session"]
+    try:
+        session_str = await asyncio.to_thread(
+            _tg_sign_in_2fa_sync, api_id, api_hash, req.password, partial_session
         )
         _pending_tg_meta.pop(business_id, None)
         conn.tg_api_id = str(api_id)
@@ -258,6 +330,9 @@ async def tg_sign_in(
         await db.commit()
         return {"status": "connected"}
     except Exception as e:
+        err = str(e).lower()
+        if "password" in err or "invalid" in err or "wrong" in err:
+            raise HTTPException(400, "Неверный пароль двухэтапной проверки.")
         raise HTTPException(400, f"Ошибка входа: {str(e)}")
 
 

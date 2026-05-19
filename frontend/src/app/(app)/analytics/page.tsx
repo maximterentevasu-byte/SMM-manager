@@ -78,7 +78,8 @@ export default function AnalyticsPage() {
   const [tgPhone, setTgPhone] = useState("");
   const [tgCode, setTgCode] = useState("");
   const [tgCodeHash, setTgCodeHash] = useState("");
-  const [tgStep, setTgStep] = useState<1 | 2>(1);
+  const [tgPassword, setTgPassword] = useState("");
+  const [tgStep, setTgStep] = useState<1 | 2 | 3>(1);
   const [tgPhoneLoading, setTgPhoneLoading] = useState(false);
   const [tgPhoneMsg, setTgPhoneMsg] = useState("");
 
@@ -170,11 +171,16 @@ export default function AnalyticsPage() {
     setTgPhoneLoading(true);
     setTgPhoneMsg("");
     try {
-      await api.post(`/analytics/${businessId}/tg-sign-in`, {
+      const { data } = await api.post(`/analytics/${businessId}/tg-sign-in`, {
         phone: tgPhone,
         code: tgCode,
         phone_code_hash: tgCodeHash,
       });
+      if (data.status === "password_required") {
+        setTgStep(3);
+        setTgPhoneMsg("На аккаунте включена двухэтапная проверка. Введите пароль.");
+        return;
+      }
       setTgCredsStatus((prev) => prev ? { ...prev, configured: true } : null);
       setTgPhoneMsg("✓ Telegram подключён! Нажмите «Собрать сейчас».");
       setTgStep(1);
@@ -188,6 +194,24 @@ export default function AnalyticsPage() {
       } else {
         setTgPhoneMsg(detail || "Ошибка входа");
       }
+    } finally {
+      setTgPhoneLoading(false);
+    }
+  };
+
+  const signIn2FA = async () => {
+    setTgPhoneLoading(true);
+    setTgPhoneMsg("");
+    try {
+      await api.post(`/analytics/${businessId}/tg-sign-in-2fa`, { password: tgPassword });
+      setTgCredsStatus((prev) => prev ? { ...prev, configured: true } : null);
+      setTgPhoneMsg("✓ Telegram подключён! Нажмите «Собрать сейчас».");
+      setTgStep(1);
+      setTgCode("");
+      setTgPassword("");
+    } catch (e: any) {
+      const detail: string = e?.response?.data?.detail || "";
+      setTgPhoneMsg(detail || "Неверный пароль. Попробуйте ещё раз.");
     } finally {
       setTgPhoneLoading(false);
     }
@@ -555,10 +579,10 @@ export default function AnalyticsPage() {
                     {isBasicMode && (
                       <div style={{ marginTop: 24 }}>
                         <TGPhoneForm
-                          step={tgStep} phone={tgPhone} code={tgCode}
+                          step={tgStep} phone={tgPhone} code={tgCode} password={tgPassword}
                           loading={tgPhoneLoading} msg={tgPhoneMsg}
-                          onPhoneChange={setTgPhone} onCodeChange={setTgCode}
-                          onSendCode={sendTgCode} onSignIn={signInTg}
+                          onPhoneChange={setTgPhone} onCodeChange={setTgCode} onPasswordChange={setTgPassword}
+                          onSendCode={sendTgCode} onSignIn={signInTg} onSignIn2FA={signIn2FA}
                           onBack={() => { setTgStep(1); setTgPhoneMsg(""); }}
                         />
                       </div>
@@ -573,10 +597,10 @@ export default function AnalyticsPage() {
               </>
             ) : tgCredsStatus?.has_connection ? (
               <TGPhoneForm
-                step={tgStep} phone={tgPhone} code={tgCode}
+                step={tgStep} phone={tgPhone} code={tgCode} password={tgPassword}
                 loading={tgPhoneLoading} msg={tgPhoneMsg}
-                onPhoneChange={setTgPhone} onCodeChange={setTgCode}
-                onSendCode={sendTgCode} onSignIn={signInTg}
+                onPhoneChange={setTgPhone} onCodeChange={setTgCode} onPasswordChange={setTgPassword}
+                onSendCode={sendTgCode} onSignIn={signInTg} onSignIn2FA={signIn2FA}
                 onBack={() => { setTgStep(1); setTgPhoneMsg(""); }}
               />
             ) : (
@@ -732,19 +756,22 @@ function NoConnectionState({ platform }: { platform: string }) {
 // ─── TG Phone Auth Form ──────────────────────────────────────────────────────
 
 type TGPhoneFormProps = {
-  step: 1 | 2;
+  step: 1 | 2 | 3;
   phone: string;
   code: string;
+  password: string;
   loading: boolean;
   msg: string;
   onPhoneChange: (v: string) => void;
   onCodeChange: (v: string) => void;
+  onPasswordChange: (v: string) => void;
   onSendCode: () => void;
   onSignIn: () => void;
+  onSignIn2FA: () => void;
   onBack: () => void;
 };
 
-function TGPhoneForm({ step, phone, code, loading, msg, onPhoneChange, onCodeChange, onSendCode, onSignIn, onBack }: TGPhoneFormProps) {
+function TGPhoneForm({ step, phone, code, password, loading, msg, onPhoneChange, onCodeChange, onPasswordChange, onSendCode, onSignIn, onSignIn2FA, onBack }: TGPhoneFormProps) {
   const inputStyle: React.CSSProperties = {
     width: "100%", padding: "10px 14px", border: "1px solid #E0DED8",
     borderRadius: 10, fontSize: 14, fontFamily: "inherit",
@@ -787,7 +814,7 @@ function TGPhoneForm({ step, phone, code, loading, msg, onPhoneChange, onCodeCha
             {loading ? "Отправляю..." : "Получить код →"}
           </button>
         </>
-      ) : (
+      ) : step === 2 ? (
         <>
           <div style={{ background: "#F0F4FF", border: "1px solid #C7D4F5", borderRadius: 10,
             padding: "12px 16px", marginBottom: 16, fontSize: 13, color: "#2D4A9A" }}>
@@ -824,12 +851,49 @@ function TGPhoneForm({ step, phone, code, loading, msg, onPhoneChange, onCodeCha
             </button>
           </div>
         </>
+      ) : (
+        <>
+          <div style={{ background: "#FFF8E1", border: "1px solid #F5C842", borderRadius: 10,
+            padding: "12px 16px", marginBottom: 16, fontSize: 13, color: "#7A5700" }}>
+            На аккаунте включена <strong>двухэтапная проверка</strong>. Введи пароль, который ты задал в Telegram.
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#444", display: "block", marginBottom: 6 }}>
+              Пароль двухэтапной проверки
+            </label>
+            <input
+              type="password"
+              placeholder="Пароль"
+              value={password}
+              onChange={(e) => onPasswordChange(e.target.value)}
+              style={inputStyle}
+              autoFocus
+            />
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              onClick={onBack}
+              style={{ padding: "11px 18px", background: "#F0F0F0",
+                color: "#444", border: "none", borderRadius: 10, fontSize: 14,
+                fontWeight: 500, cursor: "pointer" }}>
+              ← Назад
+            </button>
+            <button
+              onClick={onSignIn2FA}
+              disabled={loading || !password.trim()}
+              style={{ padding: "11px 28px", background: password.trim() ? "#3478F6" : "#ccc",
+                color: "#fff", border: "none", borderRadius: 10, fontSize: 14,
+                fontWeight: 600, cursor: password.trim() ? "pointer" : "not-allowed", flex: 1 }}>
+              {loading ? "Проверяю..." : "Подтвердить пароль"}
+            </button>
+          </div>
+        </>
       )}
 
       {msg && (
         <div style={{ marginTop: 14, fontSize: 13,
           color: msg.startsWith("✓") ? "#059669"
-            : msg.startsWith("Код отправлен") ? "#2D4A9A"
+            : msg.startsWith("На аккаунте") || msg.startsWith("Код отправлен") ? "#7A5700"
             : "#DC2626" }}>
           {msg}
         </div>
