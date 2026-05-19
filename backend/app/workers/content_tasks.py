@@ -6,6 +6,8 @@ from app.workers.celery_app import celery_app
 from app.workers.db import get_worker_db
 from app.models.models import Business, ContentSlot, PlanStatus
 from app.agents.planner_agent import build_content_plan, generate_ideas_for_slots
+from app.agents.analytics_context import get_company_analytics_context, format_analytics_for_prompt
+from app.agents.market_research import get_market_insights, format_market_insights_for_prompt
 from app.config import settings
 from sqlalchemy import select
 
@@ -51,8 +53,19 @@ async def _generate_plan(business_id: str):
         slots_meta = build_content_plan(business.strategy, business.profile, start_date=start_date)
         print(f"→ Создано {len(slots_meta)} слотов для {business.name}")
 
+        # Аналитика компании и рыночные инсайты для улучшения идей
+        analytics_ctx = await get_company_analytics_context(business_id, db)
+        analytics_text = format_analytics_for_prompt(analytics_ctx)
+        market_raw = await get_market_insights(business.profile)
+        market_text = format_market_insights_for_prompt(market_raw)
+
         try:
-            ideas = await generate_ideas_for_slots(slots_meta, business.profile)
+            ideas = await generate_ideas_for_slots(
+                slots_meta,
+                business.profile,
+                analytics_context=analytics_text,
+                market_insights=market_text,
+            )
         except Exception as e:
             print(f"✗ Ошибка генерации идей: {e} — слоты создадутся без идей")
             ideas = []
@@ -105,8 +118,10 @@ async def _generate_content(slot_id: str):
             slot.status = PlanStatus.needs_info
             print(f"✓ Пост требует информации: {slot_id[:8]}... ({slot.platform})")
         else:
+            analytics_ctx = await get_company_analytics_context(str(slot.business_id), db)
+            analytics_text = format_analytics_for_prompt(analytics_ctx)
             try:
-                post_data = await _generate_post_text(slot, business.profile)
+                post_data = await _generate_post_text(slot, business.profile, analytics_context=analytics_text)
                 slot.post_text = post_data["text"]
                 slot.hashtags = post_data["hashtags"]
 
@@ -130,13 +145,14 @@ PLATFORM_SPECS = {
 }
 
 
-async def _generate_post_text(slot, profile: dict) -> dict:
+async def _generate_post_text(slot, profile: dict, analytics_context: str = "") -> dict:
     spec = PLATFORM_SPECS.get(slot.platform, PLATFORM_SPECS["vk"])
     rubric = slot.rubric
     idea = slot.idea
 
     address = profile.get('address', '')
     contact_info = profile.get('contact_info', '')
+    analytics_block = f"\n{analytics_context}\n" if analytics_context else ""
 
     prompt = f"""Ты SMM-копирайтер для бренда "{profile.get('name', '')}".
 Голос бренда: {profile.get('brand_voice', 'дружелюбный')}
@@ -144,8 +160,7 @@ async def _generate_post_text(slot, profile: dict) -> dict:
 Аудитория: {profile.get('audience', {}).get('primary', profile.get('audience_primary', ''))}
 УТП бизнеса: {profile.get('usp', '')}
 {f"Адрес: {address}" if address else ""}
-{f"Контакты: {contact_info}" if contact_info else ""}
-
+{f"Контакты: {contact_info}" if contact_info else ""}{analytics_block}
 Рубрика: {rubric['name']}
 Структура: {' → '.join(rubric.get('structure', []))}
 Тема поста: {idea['idea']}

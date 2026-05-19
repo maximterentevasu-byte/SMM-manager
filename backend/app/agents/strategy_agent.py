@@ -129,16 +129,27 @@ async def strategy_chat(user_message: str, strategy: list | None, profile: dict)
         return {"response": "Не удалось получить ответ. Попробуйте переформулировать запрос."}
 
 
-async def generate_strategy(business_profile: dict) -> list[dict]:
+async def generate_strategy(
+    business_profile: dict,
+    analytics_context: str = "",
+    market_insights: str = "",
+) -> list[dict]:
     """
     Генерирует полную контент-стратегию на 3 месяца
-    на основе профиля бизнеса.
+    на основе профиля бизнеса, аналитики и рыночных инсайтов.
     """
     platforms = business_profile.get("platforms", ["vk"])
+
+    extra_context = ""
+    if analytics_context:
+        extra_context += f"\n\n{analytics_context}"
+    if market_insights:
+        extra_context += f"\n\n{market_insights}"
 
     msg_content = f"""Ты ведущий SMM-стратег с опытом работы с малым бизнесом в России.
 
 Тебе передан профиль бизнеса. Создай контент-стратегию для следующих площадок: {', '.join(platforms)}
+{extra_context}
 
 Для КАЖДОЙ площадки верни объект:
 {{
@@ -175,6 +186,8 @@ async def generate_strategy(business_profile: dict) -> list[dict]:
 - Рубрики должны быть конкретными, не шаблонными
 - Учитывай специфику бизнеса и аудитории
 - Соотношение типов должно соответствовать content_mix
+- Если есть данные аналитики компании — скорректируй best_posting_times под реальные best_day/best_hour
+- Если есть рыночные инсайты — используй вирусные форматы и темы при создании рубрик и example_topics
 
 Верни JSON-массив для всех площадок. ТОЛЬКО валидный JSON, без markdown, без комментариев, без trailing commas.
 

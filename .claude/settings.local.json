@@ -25,7 +25,17 @@
       "Bash(Select-Object Name)",
       "Bash(xargs ls -lh)",
       "Bash(postcss\")",
-      "PowerShell(Get-ChildItem \"c:\\\\Users\\\\admin\\\\Desktop\\\\smm-platform\\\\frontend\" -MaxDepth 1 | Where-Object {$_.Name -match \"tailwind|postcss\"} | Select-Object Name)"
+      "PowerShell(Get-ChildItem \"c:\\\\Users\\\\admin\\\\Desktop\\\\smm-platform\\\\frontend\" -MaxDepth 1 | Where-Object {$_.Name -match \"tailwind|postcss\"} | Select-Object Name)",
+      "Bash(python -m py_compile app/agents/market_research.py)",
+      "Bash(python -m py_compile app/agents/analytics_context.py)",
+      "Bash(python -m py_compile app/workers/strategy_tasks.py)",
+      "Bash(python -m py_compile app/agents/strategy_agent.py)",
+      "Bash(python -m py_compile app/agents/planner_agent.py)",
+      "Bash(python -m py_compile /c/Users/admin/Desktop/smm-platform/backend/app/agents/market_research.py)",
+      "Bash(python -m py_compile /c/Users/admin/Desktop/smm-platform/backend/app/agents/analytics_context.py)",
+      "Bash(python -m py_compile /c/Users/admin/Desktop/smm-platform/backend/app/workers/strategy_tasks.py)",
+      "Bash(python -m py_compile /c/Users/admin/Desktop/smm-platform/backend/app/agents/strategy_agent.py)",
+      "Bash(python -m py_compile /c/Users/admin/Desktop/smm-platform/backend/app/agents/planner_agent.py)"
     ]
   }
 }

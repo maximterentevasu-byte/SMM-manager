@@ -132,9 +132,20 @@ def build_content_plan(
     return sorted(slots, key=lambda x: x["scheduled_at"])
 
 
-async def generate_ideas_for_slots(slots_meta: list, business_profile: dict) -> list:
+async def generate_ideas_for_slots(
+    slots_meta: list,
+    business_profile: dict,
+    analytics_context: str = "",
+    market_insights: str = "",
+) -> list:
     if not slots_meta:
         return []
+
+    extra_context = ""
+    if analytics_context:
+        extra_context += f"\n{analytics_context}\n"
+    if market_insights:
+        extra_context += f"\n{market_insights}\n"
 
     # Отправляем пакетом — не более 15 слотов за раз
     all_ideas = []
@@ -162,7 +173,7 @@ async def generate_ideas_for_slots(slots_meta: list, business_profile: dict) -> 
         usp = business_profile.get('usp', '')
 
         prompt = f"""Ты SMM-стратег. Придумай конкретные идеи постов для каждого слота и классифицируй их.
-
+{extra_context}
 ПРОФИЛЬ БИЗНЕСА:
 - Название: {business_profile.get('name', '')}
 - Ниша: {business_profile.get('niche', '')}
@@ -173,6 +184,8 @@ async def generate_ideas_for_slots(slots_meta: list, business_profile: dict) -> 
 - Контакты: {contact_info if contact_info else 'не указаны'}
 
 ВАЖНЫЙ КОНТЕКСТ:
+Если выше переданы данные аналитики компании — ориентируйся на стиль и темы постов с высоким ER,
+избегай форматов худших постов. Если есть рыночные инсайты — используй вирусные форматы и хуки.
 Онбординг не предоставил список конкретных товаров/услуг, цен, акций, ивентов и дат —
 это "чувствительная информация", которой владеет только хозяин бизнеса.
 AI не может её выдумывать. Поэтому любой пост, требующий такой конкретики, ОБЯЗАН
