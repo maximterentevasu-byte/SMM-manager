@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { useMobile } from "@/hooks/useMobile";
 
 const STEPS = [
   { id: "business",  label: "Бизнес",      icon: "🏢" },
@@ -121,6 +122,7 @@ const INITIAL: FormData = {
 };
 
 export default function OnboardingPage() {
+  const isMobile = useMobile();
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormData>(INITIAL);
@@ -518,16 +520,16 @@ export default function OnboardingPage() {
       )}
 
       {/* Header */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #E5E7EB", padding: "0 2rem" }}>
-        <div style={{ maxWidth: 800, margin: "0 auto", display: "flex", alignItems: "center", height: 60, gap: 12 }}>
-          <span style={{ fontFamily: "'Manrope', sans-serif", fontSize: 20, fontWeight: 800, color: "#0D1B2A", letterSpacing: -0.5 }}>
+      <div style={{ background: "#fff", borderBottom: "1px solid #E5E7EB", padding: isMobile ? "0 16px" : "0 2rem" }}>
+        <div style={{ maxWidth: 800, margin: "0 auto", display: "flex", alignItems: "center", height: isMobile ? 52 : 60, gap: 12 }}>
+          <span style={{ fontFamily: "'Manrope', sans-serif", fontSize: isMobile ? 17 : 20, fontWeight: 800, color: "#0D1B2A", letterSpacing: -0.5 }}>
             smm<span style={{ color: "#3478F6" }}>platform</span>
           </span>
-          <span style={{ fontSize: 13, color: "#9CA3AF" }}>/ Настройка бизнеса</span>
+          <span style={{ fontSize: isMobile ? 11 : 13, color: "#9CA3AF" }}>/ Настройка</span>
         </div>
       </div>
 
-      <div style={{ maxWidth: step >= 6 ? 860 : 680, margin: "0 auto", padding: "2rem 1rem", transition: "max-width 0.3s" }}>
+      <div style={{ maxWidth: step >= 6 ? 860 : 680, margin: "0 auto", padding: isMobile ? "16px 12px" : "2rem 1rem", transition: "max-width 0.3s" }}>
         {/* Progress bar */}
         <div style={{ display: "flex", gap: 4, marginBottom: 32 }}>
           {STEPS.map((s, i) => (
@@ -650,7 +652,7 @@ export default function OnboardingPage() {
 
             <div>
               <label style={lbl}>Ценовой сегмент</label>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 10 }}>
                 {PRICE_SEGMENTS.map(ps => (
                   <div key={ps.value} onClick={() => set("price_segment", ps.value)}
                     style={{ padding: 12, border: `1.5px solid ${form.price_segment === ps.value ? "#0D1B2A" : "#E5E7EB"}`,
@@ -798,7 +800,7 @@ export default function OnboardingPage() {
             </div>
             <div>
               <label style={lbl}>Тональность общения</label>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 10 }}>
                 {BRAND_VOICES.map(bv => (
                   <div key={bv.value} onClick={() => set("brand_voice", bv.value)}
                     style={{ padding: "12px 14px",

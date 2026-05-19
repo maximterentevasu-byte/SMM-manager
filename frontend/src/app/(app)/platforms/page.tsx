@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import { useMobile } from "@/hooks/useMobile";
 
 type Connection = {
   platform: string;
@@ -103,6 +104,7 @@ const PLATFORMS = [
 ];
 
 export default function PlatformsPage() {
+  const isMobile = useMobile();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -233,16 +235,24 @@ export default function PlatformsPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F8F7F4", fontFamily: "'Segoe UI', sans-serif" }}>
-      <div style={{ background: "#fff", borderBottom: "1px solid #EAE8E2", padding: "0 2rem" }}>
-        <div style={{ maxWidth: 860, margin: "0 auto", height: 64, display: "flex", alignItems: "center", gap: 16 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Подключение платформ</h1>
-          <span style={{ fontSize: 13, color: "#888" }}>
-            Подключи каналы для автоматической публикации постов
-          </span>
+      {!isMobile && (
+        <div style={{ background: "#fff", borderBottom: "1px solid #EAE8E2", padding: "0 2rem" }}>
+          <div style={{ maxWidth: 860, margin: "0 auto", height: 64, display: "flex", alignItems: "center", gap: 16 }}>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Подключение платформ</h1>
+            <span style={{ fontSize: 13, color: "#888" }}>
+              Подключи каналы для автоматической публикации постов
+            </span>
+          </div>
         </div>
-      </div>
+      )}
+      {isMobile && (
+        <div style={{ padding: "14px 16px 10px", background: "#fff", borderBottom: "1px solid #F3F4F6" }}>
+          <h1 style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Подключение платформ</h1>
+          <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>Подключи каналы для автопубликации</div>
+        </div>
+      )}
 
-      <div style={{ maxWidth: 860, margin: "0 auto", padding: "2rem", display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ maxWidth: 860, margin: "0 auto", padding: isMobile ? "12px 12px" : "2rem", display: "flex", flexDirection: "column", gap: isMobile ? 12 : 20 }}>
         {loading ? (
           <div style={{ textAlign: "center", padding: "3rem", color: "#888" }}>Загружаем...</div>
         ) : (

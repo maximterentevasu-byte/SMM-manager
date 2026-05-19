@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
+import { useMobile } from "@/hooks/useMobile";
 
 type Platform = "vk" | "telegram";
 type ConnectedPlatform = { platform: Platform; page_name: string };
@@ -183,7 +184,7 @@ function UploadGrid({ slots, onSlotClick, onRemove, onReorder, onFileDrop }: {
   const [dragOver, setDragOver] = useState(-1);
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(72px, 1fr))", gap: 8 }}>
       {slots.map((slot, idx) => (
         <div
           key={idx}
@@ -359,6 +360,7 @@ function AiImagePreview({
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function PostCreatorPage() {
+  const isMobile = useMobile();
   const [businessId] = useState(() =>
     typeof window !== "undefined" ? localStorage.getItem("businessId") || "" : ""
   );
@@ -932,20 +934,33 @@ export default function PostCreatorPage() {
   return (
     <div style={{ minHeight: "100vh", background: "#F8F7F4", fontFamily: "'Segoe UI', sans-serif" }}>
       {/* Header */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #EAE8E2", padding: "0 2rem" }}>
-        <div style={{ maxWidth: 780, margin: "0 auto", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ fontSize: 20 }}>⚡</span>
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Быстрый пост</h1>
-            {draftSaved && <span style={{ fontSize: 11, color: "#0F6E56", background: "#E1F5EE", borderRadius: 8, padding: "2px 8px", fontWeight: 600 }}>Черновик сохранён</span>}
+      {!isMobile ? (
+        <div style={{ background: "#fff", borderBottom: "1px solid #EAE8E2", padding: "0 2rem" }}>
+          <div style={{ maxWidth: 780, margin: "0 auto", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: 20 }}>⚡</span>
+              <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Быстрый пост</h1>
+              {draftSaved && <span style={{ fontSize: 11, color: "#0F6E56", background: "#E1F5EE", borderRadius: 8, padding: "2px 8px", fontWeight: 600 }}>Черновик сохранён</span>}
+            </div>
+            {(hasText || idea) && (
+              <button onClick={deletePost} style={{ padding: "7px 16px", background: "none", border: "1.5px solid #DC2626", borderRadius: 10, color: "#DC2626", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Удалить пост</button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div style={{ background: "#fff", borderBottom: "1px solid #F3F4F6", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 18 }}>⚡</span>
+            <h1 style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Быстрый пост</h1>
+            {draftSaved && <span style={{ fontSize: 10, color: "#0F6E56", background: "#E1F5EE", borderRadius: 6, padding: "2px 6px", fontWeight: 600 }}>✓ Сохранён</span>}
           </div>
           {(hasText || idea) && (
-            <button onClick={deletePost} style={{ padding: "7px 16px", background: "none", border: "1.5px solid #DC2626", borderRadius: 10, color: "#DC2626", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Удалить пост</button>
+            <button onClick={deletePost} style={{ padding: "6px 12px", background: "none", border: "1.5px solid #DC2626", borderRadius: 8, color: "#DC2626", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Удалить</button>
           )}
         </div>
-      </div>
+      )}
 
-      <div style={{ maxWidth: 780, margin: "0 auto", padding: "2rem" }}>
+      <div style={{ maxWidth: 780, margin: "0 auto", padding: isMobile ? "12px 12px" : "2rem" }}>
 
         {/* ── 1. Идея ── */}
         <div style={card}>

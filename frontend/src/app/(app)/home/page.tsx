@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { useMobile } from "@/hooks/useMobile";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -142,6 +143,7 @@ function EmptyState({ icon, text }: { icon: string; text: string }) {
 
 export default function HomePage() {
   const router = useRouter();
+  const isMobile = useMobile();
   const [data, setData] = useState<DashData | null>(null);
   const [loading, setLoading] = useState(true);
   const [kpiPeriod, setKpiPeriod] = useState<"1m" | "3m" | "6m" | "all">("1m");
@@ -168,27 +170,41 @@ export default function HomePage() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F5F7FA", fontFamily: "'Inter', sans-serif" }}>
-      {/* Header */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #E5E7EB", padding: "0 2rem" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div>
-            <h1 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 20, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>
-              {greeting}{data?.business_name ? `, ${data.business_name}` : ""}
-            </h1>
-            <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>
-              {new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
+      {/* Header — hidden on mobile (top bar in layout handles it) */}
+      {!isMobile && (
+        <div style={{ background: "#fff", borderBottom: "1px solid #E5E7EB", padding: "0 2rem" }}>
+          <div style={{ maxWidth: 1200, margin: "0 auto", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <h1 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 20, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>
+                {greeting}{data?.business_name ? `, ${data.business_name}` : ""}
+              </h1>
+              <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>
+                {new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
+              </div>
             </div>
+            <button onClick={() => router.push("/content")} style={{
+              background: "#3478F6", color: "#fff", border: "none", borderRadius: 10,
+              padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            }}>
+              Контент-план →
+            </button>
           </div>
-          <button onClick={() => router.push("/content")} style={{
-            background: "#3478F6", color: "#fff", border: "none", borderRadius: 10,
-            padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-          }}>
-            Контент-план →
-          </button>
         </div>
-      </div>
+      )}
 
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 2rem" }}>
+      {/* Mobile greeting */}
+      {isMobile && (
+        <div style={{ padding: "14px 16px 4px", background: "#fff", borderBottom: "1px solid #F3F4F6" }}>
+          <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 16, fontWeight: 700, color: "#0D1B2A" }}>
+            {greeting}{data?.business_name ? `, ${data.business_name}` : ""}
+          </div>
+          <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>
+            {new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
+          </div>
+        </div>
+      )}
+
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "12px 12px" : "24px 2rem" }}>
         {loading ? (
           <div style={{ textAlign: "center", padding: 80, color: "#9CA3AF", fontSize: 14 }}>
             Загружаем дашборд...
@@ -202,17 +218,17 @@ export default function HomePage() {
           <>
             {/* ── KPI Block ─────────────────────────────────────────────────── */}
             <div style={{ marginBottom: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                <div style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: 15, color: "#0D1B2A" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+                <div style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: isMobile ? 14 : 15, color: "#0D1B2A" }}>
                   Ключевые показатели
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
                   {periods.map(p => (
                     <button key={p.key} onClick={() => setKpiPeriod(p.key)} style={{
-                      padding: "5px 12px", borderRadius: 8, border: "none", cursor: "pointer",
+                      padding: isMobile ? "4px 8px" : "5px 12px", borderRadius: 8, border: "none", cursor: "pointer",
                       background: kpiPeriod === p.key ? "#3478F6" : "#F3F4F6",
                       color: kpiPeriod === p.key ? "#fff" : "#6B7280",
-                      fontSize: 12, fontWeight: kpiPeriod === p.key ? 700 : 400,
+                      fontSize: isMobile ? 11 : 12, fontWeight: kpiPeriod === p.key ? 700 : 400,
                     }}>
                       {p.label}
                     </button>
@@ -229,7 +245,7 @@ export default function HomePage() {
                   Настройте приоритетные метрики в онбординге и подключите площадки — данные появятся автоматически
                 </div>
               ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(auto-fill, minmax(200px, 1fr))", gap: isMobile ? 8 : 12 }}>
                   {(data.kpi[kpiPeriod] || []).map((kpi, i) => (
                     <div key={i} style={{
                       background: "#fff", borderRadius: 14, padding: "18px 20px",
@@ -250,7 +266,7 @@ export default function HomePage() {
             </div>
 
             {/* ── Main 2-column grid ────────────────────────────────────────── */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? 12 : 16, marginBottom: isMobile ? 12 : 16 }}>
               {/* Analytics block */}
               <SectionCard title="📈 Аналитика за неделю">
                 {!data.analytics.has_data ? (
@@ -380,7 +396,7 @@ export default function HomePage() {
             </div>
 
             {/* ── Bottom 2-column grid ──────────────────────────────────────── */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? 12 : 16 }}>
               {/* Top content */}
               <SectionCard
                 title="🏆 Топ контент"

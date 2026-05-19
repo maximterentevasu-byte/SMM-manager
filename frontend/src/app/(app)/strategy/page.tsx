@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { useMobile } from "@/hooks/useMobile";
 
 type Rubric = {
   name: string; goal: string; format: string; tone: string;
@@ -22,6 +23,7 @@ const MIX_LABELS: Record<string, string> = { sales: "Продажи", educationa
 const MIX_COLORS: Record<string, string> = { sales: "#00B5A6", educational: "#185FA5", entertainment: "#3478F6", ugc_triggers: "#854F0B" };
 
 export default function StrategyPage() {
+  const isMobile = useMobile();
   const router = useRouter();
   const [tab, setTab] = useState<"strategy" | "profile">("strategy");
   const [strategy, setStrategy] = useState<PlatformStrategy[] | null>(null);
@@ -152,25 +154,43 @@ export default function StrategyPage() {
   return (
     <div style={{ minHeight: "100vh", background: "#F5F7FA", fontFamily: "'Inter', sans-serif" }}>
       {/* Header */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #E5E7EB", padding: "0 2rem" }}>
-        <div style={{ maxWidth: 900, margin: "0 auto", height: 64, display: "flex", alignItems: "center", gap: 24 }}>
-          <h1 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 20, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Стратегия и онбординг</h1>
-          <div style={{ display: "flex", gap: 4 }}>
+      {!isMobile ? (
+        <div style={{ background: "#fff", borderBottom: "1px solid #E5E7EB", padding: "0 2rem" }}>
+          <div style={{ maxWidth: 900, margin: "0 auto", height: 64, display: "flex", alignItems: "center", gap: 24 }}>
+            <h1 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 20, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Стратегия и онбординг</h1>
+            <div style={{ display: "flex", gap: 4 }}>
+              {(["strategy", "profile"] as const).map((t) => (
+                <button key={t} onClick={() => setTab(t)}
+                  style={{ padding: "7px 18px", borderRadius: 20, border: "1px solid",
+                    cursor: "pointer", fontSize: 13, fontWeight: tab === t ? 600 : 400,
+                    borderColor: tab === t ? "#0D1B2A" : "#E0DED8",
+                    background: tab === t ? "#0D1B2A" : "#fff",
+                    color: tab === t ? "#fff" : "#666" }}>
+                  {t === "strategy" ? "🎯 Стратегия" : "📋 Профиль бизнеса"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ background: "#fff", borderBottom: "1px solid #F3F4F6", padding: "12px 16px" }}>
+          <h1 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 17, fontWeight: 700, color: "#0D1B2A", margin: "0 0 10px" }}>Стратегия</h1>
+          <div style={{ display: "flex", gap: 6 }}>
             {(["strategy", "profile"] as const).map((t) => (
               <button key={t} onClick={() => setTab(t)}
-                style={{ padding: "7px 18px", borderRadius: 20, border: "1px solid",
-                  cursor: "pointer", fontSize: 13, fontWeight: tab === t ? 600 : 400,
+                style={{ flex: 1, padding: "8px", borderRadius: 10, border: "1px solid",
+                  cursor: "pointer", fontSize: 12, fontWeight: tab === t ? 600 : 400,
                   borderColor: tab === t ? "#0D1B2A" : "#E0DED8",
                   background: tab === t ? "#0D1B2A" : "#fff",
                   color: tab === t ? "#fff" : "#666" }}>
-                {t === "strategy" ? "🎯 Стратегия" : "📋 Профиль бизнеса"}
+                {t === "strategy" ? "🎯 Стратегия" : "📋 Профиль"}
               </button>
             ))}
           </div>
         </div>
-      </div>
+      )}
 
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "2rem" }}>
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "12px 12px" : "2rem" }}>
 
         {/* ─── TAB: STRATEGY ─── */}
         {tab === "strategy" && (
@@ -229,7 +249,7 @@ export default function StrategyPage() {
                   return (
                     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                       {/* Summary row */}
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 12 }}>
                         {[
                           { label: "Цель", value: ps.goal },
                           { label: "Тональность", value: ps.tone },

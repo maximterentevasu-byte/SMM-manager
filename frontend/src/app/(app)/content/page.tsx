@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { useMobile } from "@/hooks/useMobile";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   content_ready:     { label: "Готово",              color: "#00B5A6", bg: "#E0F7F5" },
@@ -253,7 +254,7 @@ function ModalUploadGrid({ slots, onSlotClick, onRemove, onReorder, onFileDrop }
   const dragFrom = useRef(-1);
   const [dragOver, setDragOver] = useState(-1);
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(72px, 1fr))", gap: 8 }}>
       {slots.map((slot, idx) => (
         <div
           key={idx}
@@ -358,6 +359,7 @@ const isMediaQuestion = (q: string) => MEDIA_QUESTION_KEYWORDS.some(kw => q.toLo
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function ContentPage() {
+  const isMobile = useMobile();
   const router = useRouter();
   const [slots, setSlots]               = useState<Slot[]>([]);
   const [loading, setLoading]           = useState(true);
@@ -589,6 +591,11 @@ export default function ContentPage() {
     const interval = setInterval(load, 8000);
     return () => clearInterval(interval);
   }, [slots, load]);
+
+  // На мобильном всегда показываем список
+  useEffect(() => {
+    if (isMobile) setViewMode("list");
+  }, [isMobile]);
 
   const reloadPlan = async () => {
     setReloading(true);
@@ -1144,90 +1151,113 @@ export default function ContentPage() {
       <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
 
       {/* ── Header ── */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #E8E6E0", padding: "0 2rem" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", alignItems: "center",
-          justifyContent: "space-between", height: 64 }}>
-          <h1 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 20, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Контент-план</h1>
-          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            {strategyUpdated && (
-              <button onClick={reloadPlan} disabled={reloading}
-                style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 18px",
-                  background: "#3478F6", color: "#fff", border: "none", borderRadius: 20,
-                  cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
-                <span style={{ fontSize: 16 }}>🔄</span>
-                {reloading ? "Обновляю..." : "Обновить план под новую стратегию"}
-              </button>
-            )}
-            <div style={{ display: "flex", gap: 20, fontSize: 13, color: "#666", alignItems: "center" }}>
-              {generatingCount > 0 && (
-                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ width: 12, height: 12, border: "2px solid #bbb",
-                    borderTopColor: "#3478F6", borderRadius: "50%",
-                    animation: "spin 1s linear infinite", display: "inline-block" }} />
-                  Генерируется: <strong style={{ color: "#3478F6" }}>{generatingCount}</strong>
-                </span>
+      {!isMobile ? (
+        <div style={{ background: "#fff", borderBottom: "1px solid #E8E6E0", padding: "0 2rem" }}>
+          <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", alignItems: "center",
+            justifyContent: "space-between", height: 64 }}>
+            <h1 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 20, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Контент-план</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+              {strategyUpdated && (
+                <button onClick={reloadPlan} disabled={reloading}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 18px",
+                    background: "#3478F6", color: "#fff", border: "none", borderRadius: 20,
+                    cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+                  <span style={{ fontSize: 16 }}>🔄</span>
+                  {reloading ? "Обновляю..." : "Обновить план под новую стратегию"}
+                </button>
               )}
-              {stats.needsInfo > 0 && (
-                <span>Нужна инфо: <strong style={{ color: "#8B3200" }}>{stats.needsInfo}</strong></span>
-              )}
-              {stats.pending > 0 && (
-                <span>На согласовании: <strong style={{ color: "#7C4400" }}>{stats.pending}</strong></span>
-              )}
-              <span>Готово: <strong style={{ color: "#00B5A6" }}>{stats.ready}</strong></span>
-              <span>Опубликовано: <strong style={{ color: "#3478F6" }}>{stats.published}</strong></span>
-              <span>Всего: <strong>{stats.total}</strong></span>
+              <div style={{ display: "flex", gap: 20, fontSize: 13, color: "#666", alignItems: "center" }}>
+                {generatingCount > 0 && (
+                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ width: 12, height: 12, border: "2px solid #bbb",
+                      borderTopColor: "#3478F6", borderRadius: "50%",
+                      animation: "spin 1s linear infinite", display: "inline-block" }} />
+                    Генерируется: <strong style={{ color: "#3478F6" }}>{generatingCount}</strong>
+                  </span>
+                )}
+                {stats.needsInfo > 0 && (
+                  <span>Нужна инфо: <strong style={{ color: "#8B3200" }}>{stats.needsInfo}</strong></span>
+                )}
+                {stats.pending > 0 && (
+                  <span>На согласовании: <strong style={{ color: "#7C4400" }}>{stats.pending}</strong></span>
+                )}
+                <span>Готово: <strong style={{ color: "#00B5A6" }}>{stats.ready}</strong></span>
+                <span>Опубликовано: <strong style={{ color: "#3478F6" }}>{stats.published}</strong></span>
+                <span>Всего: <strong>{stats.total}</strong></span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div style={{ background: "#fff", borderBottom: "1px solid #F3F4F6", padding: "12px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+            <h1 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 17, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Контент-план</h1>
+            {strategyUpdated && (
+              <button onClick={reloadPlan} disabled={reloading}
+                style={{ padding: "6px 12px", background: "#3478F6", color: "#fff",
+                  border: "none", borderRadius: 10, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
+                {reloading ? "..." : "🔄 Обновить"}
+              </button>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 10, fontSize: 12, color: "#666" }}>
+            {generatingCount > 0 && <span style={{ color: "#3478F6", fontWeight: 600 }}>⟳ {generatingCount}</span>}
+            {stats.needsInfo > 0 && <span style={{ color: "#8B3200" }}>⚠ {stats.needsInfo}</span>}
+            <span style={{ color: "#6B7280" }}>Готово: {stats.ready}</span>
+            <span style={{ color: "#6B7280" }}>Всего: {stats.total}</span>
+          </div>
+        </div>
+      )}
 
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "2rem" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: isMobile ? "10px 12px" : "2rem" }}>
 
         {/* ── Filters + view toggle ── */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: isMobile ? 6 : 8, marginBottom: isMobile ? 12 : 24, flexWrap: "wrap", alignItems: "center" }}>
           {([
-            { key: "all",               label: "Все" },
-            { key: "needs_info_group",  label: "Нужна информация" },
-            { key: "pending_approval",  label: "Согласование" },
-            { key: "content_ready",     label: "Готово" },
-            { key: "published",         label: "Опубликовано" },
+            { key: "all",               label: isMobile ? "Все" : "Все" },
+            { key: "needs_info_group",  label: isMobile ? "⚠ Инфо" : "Нужна информация" },
+            { key: "pending_approval",  label: isMobile ? "🔵 Согл." : "Согласование" },
+            { key: "content_ready",     label: isMobile ? "✓ Готово" : "Готово" },
+            { key: "published",         label: isMobile ? "📢" : "Опубликовано" },
           ] as const).map(({ key, label }) => (
             <button key={key} onClick={() => setFilter(key)}
-              style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid",
-                cursor: "pointer", fontSize: 13, fontWeight: 500,
+              style={{ padding: isMobile ? "5px 10px" : "6px 14px", borderRadius: 20, border: "1px solid",
+                cursor: "pointer", fontSize: isMobile ? 11 : 13, fontWeight: 500,
                 borderColor: filter === key ? "#0D1B2A" : "#E5E7EB",
                 background:  filter === key ? "#0D1B2A" : "#fff",
                 color:       filter === key ? "#fff"    : "#555" }}>
               {label}
             </button>
           ))}
-          <div style={{ width: 1, background: "#E5E7EB", margin: "0 4px" }} />
-          {["all", "telegram", "vk"].map(p => (
-            <button key={p} onClick={() => setPlatformFilter(p)}
-              style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid",
-                cursor: "pointer", fontSize: 13, fontWeight: 500,
-                borderColor: platformFilter === p ? "#3478F6" : "#E5E7EB",
-                background:  platformFilter === p ? "#EEEDFE" : "#fff",
-                color:       platformFilter === p ? "#3478F6" : "#555" }}>
-              {p === "all" ? "Все площадки" : p === "telegram" ? "✈ Telegram" : "ВК"}
-            </button>
-          ))}
-
-          <div style={{ flex: 1 }} />
-
-          <div style={{ display: "flex", background: "#F1EFE8", borderRadius: 10, padding: 3, gap: 2 }}>
-            {(["calendar", "list"] as const).map(mode => (
-              <button key={mode} onClick={() => setViewMode(mode)}
-                style={{ padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer",
-                  fontSize: 13, fontWeight: 500,
-                  background: viewMode === mode ? "#fff" : "transparent",
-                  color:      viewMode === mode ? "#0D1B2A" : "#777",
-                  boxShadow:  viewMode === mode ? "0 1px 3px rgba(0,0,0,.12)" : "none",
-                  transition: "all .15s" }}>
-                {mode === "list" ? "≡ Список" : "⊞ Календарь"}
-              </button>
-            ))}
-          </div>
+          {!isMobile && (
+            <>
+              <div style={{ width: 1, background: "#E5E7EB", margin: "0 4px" }} />
+              {["all", "telegram", "vk"].map(p => (
+                <button key={p} onClick={() => setPlatformFilter(p)}
+                  style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid",
+                    cursor: "pointer", fontSize: 13, fontWeight: 500,
+                    borderColor: platformFilter === p ? "#3478F6" : "#E5E7EB",
+                    background:  platformFilter === p ? "#EEEDFE" : "#fff",
+                    color:       platformFilter === p ? "#3478F6" : "#555" }}>
+                  {p === "all" ? "Все площадки" : p === "telegram" ? "✈ Telegram" : "ВК"}
+                </button>
+              ))}
+              <div style={{ flex: 1 }} />
+              <div style={{ display: "flex", background: "#F1EFE8", borderRadius: 10, padding: 3, gap: 2 }}>
+                {(["calendar", "list"] as const).map(mode => (
+                  <button key={mode} onClick={() => setViewMode(mode)}
+                    style={{ padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer",
+                      fontSize: 13, fontWeight: 500,
+                      background: viewMode === mode ? "#fff" : "transparent",
+                      color:      viewMode === mode ? "#0D1B2A" : "#777",
+                      boxShadow:  viewMode === mode ? "0 1px 3px rgba(0,0,0,.12)" : "none",
+                      transition: "all .15s" }}>
+                    {mode === "list" ? "≡ Список" : "⊞ Календарь"}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         {/* ── List view ── */}
@@ -1284,9 +1314,9 @@ export default function ContentPage() {
                       borderRadius: 20, color: st.color, background: st.bg, flexShrink: 0 }}>{st.label}</span>
                   </div>
 
-                  {/* Body: two-column — content left, image right */}
-                  <div style={{ display: "flex", gap: 0 }}>
-                    <div style={{ flex: 1, padding: "14px 18px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+                  {/* Body */}
+                  <div style={{ display: "flex", gap: 0, flexDirection: isMobile ? "column" : "row" }}>
+                    <div style={{ flex: 1, padding: isMobile ? "10px 14px 12px" : "14px 18px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
 
                       {/* Блок: Идея */}
                       {slot.idea && (slot.idea.idea || slot.idea.hook) && (
@@ -1355,24 +1385,34 @@ export default function ContentPage() {
                     </div>
 
                     {/* Превью изображения */}
-                    <div style={{ width: 120, flexShrink: 0, padding: "14px 14px 14px 0",
-                      display: "flex", alignItems: "flex-start", justifyContent: "center" }}>
-                      {hasImage ? (
+                    {!isMobile && (
+                      <div style={{ width: 120, flexShrink: 0, padding: "14px 14px 14px 0",
+                        display: "flex", alignItems: "flex-start", justifyContent: "center" }}>
+                        {hasImage ? (
+                          <img src={imgSrc!} alt="preview"
+                            onClick={() => openSlot(slot)}
+                            style={{ width: 106, height: 106, objectFit: "cover",
+                              borderRadius: 10, cursor: "pointer", border: "1px solid #E5E7EB" }} />
+                        ) : (
+                          <div onClick={() => openSlot(slot)}
+                            style={{ width: 106, height: 106, borderRadius: 10, border: "2px dashed #E5E7EB",
+                              display: "flex", flexDirection: "column", alignItems: "center",
+                              justifyContent: "center", gap: 4, cursor: "pointer", background: "#FAFAF8" }}>
+                            <span style={{ fontSize: 20, opacity: 0.35 }}>🖼</span>
+                            <span style={{ fontSize: 9, color: "#bbb", textAlign: "center",
+                              lineHeight: 1.3 }}>Нет<br/>изображения</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {isMobile && hasImage && (
+                      <div style={{ padding: "0 14px 12px" }}>
                         <img src={imgSrc!} alt="preview"
                           onClick={() => openSlot(slot)}
-                          style={{ width: 106, height: 106, objectFit: "cover",
+                          style={{ width: "100%", maxHeight: 140, objectFit: "cover",
                             borderRadius: 10, cursor: "pointer", border: "1px solid #E5E7EB" }} />
-                      ) : (
-                        <div onClick={() => openSlot(slot)}
-                          style={{ width: 106, height: 106, borderRadius: 10, border: "2px dashed #E5E7EB",
-                            display: "flex", flexDirection: "column", alignItems: "center",
-                            justifyContent: "center", gap: 4, cursor: "pointer", background: "#FAFAF8" }}>
-                          <span style={{ fontSize: 20, opacity: 0.35 }}>🖼</span>
-                          <span style={{ fontSize: 9, color: "#bbb", textAlign: "center",
-                            lineHeight: 1.3 }}>Нет<br/>изображения</span>
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -1672,7 +1712,7 @@ export default function ContentPage() {
               </div>
 
               {/* ── Scrollable body ── */}
-              <div style={{ overflowY: "auto", flex: 1, padding: "20px 28px" }}>
+              <div style={{ overflowY: "auto", flex: 1, padding: isMobile ? "14px 16px" : "20px 28px" }}>
 
                 {/* 1. Идея поста — всегда сверху */}
                 {expanded.idea && (

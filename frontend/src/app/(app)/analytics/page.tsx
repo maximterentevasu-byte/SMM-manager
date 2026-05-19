@@ -6,6 +6,7 @@ import PostsTab from "./PostsTab";
 import StoriesTab from "./StoriesTab";
 import VKPostsTab from "./VKPostsTab";
 import VKStoriesTab from "./VKStoriesTab";
+import { useMobile } from "@/hooks/useMobile";
 
 type TGWeek = {
   week_start: string; week_end: string; channel_name: string;
@@ -63,6 +64,7 @@ const delta = (curr: number, prev: number) => {
 };
 
 export default function AnalyticsPage() {
+  const isMobile = useMobile();
   const [tab, setTab] = useState<"tg" | "vk">("tg");
   const [tgData, setTgData] = useState<TGWeek[]>([]);
   const [vkData, setVkData] = useState<VKWeek[]>([]);
@@ -317,46 +319,79 @@ export default function AnalyticsPage() {
   return (
     <div style={{ minHeight: "100vh", background: "#F8F7F4", fontFamily: "'Segoe UI', sans-serif" }}>
       {/* Header */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #EAE8E2", padding: "0 2rem" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", height: 64,
-          display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Аналитика</h1>
-            <div style={{ display: "flex", gap: 4 }}>
-              {(["tg", "vk"] as const).map((t) => (
-                <button key={t} onClick={() => setTab(t)}
-                  style={{ padding: "6px 18px", borderRadius: 20, border: "1px solid",
-                    cursor: "pointer", fontSize: 13, fontWeight: tab === t ? 600 : 400,
-                    borderColor: tab === t ? "#1a1a1a" : "#E0DED8",
-                    background: tab === t ? "#1a1a1a" : "#fff",
-                    color: tab === t ? "#fff" : "#666" }}>
-                  {t === "tg" ? "✈ Telegram" : "В ВКонтакте"}
-                </button>
-              ))}
+      {!isMobile ? (
+        <div style={{ background: "#fff", borderBottom: "1px solid #EAE8E2", padding: "0 2rem" }}>
+          <div style={{ maxWidth: 1100, margin: "0 auto", height: 64,
+            display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Аналитика</h1>
+              <div style={{ display: "flex", gap: 4 }}>
+                {(["tg", "vk"] as const).map((t) => (
+                  <button key={t} onClick={() => setTab(t)}
+                    style={{ padding: "6px 18px", borderRadius: 20, border: "1px solid",
+                      cursor: "pointer", fontSize: 13, fontWeight: tab === t ? 600 : 400,
+                      borderColor: tab === t ? "#1a1a1a" : "#E0DED8",
+                      background: tab === t ? "#1a1a1a" : "#fff",
+                      color: tab === t ? "#fff" : "#666" }}>
+                    {t === "tg" ? "✈ Telegram" : "В ВКонтакте"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              {(tab === "tg" ? lastUpdated(tgData) : lastUpdated(vkData)) && (
+                <span style={{ fontSize: 12, color: "#aaa" }}>
+                  Обновлено: {tab === "tg" ? lastUpdated(tgData) : lastUpdated(vkData)}
+                </span>
+              )}
+              <button onClick={collect} disabled={collecting}
+                style={{ padding: "8px 16px", background: collecting ? "#888" : "#1a1a1a",
+                  color: "#fff", border: "none", borderRadius: 10,
+                  cursor: collecting ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600 }}>
+                {collecting ? "Запускаю..." : "⟳ Собрать сейчас"}
+              </button>
+              <button onClick={() => exportExcel(tab)}
+                style={{ padding: "8px 16px", background: "#0F6E56", color: "#fff",
+                  border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+                ⬇ Excel
+              </button>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            {(tab === "tg" ? lastUpdated(tgData) : lastUpdated(vkData)) && (
-              <span style={{ fontSize: 12, color: "#aaa" }}>
-                Обновлено: {tab === "tg" ? lastUpdated(tgData) : lastUpdated(vkData)}
-              </span>
-            )}
-            <button onClick={collect} disabled={collecting}
-              style={{ padding: "8px 16px", background: collecting ? "#888" : "#1a1a1a",
-                color: "#fff", border: "none", borderRadius: 10,
-                cursor: collecting ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600 }}>
-              {collecting ? "Запускаю..." : "⟳ Собрать сейчас"}
-            </button>
-            <button onClick={() => exportExcel(tab)}
-              style={{ padding: "8px 16px", background: "#0F6E56", color: "#fff",
-                border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
-              ⬇ Excel
-            </button>
+        </div>
+      ) : (
+        <div style={{ background: "#fff", borderBottom: "1px solid #EAE8E2", padding: "12px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <h1 style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Аналитика</h1>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={collect} disabled={collecting}
+                style={{ padding: "7px 12px", background: collecting ? "#888" : "#1a1a1a",
+                  color: "#fff", border: "none", borderRadius: 10,
+                  cursor: collecting ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 600 }}>
+                {collecting ? "..." : "⟳ Собрать"}
+              </button>
+              <button onClick={() => exportExcel(tab)}
+                style={{ padding: "7px 12px", background: "#0F6E56", color: "#fff",
+                  border: "none", borderRadius: 10, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                ⬇ Excel
+              </button>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {(["tg", "vk"] as const).map((t) => (
+              <button key={t} onClick={() => setTab(t)}
+                style={{ flex: 1, padding: "8px", borderRadius: 10, border: "1px solid",
+                  cursor: "pointer", fontSize: 13, fontWeight: tab === t ? 600 : 400,
+                  borderColor: tab === t ? "#1a1a1a" : "#E0DED8",
+                  background: tab === t ? "#1a1a1a" : "#fff",
+                  color: tab === t ? "#fff" : "#666" }}>
+                {t === "tg" ? "✈ Telegram" : "В ВКонтакте"}
+              </button>
+            ))}
           </div>
         </div>
-      </div>
+      )}
 
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "2rem" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: isMobile ? "12px 12px" : "2rem" }}>
         {collectMsg && (
           <div style={{ marginBottom: 16, padding: "12px 16px", borderRadius: 10, fontSize: 13,
             background: collectMsg.startsWith("✓") ? "#E1F5EE" : "#FFF3CD",
@@ -1208,7 +1243,7 @@ function TGDashboard({ data, numWeeks, onNumWeeksChange }: {
       </div>
 
       {/* 5 карточек */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8, marginBottom: 12 }}>
         <DashCard compact label="Подписчики" value={last.subscribers}
           trend={pct(last.subscribers, prev?.subscribers)}
           sparkVals={filtered.map(d => d.subscribers || 0)} />
@@ -1227,7 +1262,7 @@ function TGDashboard({ data, numWeeks, onNumWeeksChange }: {
       </div>
 
       {/* Ряд 1: охват + ER просмотры */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10, marginBottom: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.avg_views || 0} getLabel={lbl}
           color="#1a1a1a" title="Средний охват по неделям" />
         <BarChartSVG data={filtered} getValue={d => d.er_reach_pct || 0} getLabel={lbl}
@@ -1235,7 +1270,7 @@ function TGDashboard({ data, numWeeks, onNumWeeksChange }: {
       </div>
 
       {/* Ряд 2: подписчики + ER активности */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10, marginBottom: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.subscribers || 0} getLabel={lbl}
           color="#3478F6" title="Подписчики" />
         <BarChartSVG data={filtered} getValue={d => d.er_activity_pct || 0} getLabel={lbl}
@@ -1243,7 +1278,7 @@ function TGDashboard({ data, numWeeks, onNumWeeksChange }: {
       </div>
 
       {/* Ряд 3: реакции / комменты / репосты */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.avg_reactions || 0} getLabel={lbl}
           color="#4680C2" title="Ср. реакции" />
         <BarChartSVG data={filtered} getValue={d => d.avg_comments || 0} getLabel={lbl}
@@ -1268,16 +1303,16 @@ const DASH_TABS: { key: DashTabKey; label: string }[] = [
 function DashTabBar({ active, onChange }: { active: DashTabKey; onChange: (v: DashTabKey) => void }) {
   return (
     <div style={{ display: "flex", gap: 3, marginBottom: 20, background: "#F0EEE8",
-      padding: 4, borderRadius: 12, width: "fit-content" }}>
+      padding: 4, borderRadius: 12, overflowX: "auto", maxWidth: "100%" }}>
       {DASH_TABS.map(t => (
         <button key={t.key} onClick={() => onChange(t.key)}
           style={{
-            padding: "7px 18px", borderRadius: 9, border: "none", cursor: "pointer",
+            padding: "7px 14px", borderRadius: 9, border: "none", cursor: "pointer",
             fontSize: 13, fontWeight: active === t.key ? 600 : 400,
             background: active === t.key ? "#fff" : "transparent",
             color: active === t.key ? "#0D1B2A" : "#999",
             boxShadow: active === t.key ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
-            transition: "all 0.15s",
+            transition: "all 0.15s", whiteSpace: "nowrap", flexShrink: 0,
           }}>
           {t.label}
         </button>
@@ -1718,7 +1753,7 @@ function VKDashboard({ data, numWeeks, onNumWeeksChange }: {
       </div>
 
       {/* 5 карточек */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8, marginBottom: 12 }}>
         <DashCard compact label="Участников" value={last.members}
           trend={pctDelta(last.members, prev?.members)}
           sparkVals={filtered.map(d => d.members || 0)} />
@@ -1737,7 +1772,7 @@ function VKDashboard({ data, numWeeks, onNumWeeksChange }: {
       </div>
 
       {/* Ряд 1: средний охват + охват % (просмотры/участников) */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10, marginBottom: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.avg_views || 0} getLabel={lbl}
           color="#1a1a1a" title="Средний охват (просмотры)" />
         <BarChartSVG data={filtered} getValue={d => d.reach_pct || 0} getLabel={lbl}
@@ -1745,7 +1780,7 @@ function VKDashboard({ data, numWeeks, onNumWeeksChange }: {
       </div>
 
       {/* Ряд 2: участники + ER вовлечённости */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10, marginBottom: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.members || 0} getLabel={lbl}
           color="#3478F6" title="Участники" />
         <BarChartSVG data={filtered} getValue={d => d.er_subscribers_pct || 0} getLabel={lbl}
@@ -1754,7 +1789,7 @@ function VKDashboard({ data, numWeeks, onNumWeeksChange }: {
 
       {/* Ряд 3: подписались / отписались */}
       {filtered.some(d => d.subscribed != null) && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10, marginBottom: 10 }}>
           <BarChartSVG data={filtered} getValue={d => d.subscribed ?? 0} getLabel={lbl}
             color="#0F6E56" title="Подписались" />
           <BarChartSVG data={filtered} getValue={d => d.unsubscribed ?? 0} getLabel={lbl}
@@ -1763,7 +1798,7 @@ function VKDashboard({ data, numWeeks, onNumWeeksChange }: {
       )}
 
       {/* Ряд 4: лайки / комменты / репосты */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.avg_likes || 0} getLabel={lbl}
           color="#4680C2" title="Ср. лайки" />
         <BarChartSVG data={filtered} getValue={d => d.avg_comments || 0} getLabel={lbl}
