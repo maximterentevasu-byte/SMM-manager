@@ -1137,17 +1137,17 @@ function DashCard({ label, value, suffix = "", trend, sparkVals, compact = false
   );
 }
 
-function BarChartSVG({ data, getValue, getLabel, color, title, suffix = "" }: {
-  data: any[]; getValue: (d: any) => number;
-  getLabel: (d: any) => string; color: string; title: string; suffix?: string;
+function BarChartInner({ data, getValue, getLabel, color, suffix, h }: {
+  data: any[]; getValue: (d: any) => number; getLabel: (d: any) => string;
+  color: string; suffix: string; h: number;
 }) {
   const [hovIdx, setHovIdx] = useState<number | null>(null);
-
   const vals = data.map(getValue);
   const max = Math.max(...vals, 0.001);
   const n = vals.length;
-  const LEFT = 40, W = 400, H = 96, labelH = 18;
+  const LEFT = 40, W = 400, labelH = 18;
   const chartW = W - LEFT;
+  const H = h;
 
   const fmtY = (v: number) => {
     if (v >= 10000) return (v / 1000).toFixed(0) + "k";
@@ -1160,61 +1160,101 @@ function BarChartSVG({ data, getValue, getLabel, color, title, suffix = "" }: {
   const yTicks = [0.25, 0.5, 0.75, 1].map(f => ({ f, val: max * f, y: H - H * f }));
 
   return (
-    <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 14, padding: "18px 20px" }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: "#aaa", letterSpacing: 0.7, marginBottom: 14 }}>
-        {title.toUpperCase()}
-      </div>
-      <svg viewBox={`0 0 ${W} ${H + labelH}`} style={{ width: "100%", height: H + labelH + 4, display: "block", overflow: "visible" }}>
-        {/* baseline */}
-        <line x1={LEFT} y1={H} x2={W} y2={H} stroke="#E0DED8" strokeWidth={1} />
-        {/* Y-axis grid + labels */}
-        {yTicks.map(({ f, val, y }) => (
-          <g key={f}>
-            <line x1={LEFT} y1={y} x2={W} y2={y} stroke="#F0EEE8" strokeWidth={1} />
-            <text x={LEFT - 4} y={y + 3} textAnchor="end" fontSize={7.5} fill="#bbb">
-              {fmtY(val)}
+    <svg viewBox={`0 0 ${W} ${H + labelH}`} style={{ width: "100%", height: H + labelH + 4, display: "block", overflow: "visible" }}>
+      <line x1={LEFT} y1={H} x2={W} y2={H} stroke="#E0DED8" strokeWidth={1} />
+      {yTicks.map(({ f, val, y }) => (
+        <g key={f}>
+          <line x1={LEFT} y1={y} x2={W} y2={y} stroke="#F0EEE8" strokeWidth={1} />
+          <text x={LEFT - 4} y={y + 3} textAnchor="end" fontSize={7.5} fill="#bbb">{fmtY(val)}</text>
+        </g>
+      ))}
+      {vals.map((v, i) => {
+        const slotW = chartW / n;
+        const barW = Math.max(Math.min(slotW * 0.6, 44), 5);
+        const x = LEFT + i * slotW + (slotW - barW) / 2;
+        const barH = Math.max((v / max) * H, v > 0 ? 2 : 0);
+        const y = H - barH;
+        const isHov = hovIdx === i;
+        const tipW = 58;
+        const tipX = Math.min(Math.max(x + barW / 2 - tipW / 2, LEFT), W - tipW);
+        const tipY = Math.max(y - 22, 0);
+        return (
+          <g key={i} onMouseEnter={() => setHovIdx(i)} onMouseLeave={() => setHovIdx(null)} style={{ cursor: "default" }}>
+            <rect x={x} y={y} width={barW} height={barH} fill={isHov ? color : color + "88"} rx={3} style={{ transition: "fill 0.1s" }} />
+            <text x={x + barW / 2} y={H + labelH - 1} textAnchor="middle" fontSize={8.5} fill={isHov ? "#333" : "#bbb"}>
+              {getLabel(data[i])}
             </text>
+            {isHov && (
+              <g>
+                <rect x={tipX} y={tipY} width={tipW} height={17} fill="#1a1a1a" rx={4} opacity={0.88} />
+                <text x={tipX + tipW / 2} y={tipY + 12} textAnchor="middle" fontSize={9.5} fill="#fff" fontWeight="700">
+                  {v.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}{suffix}
+                </text>
+              </g>
+            )}
           </g>
-        ))}
-        {/* Bars */}
-        {vals.map((v, i) => {
-          const slotW = chartW / n;
-          const barW = Math.max(Math.min(slotW * 0.6, 44), 5);
-          const x = LEFT + i * slotW + (slotW - barW) / 2;
-          const barH = Math.max((v / max) * H, v > 0 ? 2 : 0);
-          const y = H - barH;
-          const isHov = hovIdx === i;
+        );
+      })}
+    </svg>
+  );
+}
 
-          const tipW = 58;
-          const tipX = Math.min(Math.max(x + barW / 2 - tipW / 2, LEFT), W - tipW);
-          const tipY = Math.max(y - 22, 0);
+function BarChartSVG({ data, getValue, getLabel, color, title, suffix = "" }: {
+  data: any[]; getValue: (d: any) => number;
+  getLabel: (d: any) => string; color: string; title: string; suffix?: string;
+}) {
+  const [fullscreen, setFullscreen] = useState(false);
 
-          return (
-            <g key={i}
-              onMouseEnter={() => setHovIdx(i)}
-              onMouseLeave={() => setHovIdx(null)}
-              style={{ cursor: "default" }}>
-              <rect x={x} y={y} width={barW} height={barH}
-                fill={isHov ? color : color + "88"} rx={3}
-                style={{ transition: "fill 0.1s" }} />
-              <text x={x + barW / 2} y={H + labelH - 1} textAnchor="middle"
-                fontSize={8.5} fill={isHov ? "#333" : "#bbb"}>
-                {getLabel(data[i])}
-              </text>
-              {isHov && (
-                <g>
-                  <rect x={tipX} y={tipY} width={tipW} height={17} fill="#1a1a1a" rx={4} opacity={0.88} />
-                  <text x={tipX + tipW / 2} y={tipY + 12} textAnchor="middle"
-                    fontSize={9.5} fill="#fff" fontWeight="700">
-                    {v.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}{suffix}
-                  </text>
-                </g>
-              )}
-            </g>
-          );
-        })}
-      </svg>
-    </div>
+  return (
+    <>
+      <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 14, padding: "18px 20px", position: "relative" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#aaa", letterSpacing: 0.7 }}>
+            {title.toUpperCase()}
+          </div>
+          <button
+            onClick={() => setFullscreen(true)}
+            title="Развернуть"
+            style={{ background: "none", border: "1px solid #E0DED8", borderRadius: 6, cursor: "pointer",
+              padding: "3px 6px", display: "flex", alignItems: "center", color: "#999",
+              transition: "border-color 0.15s, color 0.15s" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#3478F6"; (e.currentTarget as HTMLButtonElement).style.color = "#3478F6"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#E0DED8"; (e.currentTarget as HTMLButtonElement).style.color = "#999"; }}>
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+              <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </div>
+        <BarChartInner data={data} getValue={getValue} getLabel={getLabel} color={color} suffix={suffix} h={96} />
+      </div>
+
+      {fullscreen && (
+        <div
+          onClick={() => setFullscreen(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 9000,
+            display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: "#fff", borderRadius: 20, padding: "28px 32px",
+              width: "min(92vw, 1100px)", maxHeight: "85vh", overflow: "auto",
+              boxShadow: "0 24px 80px rgba(0,0,0,0.25)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a", letterSpacing: 0.3 }}>
+                {title}
+              </div>
+              <button
+                onClick={() => setFullscreen(false)}
+                style={{ background: "#F0EEE8", border: "none", borderRadius: 8, cursor: "pointer",
+                  width: 32, height: 32, fontSize: 16, color: "#555", display: "flex",
+                  alignItems: "center", justifyContent: "center" }}>
+                ✕
+              </button>
+            </div>
+            <BarChartInner data={data} getValue={getValue} getLabel={getLabel} color={color} suffix={suffix} h={280} />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1342,7 +1382,7 @@ function TGDashboard({ data, numWeeks, onNumWeeksChange }: {
       </div>
 
       {/* Ряд 3: реакции / комменты / репосты */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.avg_reactions || 0} getLabel={lbl}
           color="#4680C2" title="Ср. реакции" />
         <BarChartSVG data={filtered} getValue={d => d.avg_comments || 0} getLabel={lbl}
@@ -1659,6 +1699,8 @@ function AIPostCard({ post, rank, type }: { post: AIPost; rank: number; type: "t
   );
 }
 
+const AI_PDF_PRINT_ID = "ai-analysis-pdf-area";
+
 function AIAnalyticsTab({ businessId, platform = "tg" }: { businessId: string; platform?: "tg" | "vk" }) {
   const [weeks, setWeeks] = useState(8);
   const [loading, setLoading] = useState(false);
@@ -1675,6 +1717,27 @@ function AIAnalyticsTab({ businessId, platform = "tg" }: { businessId: string; p
     } finally {
       setLoading(false);
     }
+  };
+
+  const exportPDF = () => {
+    const styleId = "__ai_pdf_print_style__";
+    let style = document.getElementById(styleId) as HTMLStyleElement | null;
+    if (!style) {
+      style = document.createElement("style");
+      style.id = styleId;
+      document.head.appendChild(style);
+    }
+    style.textContent = `
+      @media print {
+        body > * { display: none !important; }
+        #${AI_PDF_PRINT_ID} { display: block !important; }
+        #${AI_PDF_PRINT_ID} { position: static; font-family: 'Inter', sans-serif; color: #1a1a1a; }
+        #${AI_PDF_PRINT_ID} * { box-shadow: none !important; }
+        @page { margin: 18mm 15mm; size: A4; }
+      }
+    `;
+    window.print();
+    setTimeout(() => style!.remove(), 1000);
   };
 
   return (
@@ -1708,9 +1771,22 @@ function AIAnalyticsTab({ businessId, platform = "tg" }: { businessId: string; p
             : "✦ Запустить ИИ-анализ"}
         </button>
         {result && (
-          <span style={{ fontSize: 12, color: "#aaa" }}>
-            {result.channel_name} · {result.period} · {result.total_posts} постов
-          </span>
+          <>
+            <span style={{ fontSize: 12, color: "#aaa" }}>
+              {result.channel_name} · {result.period} · {result.total_posts} постов
+            </span>
+            <button onClick={exportPDF}
+              style={{ marginLeft: "auto", padding: "9px 18px", background: "#fff",
+                border: "1px solid #E0DED8", borderRadius: 10, fontSize: 13,
+                fontWeight: 600, color: "#444", cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 7 }}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+                <path d="M8 1v9m0 0L5 7m3 3 3-3" stroke="#444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2" stroke="#444" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              Скачать PDF
+            </button>
+          </>
         )}
       </div>
 
@@ -1736,7 +1812,14 @@ function AIAnalyticsTab({ businessId, platform = "tg" }: { businessId: string; p
 
       {/* Результат */}
       {result && (
-        <div>
+        <div id={AI_PDF_PRINT_ID}>
+          {/* Заголовок PDF */}
+          <div style={{ display: "none" }} className="pdf-header-only">
+            <div style={{ fontSize: 11, color: "#aaa", marginBottom: 8 }}>
+              smmplatform · ИИ-аналитика · сформировано {new Date().toLocaleDateString("ru-RU")}
+            </div>
+          </div>
+
           {/* Текст анализа */}
           <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
             padding: "28px 32px", marginBottom: 20, fontSize: 14, lineHeight: 1.7 }}>
@@ -1862,7 +1945,7 @@ function VKDashboard({ data, numWeeks, onNumWeeksChange }: {
       )}
 
       {/* Ряд 4: лайки / комменты / репосты */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.avg_likes || 0} getLabel={lbl}
           color="#4680C2" title="Ср. лайки" />
         <BarChartSVG data={filtered} getValue={d => d.avg_comments || 0} getLabel={lbl}

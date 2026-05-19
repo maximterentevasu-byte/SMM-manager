@@ -186,7 +186,7 @@ async def get_home_dashboard(
         raise HTTPException(404, "Business not found")
 
     profile = biz.profile or {}
-    smm_metrics = profile.get("smm_metrics", [])
+    smm_metrics = profile.get("smm_metrics") or list(SMM_METRIC_CONFIG.keys())
 
     # Weekly analytics
     vk_result = await db.execute(
@@ -203,25 +203,30 @@ async def get_home_dashboard(
     )
     tg_weeks = list(tg_result.scalars().all())
 
-    # TelegramPost rows for top content
-    tg_posts_result = await db.execute(
-        select(TelegramPost)
-        .where(TelegramPost.business_id == business_id)
-        .order_by(TelegramPost.views.desc())
-        .limit(200)
-    )
-    tg_posts_raw = [
-        {
-            "published_at": p.published_at,
-            "views": p.views,
-            "reactions": p.reactions,
-            "comments": p.comments,
-            "reposts": p.reposts,
-            "text": p.text,
-            "channel_name": p.channel_name,
-        }
-        for p in tg_posts_result.scalars().all()
-    ]
+    # TelegramPost rows for top content — отдельный запрос на каждый период,
+    # чтобы старые вирусные посты не вытесняли свежие из лимита.
+    async def _fetch_tg_posts(since_dt):
+        q = select(TelegramPost).where(TelegramPost.business_id == business_id)
+        if since_dt:
+            q = q.where(TelegramPost.published_at >= since_dt)
+        q = q.order_by(TelegramPost.views.desc()).limit(50)
+        res = await db.execute(q)
+        return [
+            {
+                "published_at": p.published_at,
+                "views": p.views,
+                "reactions": p.reactions,
+                "comments": p.comments,
+                "reposts": p.reposts,
+                "text": p.text,
+                "channel_name": p.channel_name,
+            }
+            for p in res.scalars().all()
+        ]
+
+    tg_posts_1m = await _fetch_tg_posts(now - timedelta(days=30))
+    tg_posts_3m = await _fetch_tg_posts(now - timedelta(days=90))
+    tg_posts_all = await _fetch_tg_posts(None)
 
     # KPI
     vk_stats = [w.stats for w in vk_weeks if w.stats]
@@ -267,9 +272,9 @@ async def get_home_dashboard(
     slots_7d = slots_7d_result.scalars().all()
 
     # Top content from analytics
-    top_1m = _top_posts_from_analytics(vk_weeks, tg_posts_raw, now - timedelta(days=30))
-    top_3m = _top_posts_from_analytics(vk_weeks, tg_posts_raw, now - timedelta(days=90))
-    top_all = _top_posts_from_analytics(vk_weeks, tg_posts_raw, None)
+    top_1m = _top_posts_from_analytics(vk_weeks, tg_posts_1m, now - timedelta(days=30))
+    top_3m = _top_posts_from_analytics(vk_weeks, tg_posts_3m, now - timedelta(days=90))
+    top_all = _top_posts_from_analytics(vk_weeks, tg_posts_all, None)
 
     STATUS_LABELS = {
         "planned":         "Нет контента",

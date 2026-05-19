@@ -368,6 +368,7 @@ export default function ContentPage() {
   const [saving, setSaving]             = useState(false);
   const [generatingImg, setGeneratingImg] = useState<string | null>(null);
   const [reloading, setReloading]       = useState(false);
+  const [generatingPlan, setGeneratingPlan] = useState(false);
   const [filter, setFilter]             = useState("all");
   const [platformFilter, setPlatformFilter] = useState("all");
   const [strategyUpdated, setStrategyUpdated] = useState(false);
@@ -604,8 +605,22 @@ export default function ContentPage() {
       await api.post(`/content/${businessId}/generate-plan`, { year: now.getFullYear(), month: now.getMonth() + 1 });
       localStorage.removeItem("strategyUpdatedAt");
       setStrategyUpdated(false);
-      setTimeout(() => load(), 3000);
-    } catch { alert("Ошибка перезагрузки плана"); }
+      setGeneratingPlan(true);
+      // Polling: проверяем появление новых слотов каждые 15 секунд
+      const prevTotal = slots.length;
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        try {
+          const { data } = await api.get(`/content/${businessId}/slots`);
+          if ((data.slots?.length ?? 0) !== prevTotal || attempts >= 12) {
+            clearInterval(poll);
+            setGeneratingPlan(false);
+            await load();
+          }
+        } catch { /* ignore */ }
+      }, 15000);
+    } catch { alert("Ошибка запуска обновления плана"); }
     finally { setReloading(false); }
   };
 
@@ -1157,13 +1172,22 @@ export default function ContentPage() {
             justifyContent: "space-between", height: 64 }}>
             <h1 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 20, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Контент-план</h1>
             <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-              {strategyUpdated && (
+              {generatingPlan ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 18px",
+                  background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 20,
+                  fontSize: 13, color: "#1D4ED8", fontWeight: 600 }}>
+                  <span style={{ width: 14, height: 14, border: "2px solid #93C5FD",
+                    borderTopColor: "#1D4ED8", borderRadius: "50%",
+                    animation: "spin 0.9s linear infinite", display: "inline-block", flexShrink: 0 }} />
+                  Генерирую новый план... обычно 1–3 минуты
+                </div>
+              ) : strategyUpdated && (
                 <button onClick={reloadPlan} disabled={reloading}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 18px",
                     background: "#3478F6", color: "#fff", border: "none", borderRadius: 20,
                     cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
                   <span style={{ fontSize: 16 }}>🔄</span>
-                  {reloading ? "Обновляю..." : "Обновить план под новую стратегию"}
+                  {reloading ? "Запускаю..." : "Обновить план под новую стратегию"}
                 </button>
               )}
               <div style={{ display: "flex", gap: 20, fontSize: 13, color: "#666", alignItems: "center" }}>
@@ -1192,7 +1216,16 @@ export default function ContentPage() {
         <div style={{ background: "#fff", borderBottom: "1px solid #F3F4F6", padding: "12px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
             <h1 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 17, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Контент-план</h1>
-            {strategyUpdated && (
+            {generatingPlan ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px",
+                background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 10,
+                fontSize: 11, color: "#1D4ED8", fontWeight: 600 }}>
+                <span style={{ width: 10, height: 10, border: "2px solid #93C5FD",
+                  borderTopColor: "#1D4ED8", borderRadius: "50%",
+                  animation: "spin 0.9s linear infinite", display: "inline-block" }} />
+                Генерирую...
+              </div>
+            ) : strategyUpdated && (
               <button onClick={reloadPlan} disabled={reloading}
                 style={{ padding: "6px 12px", background: "#3478F6", color: "#fff",
                   border: "none", borderRadius: 10, cursor: "pointer", fontSize: 11, fontWeight: 600 }}>

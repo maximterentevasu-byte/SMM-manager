@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm.attributes import flag_modified
 from pydantic import BaseModel
 from app.database import get_db
 from app.models.models import User, Business
@@ -78,6 +79,7 @@ async def update_posts_per_week(
         {**ps, "posts_per_week": posts} if ps.get("platform") == body.platform else ps
         for ps in business.strategy
     ]
+    flag_modified(business, "strategy")
     await db.commit()
     return {"status": "updated", "platform": body.platform, "posts_per_week": posts}
 
@@ -118,8 +120,16 @@ async def refine_strategy_endpoint(
     try:
         new_strategy = await refine_strategy(business.strategy, body.message, business.profile or {})
     except (json.JSONDecodeError, ValueError) as e:
-        raise HTTPException(500, f"Модель вернула некорректный ответ, попробуйте переформулировать запрос")
+        raise HTTPException(500, "Модель вернула некорректный ответ, попробуйте переформулировать запрос")
+
+    # Защита: если модель пропустила платформы — восстанавливаем из оригинальной стратегии
+    new_platforms = {ps.get("platform") for ps in new_strategy}
+    for original_ps in business.strategy:
+        if original_ps.get("platform") not in new_platforms:
+            new_strategy.append(original_ps)
+
     business.strategy = new_strategy
+    flag_modified(business, "strategy")
     await db.commit()
     return {"strategy": new_strategy, "status": "updated"}
 

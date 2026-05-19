@@ -49,6 +49,7 @@ def _parse_json(text: str):
 
 
 async def refine_strategy(current_strategy: list, user_message: str, business_profile: dict) -> list:
+    platforms_list = ", ".join(ps.get("platform", "") for ps in current_strategy)
     msg_content = f"""Ты SMM-стратег. Пользователь хочет изменить контент-стратегию.
 
 Текущая стратегия:
@@ -60,7 +61,9 @@ async def refine_strategy(current_strategy: list, user_message: str, business_pr
 {json.dumps(business_profile, ensure_ascii=False, indent=2)}
 
 Внеси изменения согласно запросу. Верни ПОЛНУЮ обновлённую стратегию в том же JSON формате.
-ВАЖНО: верни ТОЛЬКО валидный JSON-массив. Без markdown, без комментариев, без trailing commas."""
+КРИТИЧЕСКИ ВАЖНО: стратегия должна содержать объекты ДЛЯ КАЖДОЙ из {len(current_strategy)} платформ: {platforms_list}.
+Не удаляй и не пропускай ни одну платформу — даже если запрос касается только одной.
+Верни ТОЛЬКО валидный JSON-массив. Без markdown, без комментариев, без trailing commas."""
 
     try:
         response = await client.messages.create(
@@ -74,6 +77,23 @@ async def refine_strategy(current_strategy: list, user_message: str, business_pr
 
     text = await _gpt_strategy([{"role": "user", "content": msg_content}], 16000)
     return _parse_json(text)
+
+
+def _extract_chat_response(raw: str) -> str:
+    """Извлекает текст ответа из JSON или возвращает raw-текст если JSON не распарсился."""
+    cleaned = re.sub(r"```(?:json)?\s*", "", raw).strip()
+    # Пробуем найти JSON-объект в тексте
+    m = re.search(r'\{[^{}]*"response"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}', cleaned)
+    if m:
+        return m.group(1).replace('\\"', '"').replace("\\n", "\n")
+    try:
+        data = json.loads(cleaned)
+        if isinstance(data, dict) and "response" in data:
+            return data["response"]
+    except json.JSONDecodeError:
+        pass
+    # Если Claude вернул просто текст без JSON — используем как есть
+    return cleaned if cleaned else ""
 
 
 async def strategy_chat(user_message: str, strategy: list | None, profile: dict) -> dict:
@@ -110,23 +130,35 @@ async def strategy_chat(user_message: str, strategy: list | None, profile: dict)
 
     context = "\n".join(context_lines)
     full_msg = f"{context}\n\nСообщение: {user_message}"
+    messages = [{"role": "user", "content": full_msg}]
 
+    # Пробуем Claude
     try:
         resp = await client.messages.create(
             model=_CLAUDE_MODEL,
             max_tokens=512,
             system=system,
-            messages=[{"role": "user", "content": full_msg}],
+            messages=messages,
         )
-        raw = resp.content[0].text.strip()
-        raw = re.sub(r"```(?:json)?\s*", "", raw).strip()
-        data = json.loads(raw)
-        return {"response": data.get("response", raw)}
+        text = _extract_chat_response(resp.content[0].text)
+        if text:
+            return {"response": text}
     except Exception as e:
         log.error("[Claude strategy_chat] failed: %s", e)
-        if not has_strategy:
-            return {"response": "Стратегия ещё не создана. Перейдите на вкладку «Профиль бизнеса», заполните данные о бизнесе и сохраните — после этого можно вернуться в онбординг для генерации стратегии."}
-        return {"response": "Не удалось получить ответ. Попробуйте переформулировать запрос."}
+
+    # GPT fallback
+    try:
+        gpt_messages = [{"role": "system", "content": system}] + messages
+        text = await _gpt_strategy(gpt_messages, 512)
+        extracted = _extract_chat_response(text)
+        if extracted:
+            return {"response": extracted}
+    except Exception as e:
+        log.error("[GPT strategy_chat] fallback failed: %s", e)
+
+    if not has_strategy:
+        return {"response": "Стратегия ещё не создана. Перейдите на вкладку «Профиль бизнеса», заполните данные о бизнесе и сохраните — после этого можно вернуться в онбординг для генерации стратегии."}
+    return {"response": "Не удалось получить ответ. Попробуйте ещё раз."}
 
 
 async def generate_strategy(

@@ -50,8 +50,32 @@ async def _generate_plan(business_id: str):
             print(f"✗ Бизнес {business_id} не найден или нет стратегии")
             return
 
-        slots_meta = build_content_plan(business.strategy, business.profile, start_date=start_date)
-        print(f"→ Создано {len(slots_meta)} слотов для {business.name}")
+        # Определяем уже существующие будущие слоты, чтобы не дублировать
+        existing_result = await db.execute(
+            select(ContentSlot).where(
+                ContentSlot.business_id == business_id,
+                ContentSlot.scheduled_at >= start_date,
+            )
+        )
+        existing_slots = existing_result.scalars().all()
+        existing_keys = {
+            (s.platform.value, s.scheduled_at.date())
+            for s in existing_slots
+        }
+
+        all_slots_meta = build_content_plan(business.strategy, business.profile, start_date=start_date)
+
+        # Оставляем только слоты на даты, которых ещё нет в БД
+        slots_meta = [
+            s for s in all_slots_meta
+            if (s["platform"], datetime.fromisoformat(s["scheduled_at"]).date()) not in existing_keys
+        ]
+        skipped = len(all_slots_meta) - len(slots_meta)
+        print(f"→ Новых слотов: {len(slots_meta)}, пропущено существующих: {skipped} для {business.name}")
+
+        if not slots_meta:
+            print("✓ Все слоты уже существуют, ничего не добавляем")
+            return
 
         # Аналитика компании и рыночные инсайты для улучшения идей
         analytics_ctx = await get_company_analytics_context(business_id, db)

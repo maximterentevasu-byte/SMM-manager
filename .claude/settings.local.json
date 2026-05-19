@@ -36,7 +36,9 @@
       "Bash(python -m py_compile /c/Users/admin/Desktop/smm-platform/backend/app/workers/strategy_tasks.py)",
       "Bash(python -m py_compile /c/Users/admin/Desktop/smm-platform/backend/app/agents/strategy_agent.py)",
       "Bash(python -m py_compile /c/Users/admin/Desktop/smm-platform/backend/app/agents/planner_agent.py)",
-      "Bash(python -m py_compile /c/Users/admin/Desktop/smm-platform/backend/app/api/analytics.py)"
+      "Bash(python -m py_compile /c/Users/admin/Desktop/smm-platform/backend/app/api/analytics.py)",
+      "Bash(python -m py_compile /c/Users/admin/Desktop/smm-platform/backend/app/api/home.py)",
+      "Bash(python -m py_compile /c/Users/admin/Desktop/smm-platform/backend/app/api/businesses.py)"
     ]
   }
 }
