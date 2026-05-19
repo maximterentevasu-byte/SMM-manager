@@ -136,6 +136,7 @@ export default function OnboardingPage() {
   const [generatingStrategy, setGeneratingStrategy] = useState(false);
   const [generatingRubrics, setGeneratingRubrics] = useState(false);
   const [strategy, setStrategy] = useState<StrategyItem[] | null>(null);
+  const [ppwLocal, setPpwLocal] = useState<Record<string, number>>({});
   const [selectedPlatform, setSelectedPlatform] = useState<string>("");
   const [editingPlatform, setEditingPlatform] = useState<string | null>(null);
   const [editMessage, setEditMessage] = useState("");
@@ -259,6 +260,9 @@ export default function OnboardingPage() {
         if (data.ready && data.strategy) {
           clearInterval(pollRef.current!);
           setStrategy(data.strategy);
+          const init: Record<string, number> = {};
+          data.strategy.forEach((ps: any) => { init[ps.platform] = ps.posts_per_week || 3; });
+          setPpwLocal(init);
           setSelectedPlatform(data.strategy[0]?.platform || "");
           setGeneratingStrategy(false);
           setLaunching(false);
@@ -310,7 +314,23 @@ export default function OnboardingPage() {
 
   const approveStrategy = async () => {
     setGeneratingRubrics(true);
-    await new Promise(r => setTimeout(r, 1800));
+    try {
+      // Сохраняем posts_per_week если пользователь изменил значения
+      for (const [platform, ppw] of Object.entries(ppwLocal)) {
+        const original = strategy?.find(ps => ps.platform === platform)?.posts_per_week;
+        if (original !== ppw && businessId) {
+          await api.patch(`/businesses/${businessId}/posts-per-week`, { platform, posts_per_week: ppw });
+        }
+      }
+      // Обновляем локальное состояние стратегии
+      if (strategy) {
+        setStrategy(strategy.map(ps => ppwLocal[ps.platform] !== undefined
+          ? { ...ps, posts_per_week: ppwLocal[ps.platform] }
+          : ps
+        ));
+      }
+    } catch { /* не критично, продолжаем */ }
+    await new Promise(r => setTimeout(r, 500));
     setGeneratingRubrics(false);
     setStep(7);
   };
@@ -1063,9 +1083,22 @@ export default function OnboardingPage() {
                     display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700 }}>
                     {ps.platform === "telegram" ? "✈" : ps.platform === "vk" ? "В" : "О"}
                   </div>
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 700, fontSize: 16 }}>{PLATFORM_LABELS[ps.platform] || ps.platform}</div>
-                    <div style={{ fontSize: 12, color: "#888" }}>{ps.posts_per_week} постов/нед · {ps.best_posting_times?.join(", ")}</div>
+                    <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>{ps.best_posting_times?.join(", ")}</div>
+                  </div>
+                  {/* Степпер постов/неделю */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", border: "1.5px solid #E5E7EB", borderRadius: 10, padding: "4px 8px" }}>
+                    <button
+                      onClick={() => setPpwLocal(prev => ({ ...prev, [ps.platform]: Math.max(1, (prev[ps.platform] ?? ps.posts_per_week) - 1) }))}
+                      style={{ width: 26, height: 26, borderRadius: 6, border: "none", background: "#F3F4F6", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#374151", display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+                    <div style={{ textAlign: "center", minWidth: 60 }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: "#0D1B2A" }}>{ppwLocal[ps.platform] ?? ps.posts_per_week}</div>
+                      <div style={{ fontSize: 10, color: "#9CA3AF" }}>постов/нед</div>
+                    </div>
+                    <button
+                      onClick={() => setPpwLocal(prev => ({ ...prev, [ps.platform]: Math.min(14, (prev[ps.platform] ?? ps.posts_per_week) + 1) }))}
+                      style={{ width: 26, height: 26, borderRadius: 6, border: "none", background: "#F3F4F6", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#374151", display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
                   </div>
                 </div>
 

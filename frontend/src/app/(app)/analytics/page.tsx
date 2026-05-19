@@ -1347,7 +1347,7 @@ function TGDashboard({ data, numWeeks, onNumWeeksChange }: {
       </div>
 
       {/* 5 карточек */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginBottom: 12 }}>
         <DashCard compact label="Подписчики" value={last.subscribers}
           trend={pct(last.subscribers, prev?.subscribers)}
           sparkVals={filtered.map(d => d.subscribers || 0)} />
@@ -1900,7 +1900,7 @@ function VKDashboard({ data, numWeeks, onNumWeeksChange }: {
       </div>
 
       {/* 5 карточек */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginBottom: 12 }}>
         <DashCard compact label="Участников" value={last.members}
           trend={pctDelta(last.members, prev?.members)}
           sparkVals={filtered.map(d => d.members || 0)} />

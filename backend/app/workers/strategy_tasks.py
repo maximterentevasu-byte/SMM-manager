@@ -41,9 +41,12 @@ async def _run(business_id: str):
                 analytics_context=analytics_text,
                 market_insights=market_text,
             )
+            if not strategy or not isinstance(strategy, list) or len(strategy) == 0:
+                print(f"✗ Стратегия пустая или невалидная — не перезаписываем")
+                return
             business.strategy = strategy
             await db.commit()
-            print(f"✓ Стратегия сгенерирована для бизнеса {business.name}")
+            print(f"✓ Стратегия сгенерирована для бизнеса {business.name}: {len(strategy)} платформ")
         except Exception as e:
             print(f"✗ Ошибка генерации стратегии: {e}")
             raise

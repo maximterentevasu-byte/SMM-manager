@@ -122,11 +122,21 @@ async def refine_strategy_endpoint(
     except (json.JSONDecodeError, ValueError) as e:
         raise HTTPException(500, "Модель вернула некорректный ответ, попробуйте переформулировать запрос")
 
+    # Защита: пустой или невалидный ответ — возвращаем оригинал без сохранения
+    if not new_strategy or not isinstance(new_strategy, list):
+        return {"strategy": business.strategy, "status": "unchanged"}
+
     # Защита: если модель пропустила платформы — восстанавливаем из оригинальной стратегии
     new_platforms = {ps.get("platform") for ps in new_strategy}
     for original_ps in business.strategy:
         if original_ps.get("platform") not in new_platforms:
             new_strategy.append(original_ps)
+
+    # Сохраняем posts_per_week из предыдущей версии (чтобы не сбрасывать пользовательские настройки)
+    ppw_map = {ps.get("platform"): ps.get("posts_per_week") for ps in business.strategy if ps.get("posts_per_week")}
+    for ps in new_strategy:
+        if ps.get("platform") in ppw_map and not ps.get("posts_per_week"):
+            ps["posts_per_week"] = ppw_map[ps["platform"]]
 
     business.strategy = new_strategy
     flag_modified(business, "strategy")
