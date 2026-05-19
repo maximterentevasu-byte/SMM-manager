@@ -243,7 +243,10 @@ export default function OnboardingPage() {
         competitors: form.competitors.filter(c => c.name || c.url).map(c => ({ name: c.name, url: c.url, pros: "", cons: "" })),
         brand_voice_examples: [],
       };
-      const { data } = await api.post("/onboarding/save-profile/new", payload);
+      // Если бизнес уже существует — обновляем его, не создаём новый (иначе слетают подключённые платформы)
+      const existingId = typeof window !== "undefined" ? localStorage.getItem("businessId") : null;
+      const endpoint = existingId ? `/onboarding/save-profile/${existingId}` : "/onboarding/save-profile/new";
+      const { data } = await api.post(endpoint, payload);
       const bId = data.business_id;
       setBusinessId(bId);
       if (typeof window !== "undefined") localStorage.setItem("businessId", bId);
