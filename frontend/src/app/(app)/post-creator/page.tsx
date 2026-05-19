@@ -827,7 +827,7 @@ export default function PostCreatorPage() {
     setLoadingImage(true);
     try {
       const baseImage = editFilled[0];
-      const refImages = editFilled.slice(1);
+      const refImages = [...editFilled.slice(1), ...Array.from(brandRefImages.values())];
       const { data: taskData } = await api.post(`/post-creator/${businessId}/edit-image`, {
         base_image: baseImage,
         reference_images: refImages.length > 0 ? refImages : undefined,
@@ -1184,7 +1184,7 @@ export default function PostCreatorPage() {
             <div style={{ marginTop: 10, fontSize: 12, color: "#aaa" }}>Можно добавить до {MAX_UPLOAD_SLOTS} изображений</div>
 
             <div style={{ fontSize: 12, color: "#666", fontWeight: 600, marginBottom: 6, marginTop: 16 }}>Инструкция по редактированию (на русском):</div>
-            {brandShortcutsNode(setEditInstruction, editInstruction)}
+            <BrandContextPanel brand={brandContext} selectedRefs={brandRefImages} onToggleRef={toggleBrandRef} />
             <Textarea value={editInstruction} onChange={setEditInstruction} placeholder="Например: замени фон на белый, добавь тёплые фирменные цвета, сохрани общую композицию..." rows={4} />
             <div style={{ marginTop: 14 }}>
               <Btn label={loadingImage ? "Редактирую..." : "✂️ Редактировать фото"} onClick={editImageFromBlock3c}
