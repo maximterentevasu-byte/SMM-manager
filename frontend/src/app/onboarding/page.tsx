@@ -142,6 +142,9 @@ export default function OnboardingPage() {
   const [ppwLocal, setPpwLocal] = useState<Record<string, number>>({});
   const [selectedPlatform, setSelectedPlatform] = useState<string>("");
   const [editingPlatform, setEditingPlatform] = useState<string | null>(null);
+  const [schedDays, setSchedDays] = useState<string[]>([]);
+  const [schedTimes, setSchedTimes] = useState<string[]>([]);
+  const [schedAiExperiment, setSchedAiExperiment] = useState(false);
   const [editMessage, setEditMessage] = useState("");
   const [editLoading, setEditLoading] = useState(false);
   const [rubricsChat, setRubricsChat] = useState<{ role: "user" | "ai"; text: string }[]>([]);
@@ -324,6 +327,14 @@ export default function OnboardingPage() {
         if (original !== ppw && businessId) {
           await api.patch(`/businesses/${businessId}/posts-per-week`, { platform, posts_per_week: ppw });
         }
+      }
+      // Сохраняем расписание публикаций
+      if (businessId) {
+        await api.patch(`/businesses/${businessId}/posting-schedule`, {
+          required_days: schedDays,
+          required_times: schedTimes,
+          ai_experiment: schedAiExperiment,
+        });
       }
       // Обновляем локальное состояние стратегии
       if (strategy) {
@@ -1195,6 +1206,104 @@ export default function OnboardingPage() {
                 </div>
               </div>
             ))}
+
+            {/* ── Расписание публикаций ── */}
+            {(() => {
+              const DAYS = [
+                { id: "mon", label: "Пн" }, { id: "tue", label: "Вт" },
+                { id: "wed", label: "Ср" }, { id: "thu", label: "Чт" },
+                { id: "fri", label: "Пт" }, { id: "sat", label: "Сб" },
+                { id: "sun", label: "Вс" },
+              ];
+              const TIMES = ["07:00","09:00","12:00","15:00","18:00","20:00","22:00"];
+              const toggleDay = (d: string) => setSchedDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
+              const toggleTime = (t: string) => setSchedTimes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
+              const chipBase: React.CSSProperties = {
+                padding: "7px 14px", borderRadius: 20, fontSize: 13, fontWeight: 600,
+                cursor: "pointer", border: "1.5px solid", transition: "all 0.15s", userSelect: "none",
+              };
+              return (
+                <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16, padding: 24, display: "flex", flexDirection: "column", gap: 20 }}>
+                  <div>
+                    <h3 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 700, color: "#0D1B2A" }}>
+                      Расписание публикаций
+                    </h3>
+                    <p style={{ margin: 0, fontSize: 13, color: "#6B7280" }}>
+                      Укажите предпочтения — ИИ будет учитывать их при составлении контент-плана
+                    </p>
+                  </div>
+
+                  {/* Дни */}
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 }}>
+                      Обязательные дни публикации
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {DAYS.map(d => {
+                        const active = schedDays.includes(d.id);
+                        return (
+                          <div key={d.id} onClick={() => toggleDay(d.id)}
+                            style={{ ...chipBase, borderColor: active ? "#3478F6" : "#E5E7EB",
+                              background: active ? "#3478F6" : "#F9FAFB",
+                              color: active ? "#fff" : "#374151" }}>
+                            {d.label}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p style={{ margin: "8px 0 0", fontSize: 12, color: "#9CA3AF" }}>
+                      Не выбрано — ИИ распределит посты по неделе самостоятельно
+                    </p>
+                  </div>
+
+                  {/* Временные слоты */}
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 }}>
+                      Обязательные временные слоты
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {TIMES.map(t => {
+                        const active = schedTimes.includes(t);
+                        return (
+                          <div key={t} onClick={() => toggleTime(t)}
+                            style={{ ...chipBase, borderColor: active ? "#0F6E56" : "#E5E7EB",
+                              background: active ? "#0F6E56" : "#F9FAFB",
+                              color: active ? "#fff" : "#374151" }}>
+                            {t}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p style={{ margin: "8px 0 0", fontSize: 12, color: "#9CA3AF" }}>
+                      Выбранное время — точное время публикации (±15 мин)
+                    </p>
+                  </div>
+
+                  {/* AI-эксперимент */}
+                  <div onClick={() => setSchedAiExperiment(prev => !prev)}
+                    style={{ display: "flex", alignItems: "flex-start", gap: 14, cursor: "pointer",
+                      background: schedAiExperiment ? "#EAF4FF" : "#F9FAFB",
+                      border: `1.5px solid ${schedAiExperiment ? "#3478F6" : "#E5E7EB"}`,
+                      borderRadius: 12, padding: "14px 16px", transition: "all 0.15s" }}>
+                    <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, marginTop: 1,
+                      background: schedAiExperiment ? "#3478F6" : "#fff",
+                      border: `2px solid ${schedAiExperiment ? "#3478F6" : "#D1D5DB"}`,
+                      display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {schedAiExperiment && <span style={{ color: "#fff", fontSize: 13, fontWeight: 700 }}>✓</span>}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "#0D1B2A", marginBottom: 4 }}>
+                        Разрешить ИИ экспериментировать со временем постинга
+                      </div>
+                      <div style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.5 }}>
+                        ИИ будет пробовать разные дни и временные слоты, собирать статистику охватов и реакций,
+                        интерпретировать данные и автоматически подбирать оптимальное расписание опытным путём.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {error && <p style={{ color: "#DC2626", fontSize: 13 }}>{error}</p>}
 

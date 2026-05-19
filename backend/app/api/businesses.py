@@ -19,6 +19,12 @@ class UpdatePostsPerWeekRequest(BaseModel):
     posts_per_week: int
 
 
+class PostingScheduleRequest(BaseModel):
+    required_days: list[str]    # ["mon","tue","wed","thu","fri","sat","sun"]
+    required_times: list[str]   # ["09:00","18:00"]
+    ai_experiment: bool         # разрешить ИИ экспериментировать со слотами
+
+
 @router.get("/")
 async def get_my_businesses(
     current_user: User = Depends(get_current_user),
@@ -82,6 +88,31 @@ async def update_posts_per_week(
     flag_modified(business, "strategy")
     await db.commit()
     return {"status": "updated", "platform": body.platform, "posts_per_week": posts}
+
+
+@router.patch("/{business_id}/posting-schedule")
+async def update_posting_schedule(
+    business_id: str,
+    body: PostingScheduleRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Business).where(Business.id == business_id, Business.user_id == current_user.id)
+    )
+    business = result.scalar_one_or_none()
+    if not business:
+        raise HTTPException(404, "Не найдено")
+    profile = dict(business.profile or {})
+    profile["posting_schedule"] = {
+        "required_days": body.required_days,
+        "required_times": body.required_times,
+        "ai_experiment": body.ai_experiment,
+    }
+    business.profile = profile
+    flag_modified(business, "profile")
+    await db.commit()
+    return {"status": "updated"}
 
 
 @router.get("/{business_id}/profile")
