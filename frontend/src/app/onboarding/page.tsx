@@ -233,11 +233,38 @@ export default function OnboardingPage() {
     setLoading(true);
     setError("");
     try {
-      const compressedAssets = brandAssets.map(a => {
-        const mime = a.file.type || "image/jpeg";
-        const data = a.preview && a.preview.includes(",") ? a.preview.split(",")[1] : undefined;
-        return { name: a.file.name, label: a.label, ...(data ? { data, mime } : {}) };
-      });
+      const compressedAssets = await Promise.all(brandAssets.map(async a => {
+        const isImage = a.file.type.startsWith("image/") || /\.(jpe?g|png|gif|webp|bmp)$/i.test(a.file.name);
+        if (!isImage || !a.preview) return { name: a.file.name, label: a.label };
+        try {
+          const dataUrl = await new Promise<string>((res, rej) => {
+            const img = new window.Image();
+            img.onload = () => {
+              const MAX = 800;
+              const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+              const w = Math.round(img.width * scale);
+              const h = Math.round(img.height * scale);
+              const canvas = document.createElement("canvas");
+              canvas.width = w; canvas.height = h;
+              const ctx = canvas.getContext("2d");
+              if (!ctx) { rej(new Error("no ctx")); return; }
+              ctx.drawImage(img, 0, 0, w, h);
+              res(canvas.toDataURL("image/jpeg", 0.7));
+            };
+            img.onerror = rej;
+            img.src = a.preview;
+          });
+          const parts = dataUrl.split(",");
+          if (!parts[1]) throw new Error("empty");
+          return { name: a.file.name, label: a.label, data: parts[1], mime: "image/jpeg" };
+        } catch {
+          // canvas failed — use raw preview data directly
+          const parts = a.preview.split(",");
+          return parts[1]
+            ? { name: a.file.name, label: a.label, data: parts[1], mime: a.file.type || "image/jpeg" }
+            : { name: a.file.name, label: a.label };
+        }
+      }));
       const payload = {
         ...form,
         products: [],
