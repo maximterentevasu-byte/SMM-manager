@@ -412,6 +412,52 @@ async def get_brand_context(
     }
 
 
+# ─── 1b. Управление файлами фирменного стиля ─────────────────────────────────
+
+class BrandAssetIn(BaseModel):
+    label: str
+    data: str
+    mime: str = "image/jpeg"
+
+@router.post("/{business_id}/brand-asset")
+async def add_brand_asset(
+    business_id: str,
+    body: BrandAssetIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy.orm.attributes import flag_modified
+    biz = await _get_business(business_id, current_user, db)
+    profile = dict(biz.profile or {})
+    assets = list(profile.get("brand_assets_labels", []))
+    assets.append({"name": body.label, "label": body.label, "data": body.data, "mime": body.mime})
+    profile["brand_assets_labels"] = assets
+    biz.profile = profile
+    flag_modified(biz, "profile")
+    await db.commit()
+    return {"status": "added", "count": len(assets)}
+
+
+@router.delete("/{business_id}/brand-asset/{idx}")
+async def delete_brand_asset(
+    business_id: str,
+    idx: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy.orm.attributes import flag_modified
+    biz = await _get_business(business_id, current_user, db)
+    profile = dict(biz.profile or {})
+    assets = list(profile.get("brand_assets_labels", []))
+    if 0 <= idx < len(assets):
+        assets.pop(idx)
+    profile["brand_assets_labels"] = assets
+    biz.profile = profile
+    flag_modified(biz, "profile")
+    await db.commit()
+    return {"status": "deleted", "count": len(assets)}
+
+
 # ─── 2. Генерация промта для изображения ─────────────────────────────────────
 
 class PromptIn(BaseModel):

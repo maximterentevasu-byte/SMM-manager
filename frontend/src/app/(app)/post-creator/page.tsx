@@ -122,42 +122,117 @@ const PLATFORM_META: Record<Platform, { label: string; color: string; icon: stri
 // ── Brand Context Panel ────────────────────────────────────────────────────────
 
 function BrandContextPanel({
-  brand, selectedRefs, onToggleRef,
+  brand, selectedRefs, onToggleRef, businessId, onRefresh,
 }: {
   brand: BrandContext;
   selectedRefs: Map<number, { data: string; mime: string }>;
   onToggleRef: (idx: number, asset: BrandAssetLabel) => void;
+  businessId: string;
+  onRefresh: () => void;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingFile, setPendingFile] = useState<{ data: string; mime: string } | null>(null);
+  const [pendingLabel, setPendingLabel] = useState("");
+  const [uploading, setUploading] = useState(false);
+
   const assets = brand.brand_assets_labels || [];
-  if (assets.length === 0) return null;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const s = ev.target?.result as string;
+      if (!s) return;
+      const parts = s.split(",");
+      if (parts[1]) {
+        setPendingFile({ data: parts[1], mime: file.type || "image/jpeg" });
+        setPendingLabel(file.name.replace(/\.[^.]+$/, ""));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const saveAsset = async () => {
+    if (!pendingFile || !pendingLabel.trim() || uploading) return;
+    setUploading(true);
+    try {
+      await api.post(`/post-creator/${businessId}/brand-asset`, { label: pendingLabel.trim(), ...pendingFile });
+      setPendingFile(null);
+      setPendingLabel("");
+      onRefresh();
+    } catch { alert("Ошибка сохранения"); }
+    finally { setUploading(false); }
+  };
+
+  const deleteAsset = async (idx: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try { await api.delete(`/post-creator/${businessId}/brand-asset/${idx}`); onRefresh(); } catch {}
+  };
 
   return (
     <div style={{ marginBottom: 12, padding: "12px 14px", background: "#FFF8F0", border: "1px solid #FED7AA", borderRadius: 12 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: "#C2410C", marginBottom: 4 }}>Фирменный стиль — референс для изображения:</div>
-      <div style={{ fontSize: 11, color: "#92400E", marginBottom: 8 }}>Выберите один или несколько файлов — ИИ учтёт их визуальный стиль при генерации</div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {assets.map((a, i) => {
-          const name = a.label || a.name;
-          const selected = selectedRefs.has(i);
-          const hasData = !!a.data;
-          return (
-            <button key={i} onClick={() => onToggleRef(i, a)}
-              title={hasData ? (selected ? "Снять выбор" : "Добавить как референс") : "Нет данных изображения — переройдите онбординг"}
-              style={{
-                padding: "5px 12px", borderRadius: 20, cursor: "pointer", fontSize: 11, fontWeight: 600,
-                background: selected ? "#C2410C" : "#fff",
-                color: selected ? "#fff" : (hasData ? "#C2410C" : "#999"),
-                border: `1.5px solid ${selected ? "#C2410C" : (hasData ? "#FED7AA" : "#E5E7EB")}`,
-                opacity: hasData ? 1 : 0.6,
-              }}>
-              {selected ? "✓ " : "+ "}{name}
-            </button>
-          );
-        })}
+      <div style={{ fontSize: 11, color: "#92400E", marginBottom: 8 }}>
+        {assets.length > 0 ? "Выберите файл — ИИ учтёт его визуальный стиль при генерации" : "Загрузите файлы фирменного стиля (логотип, маскот, фото)"}
       </div>
+
+      {assets.length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          {assets.map((a, i) => {
+            const name = a.label || a.name;
+            const selected = selectedRefs.has(i);
+            const hasData = !!a.data;
+            return (
+              <div key={i} style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                <button onClick={() => onToggleRef(i, a)}
+                  title={hasData ? "" : "Файл без данных — загрузите заново через кнопку ниже"}
+                  style={{
+                    padding: "5px 26px 5px 12px", borderRadius: 20, cursor: hasData ? "pointer" : "default",
+                    fontSize: 11, fontWeight: 600,
+                    background: selected ? "#C2410C" : "#fff",
+                    color: selected ? "#fff" : (hasData ? "#C2410C" : "#999"),
+                    border: `1.5px solid ${selected ? "#C2410C" : (hasData ? "#FED7AA" : "#E5E7EB")}`,
+                    opacity: hasData ? 1 : 0.55,
+                  }}>
+                  {selected ? "✓ " : ""}{name}
+                </button>
+                <button onClick={(e) => deleteAsset(i, e)}
+                  style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: selected ? "#fff" : "#C2410C", padding: 0, lineHeight: 1 }}>
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {pendingFile && (
+        <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 8, padding: "8px 10px", background: "#FEF3C7", borderRadius: 8, border: "1px solid #FCD34D" }}>
+          <span style={{ fontSize: 11, color: "#92400E", flexShrink: 0 }}>Название:</span>
+          <input autoFocus value={pendingLabel} onChange={e => setPendingLabel(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") saveAsset(); if (e.key === "Escape") { setPendingFile(null); setPendingLabel(""); } }}
+            style={{ flex: 1, fontSize: 11, padding: "3px 8px", border: "1px solid #E5E7EB", borderRadius: 6, outline: "none" }}
+            placeholder="логобук, маскот, магазин..." />
+          <button onClick={saveAsset} disabled={!pendingLabel.trim() || uploading}
+            style={{ padding: "3px 10px", background: "#C2410C", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 700 }}>
+            {uploading ? "..." : "✓"}
+          </button>
+          <button onClick={() => { setPendingFile(null); setPendingLabel(""); }}
+            style={{ padding: "3px 8px", background: "none", border: "1px solid #E5E7EB", borderRadius: 6, cursor: "pointer", fontSize: 11, color: "#666" }}>✕</button>
+        </div>
+      )}
+
+      <button onClick={() => fileInputRef.current?.click()}
+        style={{ padding: "5px 14px", background: "#fff", border: "1.5px dashed #FED7AA", borderRadius: 20, color: "#C2410C", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
+        + Загрузить файл
+      </button>
+      <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileChange} />
+
       {selectedRefs.size > 0 && (
         <div style={{ marginTop: 8, fontSize: 11, color: "#92400E", fontWeight: 600 }}>
-          ✓ {selectedRefs.size} референс{selectedRefs.size > 1 ? "а" : ""} будут переданы в генерацию изображения
+          ✓ {selectedRefs.size} референс{selectedRefs.size > 1 ? "а" : ""} будут переданы в генерацию
         </div>
       )}
     </div>
@@ -478,12 +553,17 @@ export default function PostCreatorPage() {
   }, [idea, ideaUrl, postText, textHistory, currentTextIdx, imagePrompt,
       imageHistory, currentImageIdx, uploadSlots, selectedPlatforms, publishNow, publishDate, publishTime]);
 
+  const fetchBrandContext = useCallback(() => {
+    if (!businessId) return;
+    api.get(`/post-creator/${businessId}/brand-context`).then(({ data }) => setBrandContext(data)).catch(() => {});
+  }, [businessId]);
+
   useEffect(() => {
     if (!businessId) return;
     api.get(`/platforms/list/${businessId}`).then(({ data }) => {
       setConnectedPlatforms((data || []).filter((p: any) => p.is_active).map((p: any) => ({ platform: p.platform as Platform, page_name: p.page_name })));
     }).catch(() => {});
-    api.get(`/post-creator/${businessId}/brand-context`).then(({ data }) => setBrandContext(data)).catch(() => {});
+    fetchBrandContext();
     const today = new Date();
     setPublishDate(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`);
     const draft = loadDraft(businessId);
@@ -1069,7 +1149,7 @@ export default function PostCreatorPage() {
           <div style={card}>
             <SectionTitle n={3} label="Промт для изображения" done={!!imagePrompt.trim()} />
             <p style={{ color: "#888", fontSize: 13, margin: "0 0 14px" }}>Напишите промт — опишите что должно быть на изображении.</p>
-            <BrandContextPanel brand={brandContext} selectedRefs={brandRefImages} onToggleRef={toggleBrandRef} />
+            <BrandContextPanel brand={brandContext} selectedRefs={brandRefImages} onToggleRef={toggleBrandRef} businessId={businessId} onRefresh={fetchBrandContext} />
             {postText.trim() && (
               <div style={{ marginBottom: 10 }}>
                 <button onClick={() => appendToPrompt(postText.slice(0, 500))}
