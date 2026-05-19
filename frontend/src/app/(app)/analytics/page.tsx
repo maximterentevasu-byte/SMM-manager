@@ -1365,12 +1365,12 @@ function TGDashboard({ data, numWeeks, onNumWeeksChange }: {
           sparkVals={filtered.map(d => d.posts_count || 0)} />
       </div>
 
-      {/* Ряд 1: охват + ER просмотры */}
+      {/* Ряд 1: охват + реакции */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10, marginBottom: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.avg_views || 0} getLabel={lbl}
           color="#1a1a1a" title="Средний охват по неделям" />
-        <BarChartSVG data={filtered} getValue={d => d.er_reach_pct || 0} getLabel={lbl}
-          color="#0F6E56" title="ER (просмотры) %" suffix="%" />
+        <BarChartSVG data={filtered} getValue={d => d.avg_reactions || 0} getLabel={lbl}
+          color="#4680C2" title="Ср. реакции" />
       </div>
 
       {/* Ряд 2: подписчики + ER активности */}
@@ -1381,10 +1381,10 @@ function TGDashboard({ data, numWeeks, onNumWeeksChange }: {
           color="#7C5CBF" title="ER (активности) %" suffix="%" />
       </div>
 
-      {/* Ряд 3: реакции / комменты / репосты */}
+      {/* Ряд 3: ER просмотры / комменты / репосты */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-        <BarChartSVG data={filtered} getValue={d => d.avg_reactions || 0} getLabel={lbl}
-          color="#4680C2" title="Ср. реакции" />
+        <BarChartSVG data={filtered} getValue={d => d.er_reach_pct || 0} getLabel={lbl}
+          color="#0F6E56" title="ER (просмотры) %" suffix="%" />
         <BarChartSVG data={filtered} getValue={d => d.avg_comments || 0} getLabel={lbl}
           color="#7C5CBF" title="Ср. комментарии" />
         <BarChartSVG data={filtered} getValue={d => d.avg_reposts || 0} getLabel={lbl}
