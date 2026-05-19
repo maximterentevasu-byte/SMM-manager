@@ -241,7 +241,14 @@ async def get_clarifying_questions(
     if not business:
         raise HTTPException(status_code=404, detail="Business not found")
 
-    questions = await clarify_business_profile(business.profile)
+    # Strip binary data from brand assets before sending to AI (avoids token limit)
+    profile_for_ai = {**business.profile}
+    if "brand_assets_labels" in profile_for_ai:
+        profile_for_ai["brand_assets_labels"] = [
+            {k: v for k, v in a.items() if k != "data"}
+            for a in (profile_for_ai["brand_assets_labels"] or [])
+        ]
+    questions = await clarify_business_profile(profile_for_ai)
     return {"questions": questions}
 
 
@@ -286,8 +293,14 @@ async def answer_clarification(
     if not business:
         raise HTTPException(status_code=404, detail="Business not found")
 
+    profile_for_ai = {**business.profile}
+    if "brand_assets_labels" in profile_for_ai:
+        profile_for_ai["brand_assets_labels"] = [
+            {k: v for k, v in a.items() if k != "data"}
+            for a in (profile_for_ai["brand_assets_labels"] or [])
+        ]
     updated_profile = await parse_clarification_answer(
-        body["question"], body["answer"], business.profile
+        body["question"], body["answer"], profile_for_ai
     )
     business.profile = updated_profile
     await db.commit()
