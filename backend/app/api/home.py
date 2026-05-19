@@ -12,6 +12,13 @@ from app.api.auth import get_current_user
 
 router = APIRouter()
 
+METRIC_ALIASES: dict = {
+    "Охваты / Показы":    "Охваты/Показы",
+    "ER вовлеченность ЦА": "ER вовлечённость ЦА",
+    "Вирусность контента": "Виральность",
+    "ER по просмотрам":   None,
+}
+
 SMM_METRIC_CONFIG: dict = {
     "Подписчики":            {"vk": "members",              "tg": "subscribers",      "agg": "latest", "fmt": "int",   "icon": "👥", "label": "Подписчики"},
     "Охваты/Показы":         {"vk": "total_views",          "tg": "total_views",      "agg": "sum",    "fmt": "int",   "icon": "👁",  "label": "Охваты"},
@@ -186,7 +193,11 @@ async def get_home_dashboard(
         raise HTTPException(404, "Business not found")
 
     profile = biz.profile or {}
-    smm_metrics = profile.get("smm_metrics") or list(SMM_METRIC_CONFIG.keys())
+    raw_metrics = profile.get("smm_metrics") or []
+    smm_metrics = [METRIC_ALIASES.get(m, m) for m in raw_metrics]
+    smm_metrics = [m for m in smm_metrics if m and m in SMM_METRIC_CONFIG]
+    if not smm_metrics:
+        smm_metrics = list(SMM_METRIC_CONFIG.keys())
 
     # Weekly analytics
     vk_result = await db.execute(
