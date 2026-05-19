@@ -1,7 +1,7 @@
 """
 Генерация и редактирование изображений (каскад) — полностью async.
-Каскад генерации:   Gemini Flash Image → gpt-image-2 → gpt-image-1-mini
-Каскад редактирования: Gemini Flash Image (img2img) → gpt-image-2 edit
+Каскад генерации:   Gemini 2.0 Flash Image → Imagen 3 → gpt-image-2 → gpt-image-1-mini
+Каскад редактирования: Gemini 2.0 Flash Image (img2img) → gpt-image-2 edit
 """
 import asyncio
 import io
@@ -15,7 +15,7 @@ from app.config import settings
 log = logging.getLogger(__name__)
 
 _GEMINI_MODEL = "gemini-3.1-flash-image-preview"
-_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+_GEMINI_BASE  = "https://generativelanguage.googleapis.com/v1beta/models"
 
 _OAI_SIZE = {
     "1:1":  "1024x1024",
@@ -24,8 +24,8 @@ _OAI_SIZE = {
     "4:3":  "1536x1024",
 }
 
-_GEMINI_TIMEOUT = 90.0   # секунд на запрос к Gemini (в Celery нет HTTP-лимита)
-_OAI_TIMEOUT    = 120.0  # секунд на запрос к OpenAI (edit/generate может занимать 60-90с)
+_GEMINI_TIMEOUT = 60.0   # секунд — если не ответил за 60с, переходим к следующему
+_OAI_TIMEOUT    = 120.0
 
 
 # ─── Вспомогательные синхронные функции (PIL, быстрые) ───────────────────────
@@ -118,9 +118,14 @@ async def generate_image(prompt: str, aspect_ratio: str = "1:1", reference_image
     if settings.GEMINI_API_KEY:
         try:
             return await _gemini_generate(prompt, reference_images or [])
+        except httpx.TimeoutException:
+            msg = f"таймаут {int(_GEMINI_TIMEOUT)}с"
+            log.error("[Gemini generate] timeout after %ss", _GEMINI_TIMEOUT)
+            errors.append(f"Gemini: {msg}")
         except Exception as e:
-            log.error("[Gemini generate] failed, falling through to OpenAI: %s", e)
-            errors.append(f"Gemini: {e}")
+            err = str(e) or type(e).__name__
+            log.error("[Gemini generate] failed: %s", err)
+            errors.append(f"Gemini: {err}")
 
     if settings.OPENAI_API_KEY:
         for model_name in ("gpt-image-2", "gpt-image-1-mini"):
