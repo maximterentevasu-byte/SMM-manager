@@ -24,12 +24,12 @@ _GPT_MODEL = "gpt-5.4"
 
 def _gpt_sync(messages: list, max_tokens: int) -> str:
     oai = _OpenAI(api_key=settings.OPENAI_API_KEY)
-    resp = oai.chat.completions.create(
+    resp = oai.responses.create(
         model=_GPT_MODEL,
-        max_completion_tokens=max_tokens,
-        messages=messages,
+        input=messages,
+        max_output_tokens=max_tokens,
     )
-    return resp.choices[0].message.content.strip()
+    return resp.output_text
 
 
 @celery_app.task(name="app.workers.content_tasks.generate_content_plan_task")

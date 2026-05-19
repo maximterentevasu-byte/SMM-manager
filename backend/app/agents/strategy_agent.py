@@ -9,17 +9,17 @@ log = logging.getLogger(__name__)
 client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
 
 _CLAUDE_MODEL = "claude-sonnet-4-6"
-_GPT_MODEL = "gpt-4o"
+_GPT_MODEL = "gpt-5.4"
 
 
 async def _gpt_strategy(messages: list, max_tokens: int) -> str:
     async with AsyncOpenAI(api_key=settings.OPENAI_API_KEY) as oai:
-        resp = await oai.chat.completions.create(
+        resp = await oai.responses.create(
             model=_GPT_MODEL,
-            max_completion_tokens=max_tokens,
-            messages=messages,
+            input=messages,
+            max_output_tokens=max_tokens,
         )
-    return resp.choices[0].message.content.strip()
+    return resp.output_text
 
 
 def _parse_json(text: str):

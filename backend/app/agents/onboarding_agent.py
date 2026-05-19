@@ -56,12 +56,12 @@ async def clarify_business_profile(profile: dict) -> list[dict]:
         log.error("[Claude clarify_business_profile] failed, falling back to GPT: %s", e)
 
     oai = _OpenAI(api_key=settings.OPENAI_API_KEY)
-    resp = oai.chat.completions.create(
+    resp = oai.responses.create(
         model=_GPT_MODEL,
-        max_completion_tokens=1000,
-        messages=[{"role": "user", "content": prompt}],
+        input=[{"role": "user", "content": prompt}],
+        max_output_tokens=1000,
     )
-    return _parse(resp.choices[0].message.content)
+    return _parse(resp.output_text)
 
 
 async def parse_clarification_answer(question: str, answer: str, profile: dict) -> dict:
@@ -97,9 +97,9 @@ async def parse_clarification_answer(question: str, answer: str, profile: dict) 
         log.error("[Claude parse_clarification_answer] failed, falling back to GPT: %s", e)
 
     oai = _OpenAI(api_key=settings.OPENAI_API_KEY)
-    resp = oai.chat.completions.create(
+    resp = oai.responses.create(
         model=_GPT_MODEL,
-        max_completion_tokens=2000,
-        messages=[{"role": "user", "content": prompt}],
+        input=[{"role": "user", "content": prompt}],
+        max_output_tokens=2000,
     )
-    return _parse(resp.choices[0].message.content)
+    return _parse(resp.output_text)

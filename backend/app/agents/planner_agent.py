@@ -257,8 +257,8 @@ is_sensitive = true (Категория 2 — нужно спросить у в�
             log.error("[Claude generate_ideas_for_slots] batch %d failed, falling back to GPT: %s", i // batch_size, e)
             try:
                 oai = _OpenAI(api_key=settings.OPENAI_API_KEY)
-                gpt_resp = oai.chat.completions.create(model=_GPT_MODEL, max_completion_tokens=8000, messages=messages)
-                raw = gpt_resp.choices[0].message.content.strip().replace("```json", "").replace("```", "").strip()
+                gpt_resp = oai.responses.create(model=_GPT_MODEL, input=messages, max_output_tokens=8000)
+                raw = gpt_resp.output_text.strip().replace("```json", "").replace("```", "").strip()
             except Exception as e2:
                 log.error("[GPT generate_ideas_for_slots] batch %d also failed: %s", i // batch_size, e2)
 
@@ -300,8 +300,8 @@ async def _generate_ideas_simple(batch, batch_simple, business_profile: dict) ->
         log.error("[Claude _generate_ideas_simple] failed, trying GPT: %s", e)
     try:
         oai = _OpenAI(api_key=settings.OPENAI_API_KEY)
-        gpt_resp = oai.chat.completions.create(model=_GPT_MODEL, max_completion_tokens=4000, messages=messages)
-        raw = gpt_resp.choices[0].message.content.strip().replace("```json", "").replace("```", "").strip()
+        gpt_resp = oai.responses.create(model=_GPT_MODEL, input=messages, max_output_tokens=4000)
+        raw = gpt_resp.output_text.strip().replace("```json", "").replace("```", "").strip()
         return json.loads(raw)
     except Exception as e2:
         print(f"✗ GPT fallback ideas also failed: {e2}")

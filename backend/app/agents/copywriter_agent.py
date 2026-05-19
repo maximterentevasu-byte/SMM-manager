@@ -100,12 +100,12 @@ async def generate_post_text(slot, business_profile: dict) -> dict:
         log.error("[Claude copywriter] failed, falling back to GPT: %s", e)
 
     oai = _OpenAI(api_key=settings.OPENAI_API_KEY)
-    resp = oai.chat.completions.create(
+    resp = oai.responses.create(
         model=_GPT_MODEL,
-        max_completion_tokens=2000,
-        messages=[{"role": "user", "content": prompt}],
+        input=[{"role": "user", "content": prompt}],
+        max_output_tokens=2000,
     )
-    raw = resp.choices[0].message.content.strip().replace("```json", "").replace("```", "").strip()
+    raw = resp.output_text.strip().replace("```json", "").replace("```", "").strip()
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
