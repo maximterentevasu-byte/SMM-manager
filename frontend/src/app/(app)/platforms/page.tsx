@@ -126,9 +126,13 @@ export default function PlatformsPage() {
   );
 
   useEffect(() => {
-    if (!businessId) return;
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
     api.get(`/platforms/list/${businessId}`)
       .then(({ data }) => setConnections(data))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [businessId]);
 

@@ -50,7 +50,7 @@ export default function StrategyPage() {
   );
 
   useEffect(() => {
-    if (!businessId) { router.push("/login"); return; }
+    if (!businessId) { setLoadingStrategy(false); return; }
     api.get(`/businesses/${businessId}/strategy`)
       .then(({ data }) => {
         setStrategy(data.strategy);
