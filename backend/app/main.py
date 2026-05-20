@@ -36,13 +36,21 @@ _MIGRATIONS = [
 ]
 
 
+_CREATE_TYPES = [
+    "DO $$ BEGIN CREATE TYPE platform AS ENUM ('vk', 'telegram', 'ok'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+    "DO $$ BEGIN CREATE TYPE planstatus AS ENUM ('planned', 'idea_ready', 'pending_approval', 'needs_info', 'content_ready', 'published', 'failed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+    "DO $$ BEGIN CREATE TYPE subscriptionplan AS ENUM ('demo', 'start', 'business', 'pro'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
-        # CREATE TYPE IF NOT EXISTS для всех enum-ов перед create_all
-        await conn.execute(text("CREATE TYPE IF NOT EXISTS platform AS ENUM ('vk', 'telegram', 'ok')"))
-        await conn.execute(text("CREATE TYPE IF NOT EXISTS planstatus AS ENUM ('planned', 'idea_ready', 'pending_approval', 'needs_info', 'content_ready', 'published', 'failed')"))
-        await conn.execute(text("CREATE TYPE IF NOT EXISTS subscriptionplan AS ENUM ('demo', 'start', 'business', 'pro')"))
+        for stmt in _CREATE_TYPES:
+            try:
+                await conn.execute(text(stmt))
+            except Exception:
+                pass
         await conn.run_sync(lambda c: Base.metadata.create_all(c))
         for migration in _MIGRATIONS:
             try:
