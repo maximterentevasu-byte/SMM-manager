@@ -7,7 +7,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from app.database import engine, Base
 from app.config import settings
-from app.api import auth, businesses, onboarding, content, platforms, subscriptions, analytics, post_creator, events, home
+from app.api import auth, businesses, onboarding, content, platforms, subscriptions, analytics, post_creator, events, home, leads
 
 # Колонки для миграций без Alembic — добавляются через ADD COLUMN IF NOT EXISTS
 _MIGRATIONS = [
@@ -112,6 +112,7 @@ app.include_router(analytics.router,      prefix="/api/analytics",      tags=["a
 app.include_router(post_creator.router,   prefix="/api/post-creator",   tags=["post-creator"])
 app.include_router(events.router,         prefix="/api/events",          tags=["events"])
 app.include_router(home.router,           prefix="/api/home",            tags=["home"])
+app.include_router(leads.router,          prefix="/api/leads",           tags=["leads"])
 
 
 @app.get("/")

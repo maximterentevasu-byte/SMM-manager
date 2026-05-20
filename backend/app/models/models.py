@@ -299,3 +299,14 @@ class Subscription(Base):
     platforms_limit: Mapped[int] = mapped_column(default=1)
 
     user: Mapped["User"] = relationship(back_populates="subscriptions")
+
+
+class Lead(Base):
+    __tablename__ = "leads"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255))
+    email: Mapped[str] = mapped_column(String(255), index=True)
+    phone: Mapped[str] = mapped_column(String(50), nullable=True)
+    source: Mapped[str] = mapped_column(String(100), default="landing")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

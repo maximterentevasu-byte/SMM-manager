@@ -163,6 +163,36 @@ def send_welcome_email(to: str, plan: str) -> bool:
     return send_email(to, subject, _base_template(content))
 
 
+def send_lead_notification(name: str, email: str, phone: str) -> bool:
+    from app.config import settings
+    admin = settings.SMTP_FROM or settings.SMTP_USER
+    if not admin:
+        print(f"[LEAD] {name} | {email} | {phone}")
+        return True
+    subject = f"Новая заявка с лендинга — {name}"
+    content = f"""
+    <div style="padding:32px;">
+      <h1 style="font-size:20px;font-weight:700;color:#0D1B2A;margin:0 0 20px;">
+        Новая заявка с лендинга
+      </h1>
+      <table style="width:100%;border-collapse:collapse;">
+        <tr>
+          <td style="padding:10px 0;border-bottom:1px solid #E5E7EB;color:#6B7280;font-size:14px;width:100px;">Имя</td>
+          <td style="padding:10px 0;border-bottom:1px solid #E5E7EB;color:#0D1B2A;font-size:14px;font-weight:600;">{name}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 0;border-bottom:1px solid #E5E7EB;color:#6B7280;font-size:14px;">Email</td>
+          <td style="padding:10px 0;border-bottom:1px solid #E5E7EB;color:#0D1B2A;font-size:14px;font-weight:600;">{email}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 0;color:#6B7280;font-size:14px;">Телефон</td>
+          <td style="padding:10px 0;color:#0D1B2A;font-size:14px;font-weight:600;">{phone}</td>
+        </tr>
+      </table>
+    </div>"""
+    return send_email(admin, subject, _base_template(content))
+
+
 def send_subscription_expiring(to: str, days_left: int) -> bool:
     if days_left == 1:
         days_str = "1 день"
