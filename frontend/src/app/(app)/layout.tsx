@@ -270,14 +270,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 {NAV.map((item) => {
                   const active = pathname === item.href || pathname.startsWith(item.href + "/");
                   return (
-                    <button key={item.href} onClick={() => router.push(item.href)} style={{
-                      display: "flex", alignItems: "center", gap: 12,
-                      padding: "11px 12px", borderRadius: 10, border: "none",
-                      cursor: "pointer", width: "100%", textAlign: "left",
-                      background: active ? "#3478F6" : "transparent",
-                      color: active ? "#fff" : "rgba(255,255,255,0.6)",
-                      fontSize: 14, fontWeight: active ? 600 : 400,
-                    }}>
+                    <button
+                      key={item.href}
+                      id={item.href === "/platforms" ? "nav-platforms" : undefined}
+                      onClick={() => router.push(item.href)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 12,
+                        padding: "11px 12px", borderRadius: 10, border: "none",
+                        cursor: "pointer", width: "100%", textAlign: "left",
+                        background: active ? "#3478F6" : "transparent",
+                        color: active ? "#fff" : "rgba(255,255,255,0.6)",
+                        fontSize: 14, fontWeight: active ? 600 : 400,
+                      }}
+                    >
                       <span style={{ opacity: active ? 1 : 0.7, display: "flex" }}>{item.icon(active)}</span>
                       <span>{item.label}</span>
                     </button>
@@ -391,15 +396,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {NAV.map((item) => {
           const active = pathname === item.href || pathname.startsWith(item.href + "/");
           return (
-            <button key={item.href} onClick={() => router.push(item.href)} style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "9px 12px", borderRadius: 10, border: "none",
-              cursor: "pointer", width: "100%", textAlign: "left",
-              background: active ? "#3478F6" : "transparent",
-              color: active ? "#fff" : "rgba(255,255,255,0.55)",
-              fontSize: 13, fontWeight: active ? 600 : 400,
-              transition: "background 0.15s, color 0.15s", lineHeight: 1.3,
-            }}>
+            <button
+              key={item.href}
+              id={item.href === "/platforms" ? "nav-platforms" : undefined}
+              onClick={() => router.push(item.href)}
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "9px 12px", borderRadius: 10, border: "none",
+                cursor: "pointer", width: "100%", textAlign: "left",
+                background: active ? "#3478F6" : "transparent",
+                color: active ? "#fff" : "rgba(255,255,255,0.55)",
+                fontSize: 13, fontWeight: active ? 600 : 400,
+                transition: "background 0.15s, color 0.15s", lineHeight: 1.3,
+              }}
+            >
               <span style={{ flexShrink: 0, opacity: active ? 1 : 0.7, display: "flex", alignItems: "center" }}>
                 {item.icon(active)}
               </span>

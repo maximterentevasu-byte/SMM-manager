@@ -1,260 +1,271 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Joyride, ACTIONS, EVENTS, STATUS, type EventData, type Controls, type TooltipRenderProps, type Step } from "react-joyride";
 import api from "@/lib/api";
 
-const STEPS_CFG = [
+const PAD = 10;
+const TOOLTIP_W = 276;
+const TOOLTIP_H = 170;
+
+const STEPS = [
   {
-    target: "#tour-add-platform",
-    route: "/platforms",
-    title: "Привет! Я АИСТ 👋",
-    content: "Начнём с главного — подключи первую площадку. ВКонтакте или Telegram. Без площадки я не смогу публиковать за тебя.",
+    targetId: "nav-platforms",
+    title: "Шаг 1 из 2 · Платформы",
+    text: "Начнём с главного — подключи ВКонтакте или Telegram. Без площадки я не смогу публиковать за тебя. Нажми «Платформы» в меню.",
+    advanceOn: "/platforms",
+    side: "right" as const,
+    final: false,
   },
   {
-    target: "#tour-analytics-header",
-    route: "/analytics",
-    title: "Аналитика в реальном времени",
-    content: "Здесь я покажу охваты, подписчиков и вовлечённость по каждой площадке. После первых публикаций данные появятся автоматически.",
-  },
-  {
-    target: "#tour-generate-strategy",
-    route: "/strategy",
-    title: "AI-стратегия за 30 секунд",
-    content: "Расскажи о бизнесе — и я составлю контент-план с темами, рубриками и частотой. Это основа для всего контента.",
-  },
-  {
-    target: "#tour-content-plan",
-    route: "/content",
-    title: "Твой контент-календарь",
-    content: "Посты по стратегии появятся здесь. Одобри — и я опубликую в нужное время. Или создай вручную прямо сейчас.",
-  },
-  {
-    target: "#tour-kpi-block",
-    route: "/home",
-    title: "Это твой пульт управления 🚀",
-    content: "Все ключевые показатели на одном экране. Подключи площадку — и я начну заполнять эти карточки живыми данными!",
+    targetId: "tour-platform-cards",
+    title: "Шаг 2 из 2 · Подключи площадку",
+    text: "Нажми «Подключить» на нужной платформе и следуй инструкции. Это займёт меньше минуты.",
+    advanceOn: null,
+    side: "top" as const,
+    final: true,
   },
 ];
 
-const TOTAL = STEPS_CFG.length;
-
-function CustomTooltip({ index, size, skipProps, primaryProps, backProps, tooltipProps, isLastStep }: TooltipRenderProps) {
-  const s = STEPS_CFG[index];
-  return (
-    <div
-      {...tooltipProps}
-      style={{
-        background: "#fff",
-        border: "1.5px solid #E5E7EB",
-        borderRadius: 20,
-        boxShadow: "0 8px 48px rgba(13,27,42,0.22)",
-        padding: "22px 22px 18px",
-        maxWidth: 310,
-        fontFamily: "'Inter', sans-serif",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-        <div style={{
-          width: 46, height: 46, borderRadius: "50%",
-          background: "linear-gradient(135deg, #EAF4FF, #E0F7F6)",
-          border: "2px solid #3478F6",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 22, flexShrink: 0,
-        }}>
-          🦢
-        </div>
-        <div>
-          <div style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", letterSpacing: 0.5, marginBottom: 1 }}>
-            ШАГ {index + 1} ИЗ {size}
-          </div>
-          <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 14, fontWeight: 700, color: "#0D1B2A", lineHeight: 1.3 }}>
-            {s?.title}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
-        {STEPS_CFG.map((_, i) => (
-          <div key={i} style={{
-            height: 4,
-            width: i === index ? 20 : 6,
-            borderRadius: 2,
-            background: i === index ? "#3478F6" : i < index ? "#00B5A6" : "#E5E7EB",
-            transition: "width 0.2s, background 0.2s",
-          }} />
-        ))}
-      </div>
-
-      <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.65, margin: "0 0 16px" }}>
-        {s?.content}
-      </p>
-
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <button
-          {...skipProps}
-          style={{
-            background: "none", border: "none", cursor: "pointer",
-            fontSize: 12, color: "#9CA3AF", padding: 0, textDecoration: "underline",
-            fontFamily: "'Inter', sans-serif",
-          }}
-        >
-          Пропустить
-        </button>
-        <div style={{ display: "flex", gap: 8 }}>
-          {index > 0 && (
-            <button
-              {...backProps}
-              style={{
-                padding: "7px 14px", background: "#F5F7FA",
-                border: "1px solid #E5E7EB", borderRadius: 10,
-                cursor: "pointer", fontSize: 12, fontWeight: 500, color: "#374151",
-                fontFamily: "'Inter', sans-serif",
-              }}
-            >
-              ← Назад
-            </button>
-          )}
-          <button
-            {...primaryProps}
-            style={{
-              padding: "7px 18px", background: "#3478F6",
-              border: "none", borderRadius: 10,
-              cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#fff",
-              fontFamily: "'Inter', sans-serif",
-            }}
-          >
-            {isLastStep ? "Завершить ✓" : "Далее →"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface Props {
-  tourKey: number;
-}
+interface Props { tourKey: number; }
 
 export function OnboardingTour({ tourKey }: Props) {
   const router = useRouter();
   const pathname = usePathname();
-  const [run, setRun] = useState(false);
-  const [stepIndex, setStepIndex] = useState(0);
-  const [navigating, setNavigating] = useState(false);
 
-  const completeTour = useCallback(() => {
+  const [phase, setPhase] = useState<"idle" | "modal" | "spotlight">("idle");
+  const [stepIdx, setStepIdx] = useState(0);
+  const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+
+  const done = useCallback(() => {
+    setPhase("idle");
+    setRect(null);
     localStorage.setItem("tourDone", "1");
     api.post("/auth/tour-complete").catch(() => {});
   }, []);
 
+  // Start or restart tour
   useEffect(() => {
     if (tourKey === 0) return;
-    setStepIndex(0);
-    setRun(false);
-    setNavigating(false);
-    const firstRoute = STEPS_CFG[0].route;
-    if (pathname !== firstRoute) {
-      router.push(firstRoute);
-      setTimeout(() => setRun(true), 900);
-    } else {
-      setTimeout(() => setRun(true), 400);
-    }
+    setStepIdx(0);
+    setRect(null);
+    setPhase("modal");
+    if (pathname !== "/home") router.push("/home");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tourKey]);
 
-  // After navigation, wait for target element to appear
+  // Locate target element in DOM
   useEffect(() => {
-    if (!navigating) return;
-    const target = STEPS_CFG[stepIndex]?.target;
-    if (!target) return;
-    let attempts = 0;
-    const check = () => {
-      attempts++;
-      if (document.querySelector(target)) {
-        setNavigating(false);
-        setRun(true);
-      } else if (attempts < 25) {
-        setTimeout(check, 150);
-      } else {
-        setNavigating(false);
-        setRun(true);
+    if (phase !== "spotlight") return;
+    const cfg = STEPS[stepIdx];
+    if (!cfg) { done(); return; }
+    setRect(null);
+
+    let tries = 0;
+    const find = () => {
+      const el = document.getElementById(cfg.targetId);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        setRect({ x: r.left, y: r.top, w: r.width, h: r.height });
+      } else if (tries++ < 30) {
+        setTimeout(find, 150);
       }
     };
-    setTimeout(check, 400);
-  }, [navigating, stepIndex]);
+    setTimeout(find, 400);
+  }, [phase, stepIdx, done]);
 
-  const handleEvent = useCallback((data: EventData, _controls: Controls) => {
-    const { action, type, status } = data;
-
-    if (type === EVENTS.STEP_AFTER) {
-      if (action === ACTIONS.NEXT) {
-        const nextIdx = stepIndex + 1;
-        if (nextIdx >= TOTAL) {
-          setRun(false);
-          completeTour();
-          return;
-        }
-        const nextRoute = STEPS_CFG[nextIdx].route;
-        setRun(false);
-        setStepIndex(nextIdx);
-        if (pathname !== nextRoute) {
-          router.push(nextRoute);
-          setNavigating(true);
-        } else {
-          setTimeout(() => setRun(true), 200);
-        }
-      } else if (action === ACTIONS.PREV) {
-        const prevIdx = stepIndex - 1;
-        if (prevIdx < 0) return;
-        const prevRoute = STEPS_CFG[prevIdx].route;
-        setRun(false);
-        setStepIndex(prevIdx);
-        if (pathname !== prevRoute) {
-          router.push(prevRoute);
-          setNavigating(true);
-        } else {
-          setTimeout(() => setRun(true), 200);
-        }
+  // Keep rect in sync on scroll/resize
+  useEffect(() => {
+    if (phase !== "spotlight") return;
+    const cfg = STEPS[stepIdx];
+    if (!cfg) return;
+    const update = () => {
+      const el = document.getElementById(cfg.targetId);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        setRect({ x: r.left, y: r.top, w: r.width, h: r.height });
       }
+    };
+    window.addEventListener("resize", update, { passive: true });
+    window.addEventListener("scroll", update, { passive: true, capture: true });
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [phase, stepIdx]);
+
+  // Auto-advance when user navigates to the expected route
+  useEffect(() => {
+    if (phase !== "spotlight") return;
+    const cfg = STEPS[stepIdx];
+    if (!cfg?.advanceOn) return;
+    if (pathname === cfg.advanceOn) {
+      const next = stepIdx + 1;
+      setRect(null);
+      if (next >= STEPS.length) done();
+      else setStepIdx(next);
     }
+  }, [pathname, phase, stepIdx, done]);
 
-    if (status === STATUS.SKIPPED || status === STATUS.FINISHED) {
-      setRun(false);
-      completeTour();
+  if (phase === "idle") return null;
+
+  const cfg = STEPS[stepIdx];
+  const ww = typeof window !== "undefined" ? window.innerWidth : 1280;
+  const wh = typeof window !== "undefined" ? window.innerHeight : 800;
+  const isMobile = ww < 768;
+
+  // Tooltip position relative to spotlight rect
+  const tooltipStyle = (): React.CSSProperties => {
+    if (!rect || !cfg) return { top: 80, left: 80 };
+    const { x, y, w, h } = rect;
+    if (cfg.side === "right") {
+      return {
+        top: Math.max(8, Math.min(y + h / 2 - TOOLTIP_H / 2, wh - TOOLTIP_H - 8)),
+        left: Math.min(x + w + PAD + 14, ww - TOOLTIP_W - 8),
+      };
     }
-  }, [stepIndex, pathname, router, completeTour]);
+    // top / bottom — pick whichever fits
+    const left = Math.max(8, Math.min(x + w / 2 - TOOLTIP_W / 2, ww - TOOLTIP_W - 8));
+    const topAbove = y - PAD - TOOLTIP_H - 8;
+    const topBelow = y + h + PAD + 8;
+    return { top: topAbove >= 8 ? topAbove : topBelow, left };
+  };
 
-  const joyrideSteps: Step[] = STEPS_CFG.map((s) => ({
-    target: s.target,
-    content: s.content,
-    title: s.title,
-    placement: "bottom" as const,
-    skipBeacon: true,
-    overlayClickAction: false,
-    dismissKeyAction: false,
-  } as Step));
+  const btn: React.CSSProperties = {
+    fontFamily: "'Inter', sans-serif", cursor: "pointer", border: "none",
+  };
 
-  if (!run) return null;
+  // ── WELCOME MODAL ──────────────────────────────────────────────────────────
+  if (phase === "modal") {
+    return (
+      <div style={{
+        position: "fixed", inset: 0, zIndex: 9000,
+        background: "rgba(13,27,42,0.72)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 16,
+      }}>
+        <div style={{
+          background: "#fff", borderRadius: 22, padding: "36px 28px",
+          maxWidth: 380, width: "100%", textAlign: "center",
+          boxShadow: "0 12px 60px rgba(13,27,42,0.35)",
+          fontFamily: "'Inter', sans-serif",
+        }}>
+          <div style={{ fontSize: 54, marginBottom: 12 }}>🦢</div>
+          <h2 style={{
+            fontFamily: "'Manrope', sans-serif", fontSize: 20, fontWeight: 800,
+            color: "#0D1B2A", margin: "0 0 10px",
+          }}>
+            Привет! Я АИСТ
+          </h2>
+          <p style={{ fontSize: 14, color: "#6B7280", lineHeight: 1.7, margin: "0 0 26px" }}>
+            Я ИИ-ассистент этой платформы. Помогу разобраться за пару шагов — покажу, как подключить площадки и начать публиковать.
+          </p>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+            <button onClick={done} style={{
+              ...btn, padding: "11px 22px",
+              background: "#F5F7FA", border: "1px solid #E5E7EB",
+              borderRadius: 12, fontSize: 14, color: "#6B7280", fontWeight: 500,
+            }}>
+              Закрыть
+            </button>
+            <button
+              onClick={() => {
+                // On mobile skip nav-spotlight, go straight to platforms page step
+                if (isMobile) {
+                  setStepIdx(1);
+                  setPhase("spotlight");
+                  router.push("/platforms");
+                } else {
+                  setStepIdx(0);
+                  setPhase("spotlight");
+                }
+              }}
+              style={{
+                ...btn, padding: "11px 26px",
+                background: "#3478F6", borderRadius: 12,
+                fontSize: 14, fontWeight: 600, color: "#fff",
+              }}
+            >
+              Продолжить →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
+  // ── SPOTLIGHT ─────────────────────────────────────────────────────────────
   return (
-    <Joyride
-      steps={joyrideSteps}
-      stepIndex={stepIndex}
-      run={run}
-      continuous
-      tooltipComponent={CustomTooltip}
-      onEvent={handleEvent}
-      options={{
-        overlayColor: "rgba(13, 27, 42, 0.55)",
-        overlayClickAction: false,
-        dismissKeyAction: false,
-        spotlightPadding: 10,
-        zIndex: 9000,
-      }}
-      styles={{
-        overlay: { cursor: "default" },
-      }}
-    />
+    <>
+      {/* SVG overlay with spotlight cutout — pointer-events: none so target stays clickable */}
+      {rect && (
+        <svg style={{
+          position: "fixed", inset: 0, width: "100%", height: "100%",
+          zIndex: 9000, pointerEvents: "none",
+        }}>
+          <defs>
+            <mask id="aist-spotlight-mask">
+              <rect width="100%" height="100%" fill="white" />
+              <rect
+                x={rect.x - PAD} y={rect.y - PAD}
+                width={rect.w + PAD * 2} height={rect.h + PAD * 2}
+                rx="12" fill="black"
+              />
+            </mask>
+          </defs>
+          <rect
+            width="100%" height="100%"
+            fill="rgba(13,27,42,0.62)"
+            mask="url(#aist-spotlight-mask)"
+          />
+        </svg>
+      )}
+
+      {/* Tooltip */}
+      {rect && cfg && (
+        <div style={{
+          position: "fixed",
+          zIndex: 9100,
+          width: TOOLTIP_W,
+          ...tooltipStyle(),
+          background: "#fff",
+          border: "1.5px solid #E5E7EB",
+          borderRadius: 16,
+          padding: "16px 18px 14px",
+          boxShadow: "0 4px 28px rgba(13,27,42,0.22)",
+          fontFamily: "'Inter', sans-serif",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 20 }}>🦢</span>
+            <span style={{
+              fontSize: 12, fontWeight: 700, color: "#0D1B2A",
+              fontFamily: "'Manrope', sans-serif",
+            }}>
+              {cfg.title}
+            </span>
+          </div>
+          <p style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.65, margin: "0 0 14px" }}>
+            {cfg.text}
+          </p>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <button onClick={done} style={{
+              ...btn, background: "none",
+              fontSize: 12, color: "#9CA3AF",
+              textDecoration: "underline", padding: 0,
+            }}>
+              Закрыть
+            </button>
+            {cfg.final && (
+              <button onClick={done} style={{
+                ...btn, padding: "7px 14px",
+                background: "#3478F6", borderRadius: 8,
+                fontSize: 12, fontWeight: 600, color: "#fff",
+              }}>
+                Готово ✓
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
