@@ -63,10 +63,10 @@ const NAV = [
 const BOTTOM_NAV = NAV.slice(0, 4);
 
 const PLAN_CARDS = [
-  { id: "demo", name: "Демо", price: "0 ₽", period: "3 дня", color: "#5F5E5A", bg: "#F1EFE8", features: ["10 постов", "1 площадка", "AI-стратегия", "AI-тексты", "Автопостинг"] },
-  { id: "start", name: "Старт", price: "2 990 ₽", period: "месяц", color: "#185FA5", bg: "#E6F1FB", features: ["12 постов/мес", "1 площадка", "AI-тексты + картинки", "Аналитика"] },
-  { id: "business", name: "Бизнес", price: "5 990 ₽", period: "месяц", color: "#0F6E56", bg: "#E1F5EE", badge: "Популярный", features: ["30 постов/мес", "3 площадки", "AI-тексты + картинки", "Полная аналитика"] },
-  { id: "pro", name: "Про", price: "11 990 ₽", period: "месяц", color: "#533AB7", bg: "#EEEDFE", features: ["Без ограничений", "Все площадки", "White label", "API доступ"] },
+  { id: "demo",     name: "Демо",   price: "0 ₽",      period: "3 дня",  color: "#6B7280", bg: "#F5F7FA", features: ["10 постов", "1 площадка", "AI-стратегия", "AI-тексты", "Автопостинг"] },
+  { id: "start",    name: "Старт",  price: "2 990 ₽",  period: "месяц",  color: "#3478F6", bg: "#EAF4FF", features: ["12 постов/мес", "1 площадка", "AI-тексты + картинки", "Аналитика"] },
+  { id: "business", name: "Бизнес", price: "5 990 ₽",  period: "месяц",  color: "#00B5A6", bg: "#E0F7F6", badge: "Популярный", features: ["30 постов/мес", "3 площадки", "AI-тексты + картинки", "Полная аналитика"] },
+  { id: "pro",      name: "Про",    price: "11 990 ₽", period: "месяц",  color: "#1F2937", bg: "#F5F7FA", features: ["Без ограничений", "Все площадки", "White label", "API доступ"] },
 ];
 
 function PaywallScreen({ demoUsed, onLogout }: { demoUsed: boolean; onLogout: () => void }) {
@@ -91,10 +91,10 @@ function PaywallScreen({ demoUsed, onLogout }: { demoUsed: boolean; onLogout: ()
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 9999,
-      background: "#F8F7F4", display: "flex", flexDirection: "column",
+      background: "#F5F7FA", display: "flex", flexDirection: "column",
       alignItems: "center", overflowY: "auto",
       padding: isMobile ? "2rem 1rem" : "3rem 1rem",
-      fontFamily: "'Inter', 'Segoe UI', sans-serif",
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
     }}>
       <div style={{ fontFamily: "'Manrope', sans-serif", fontSize: 22, fontWeight: 800, color: "#0D1B2A", marginBottom: 24 }}>
         smm<span style={{ color: "#3478F6" }}>platform</span>
@@ -103,17 +103,17 @@ function PaywallScreen({ demoUsed, onLogout }: { demoUsed: boolean; onLogout: ()
         background: "#fff", borderRadius: 20, padding: isMobile ? "24px 20px" : "32px 36px",
         maxWidth: 480, width: "100%", textAlign: "center",
         boxShadow: "0 4px 24px rgba(0,0,0,0.07)", marginBottom: 32,
-        border: "1px solid #EAE8E2",
+        border: "1px solid #E5E7EB",
       }}>
         <div style={{ fontSize: 36, marginBottom: 12 }}>{demoUsed ? "⏰" : "👋"}</div>
-        <h2 style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: "#1a1a1a", margin: "0 0 10px" }}>
+        <h2 style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: "#0D1B2A", margin: "0 0 10px" }}>
           {demoUsed ? "Пробный период завершён" : "Выберите тариф для начала работы"}
         </h2>
-        <p style={{ color: "#888", fontSize: 14, lineHeight: 1.6, margin: "0 0 8px" }}>
+        <p style={{ color: "#6B7280", fontSize: 14, lineHeight: 1.6, margin: "0 0 8px" }}>
           {demoUsed ? "Платные тарифы скоро станут доступны — следите за обновлениями." : "Начните бесплатно с демо-периода на 3 дня. Карта не нужна."}
         </p>
         {demoUsed && (
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, background: "#FFF8E1", border: "1px solid #FFD54F", borderRadius: 20, padding: "5px 14px", fontSize: 13, color: "#7B6200" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, background: "#EAF4FF", border: "1px solid #93C3FD", borderRadius: 20, padding: "5px 14px", fontSize: 13, color: "#3478F6" }}>
             🔒 Платные тарифы скоро будут доступны
           </div>
         )}
@@ -125,25 +125,25 @@ function PaywallScreen({ demoUsed, onLogout }: { demoUsed: boolean; onLogout: ()
           const isDemoDisabled = plan.id === "demo" && demoUsed;
           const isDisabled = isPaid || isDemoDisabled;
           return (
-            <div key={plan.id} style={{ background: isDisabled ? "#FAFAFA" : "#fff", border: "1px solid #EAE8E2", borderRadius: 16, padding: "16px 14px", position: "relative", display: "flex", flexDirection: "column", opacity: isDisabled ? 0.6 : 1 }}>
+            <div key={plan.id} style={{ background: isDisabled ? "#FAFAFA" : "#fff", border: "1px solid #E5E7EB", borderRadius: 16, padding: "16px 14px", position: "relative", display: "flex", flexDirection: "column", opacity: isDisabled ? 0.6 : 1 }}>
               {"badge" in plan && plan.badge && (
                 <div style={{ position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", background: plan.color, color: "#fff", fontSize: 10, fontWeight: 600, padding: "2px 10px", borderRadius: 20, whiteSpace: "nowrap" }}>{plan.badge}</div>
               )}
               {isPaid && <div style={{ position: "absolute", top: 10, right: 10, background: "#F3F4F6", color: "#6B7280", fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 20 }}>Скоро</div>}
               <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: plan.bg, color: plan.color, display: "inline-block", marginBottom: 10, alignSelf: "flex-start" }}>{plan.name}</span>
               <div style={{ marginBottom: 12 }}>
-                <span style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: isDisabled ? "#9CA3AF" : "#1a1a1a" }}>{plan.price}</span>
+                <span style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: isDisabled ? "#9CA3AF" : "#0D1B2A" }}>{plan.price}</span>
                 <span style={{ fontSize: 11, color: "#999", marginLeft: 2 }}>/{plan.period}</span>
               </div>
               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
                 {plan.features.map(f => (
                   <div key={f} style={{ display: "flex", gap: 5 }}>
                     <span style={{ color: isDisabled ? "#9CA3AF" : plan.color, fontSize: 12 }}>✓</span>
-                    <span style={{ fontSize: 11, color: isDisabled ? "#9CA3AF" : "#444", lineHeight: 1.4 }}>{f}</span>
+                    <span style={{ fontSize: 11, color: isDisabled ? "#9CA3AF" : "#1F2937", lineHeight: 1.4 }}>{f}</span>
                   </div>
                 ))}
               </div>
-              <button onClick={!isDisabled ? startDemo : undefined} disabled={isDisabled || activating} style={{ width: "100%", padding: "9px", background: isDisabled ? "#E5E7EB" : "#1a1a1a", color: isDisabled ? "#9CA3AF" : "#fff", border: "none", borderRadius: 8, cursor: isDisabled ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 600 }}>
+              <button onClick={!isDisabled ? startDemo : undefined} disabled={isDisabled || activating} style={{ width: "100%", padding: "9px", background: isDisabled ? "#E5E7EB" : plan.color, color: isDisabled ? "#9CA3AF" : "#fff", border: "none", borderRadius: 8, cursor: isDisabled ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 600 }}>
                 {isDisabled ? (isDemoDisabled ? "Использован" : "Скоро") : activating ? "..." : "Начать бесплатно"}
               </button>
             </div>
@@ -153,7 +153,7 @@ function PaywallScreen({ demoUsed, onLogout }: { demoUsed: boolean; onLogout: ()
       <p style={{ color: "#aaa", fontSize: 13, textAlign: "center", marginBottom: 10 }}>
         По вопросам: <a href="mailto:support@smmplatform.ru" style={{ color: "#3478F6", textDecoration: "none" }}>support@smmplatform.ru</a>
       </p>
-      <button onClick={onLogout} style={{ background: "transparent", border: "1px solid #E5E7EB", color: "#888", borderRadius: 10, padding: "9px 24px", fontSize: 13, cursor: "pointer" }}>
+      <button onClick={onLogout} style={{ background: "transparent", border: "1px solid #E5E7EB", color: "#6B7280", borderRadius: 10, padding: "9px 24px", fontSize: 13, cursor: "pointer" }}>
         Выйти из аккаунта
       </button>
     </div>

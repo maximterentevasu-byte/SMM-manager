@@ -6,13 +6,13 @@ import api from "@/lib/api";
 import { useMobile } from "@/hooks/useMobile";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  content_ready:     { label: "Готово",              color: "#00B5A6", bg: "#E0F7F5" },
+  content_ready:     { label: "Готово",              color: "#00B5A6", bg: "#E0F7F6" },
   published:         { label: "Опубликовано",        color: "#3478F6", bg: "#EAF4FF" },
-  planned:           { label: "Нужна информация",    color: "#B45309", bg: "#FEF3C7" },
-  idea_ready:        { label: "Нужна информация",    color: "#B45309", bg: "#FEF3C7" },
-  pending_approval:  { label: "Согласование",        color: "#B45309", bg: "#FEF3C7" },
-  needs_info:        { label: "Нужна информация",    color: "#B45309", bg: "#FEF3C7" },
-  failed:            { label: "Ошибка",              color: "#DC2626", bg: "#FEF2F2" },
+  planned:           { label: "Нужна информация",    color: "#92400E", bg: "#F2E8D5" },
+  idea_ready:        { label: "Нужна информация",    color: "#92400E", bg: "#F2E8D5" },
+  pending_approval:  { label: "Согласование",        color: "#3478F6", bg: "#EAF4FF" },
+  needs_info:        { label: "Нужна информация",    color: "#92400E", bg: "#F2E8D5" },
+  failed:            { label: "Ошибка",              color: "#FF6B5E", bg: "#FFF0EF" },
 };
 
 const NEEDS_INFO_STATUSES = ["planned", "idea_ready", "needs_info", "failed"];
@@ -136,7 +136,7 @@ const PLATFORM_LABELS: Record<string, { label: string; color: string; bg: string
   ok:       { label: "Одноклассники", color: "#F57C00", bg: "#FFF3E0" },
 };
 
-function SlideToConfirm({ label, onConfirm, color = "#DC2626" }: {
+function SlideToConfirm({ label, onConfirm, color = "#FF6B5E" }: {
   label: string; onConfirm: () => void; color?: string;
 }) {
   const [progress, setProgress] = useState(0);
@@ -1908,9 +1908,9 @@ export default function ContentPage() {
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: "#555" }}>Промт для генерации</div>
                         {modalImageGenCount > 0 && (
-                          <span style={{ fontSize: 11, color: modalImageGenCount >= 3 ? "#DC2626" : "#00B5A6",
-                            background: (modalImageGenCount >= 3 ? "#DC2626" : "#00B5A6") + "15",
-                            border: `1px solid ${(modalImageGenCount >= 3 ? "#DC2626" : "#00B5A6")}30`,
+                          <span style={{ fontSize: 11, color: modalImageGenCount >= 3 ? "#FF6B5E" : "#00B5A6",
+                            background: (modalImageGenCount >= 3 ? "#FF6B5E" : "#00B5A6") + "15",
+                            border: `1px solid ${(modalImageGenCount >= 3 ? "#FF6B5E" : "#00B5A6")}30`,
                             borderRadius: 12, padding: "2px 8px", fontWeight: 600 }}>
                             Генераций: {modalImageGenCount}/3
                           </span>
@@ -1970,7 +1970,7 @@ export default function ContentPage() {
                           color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
                         {editingModalImg ? `Генерирую... ${modalImgElapsed}с` : modalAiImageB64 ? "🔄 Перегенерировать" : "✨ Сгенерировать"}
                       </button>
-                      {modalImageGenCount >= 3 && <div style={{ marginTop: 6, fontSize: 12, color: "#DC2626" }}>Достигнут лимит генераций (3).</div>}
+                      {modalImageGenCount >= 3 && <div style={{ marginTop: 6, fontSize: 12, color: "#FF6B5E" }}>Достигнут лимит генераций (3).</div>}
 
                       {/* Результат + история + инлайн правки */}
                       {(editingModalImg && !modalAiImageB64) && (
@@ -2015,9 +2015,9 @@ export default function ContentPage() {
                             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                               <div style={{ fontSize: 13, fontWeight: 700, color: "#0D1B2A" }}>Редактировать результат</div>
                               {modalInlineEditCount > 0 && (
-                                <span style={{ fontSize: 11, color: modalInlineEditCount >= 3 ? "#DC2626" : "#00B5A6",
-                                  background: (modalInlineEditCount >= 3 ? "#DC2626" : "#00B5A6") + "15",
-                                  border: `1px solid ${(modalInlineEditCount >= 3 ? "#DC2626" : "#00B5A6")}30`,
+                                <span style={{ fontSize: 11, color: modalInlineEditCount >= 3 ? "#FF6B5E" : "#00B5A6",
+                                  background: (modalInlineEditCount >= 3 ? "#FF6B5E" : "#00B5A6") + "15",
+                                  border: `1px solid ${(modalInlineEditCount >= 3 ? "#FF6B5E" : "#00B5A6")}30`,
                                   borderRadius: 12, padding: "2px 8px", fontWeight: 600 }}>Правок: {modalInlineEditCount}/3</span>
                               )}
                             </div>
@@ -2045,7 +2045,7 @@ export default function ContentPage() {
                                 </div>
                               </>
                             )}
-                            {modalInlineEditCount >= 3 && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 6 }}>Достигнут лимит правок (3).</div>}
+                            {modalInlineEditCount >= 3 && <div style={{ fontSize: 12, color: "#FF6B5E", marginTop: 6 }}>Достигнут лимит правок (3).</div>}
                           </div>
                         </div>
                       )}
@@ -2101,9 +2101,9 @@ export default function ContentPage() {
                       )}
                       <div style={{ marginTop: 14, fontSize: 12, fontWeight: 600, color: "#555", marginBottom: 6 }}>Инструкция по редактированию</div>
                       {modalEditAttemptCount > 0 && (
-                        <span style={{ fontSize: 11, color: modalEditAttemptCount >= 3 ? "#DC2626" : "#00B5A6",
-                          background: (modalEditAttemptCount >= 3 ? "#DC2626" : "#00B5A6") + "15",
-                          border: `1px solid ${(modalEditAttemptCount >= 3 ? "#DC2626" : "#00B5A6")}30`,
+                        <span style={{ fontSize: 11, color: modalEditAttemptCount >= 3 ? "#FF6B5E" : "#00B5A6",
+                          background: (modalEditAttemptCount >= 3 ? "#FF6B5E" : "#00B5A6") + "15",
+                          border: `1px solid ${(modalEditAttemptCount >= 3 ? "#FF6B5E" : "#00B5A6")}30`,
                           borderRadius: 12, padding: "2px 8px", fontWeight: 600, display: "inline-block", marginBottom: 8 }}>Правок: {modalEditAttemptCount}/3</span>
                       )}
                       {brandAssetsLabels.length > 0 && (
@@ -2146,7 +2146,7 @@ export default function ContentPage() {
                           color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
                         {editingModalImg ? "Редактирую..." : "🖌 Редактировать фото"}
                       </button>
-                      {modalEditAttemptCount >= 3 && <div style={{ marginTop: 6, fontSize: 12, color: "#DC2626" }}>Достигнут лимит правок (3).</div>}
+                      {modalEditAttemptCount >= 3 && <div style={{ marginTop: 6, fontSize: 12, color: "#FF6B5E" }}>Достигнут лимит правок (3).</div>}
 
                       {/* Результат редактирования + инлайн правки */}
                       {(editingModalImg && !modalAiImageB64) && (
@@ -2187,9 +2187,9 @@ export default function ContentPage() {
                             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                               <div style={{ fontSize: 13, fontWeight: 700, color: "#0D1B2A" }}>Редактировать результат</div>
                               {modalInlineEditCount > 0 && (
-                                <span style={{ fontSize: 11, color: modalInlineEditCount >= 3 ? "#DC2626" : "#00B5A6",
-                                  background: (modalInlineEditCount >= 3 ? "#DC2626" : "#00B5A6") + "15",
-                                  border: `1px solid ${(modalInlineEditCount >= 3 ? "#DC2626" : "#00B5A6")}30`,
+                                <span style={{ fontSize: 11, color: modalInlineEditCount >= 3 ? "#FF6B5E" : "#00B5A6",
+                                  background: (modalInlineEditCount >= 3 ? "#FF6B5E" : "#00B5A6") + "15",
+                                  border: `1px solid ${(modalInlineEditCount >= 3 ? "#FF6B5E" : "#00B5A6")}30`,
                                   borderRadius: 12, padding: "2px 8px", fontWeight: 600 }}>Правок: {modalInlineEditCount}/3</span>
                               )}
                             </div>
@@ -2217,7 +2217,7 @@ export default function ContentPage() {
                                 </div>
                               </>
                             )}
-                            {modalInlineEditCount >= 3 && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 6 }}>Достигнут лимит правок (3).</div>}
+                            {modalInlineEditCount >= 3 && <div style={{ fontSize: 12, color: "#FF6B5E", marginTop: 6 }}>Достигнут лимит правок (3).</div>}
                           </div>
                         </div>
                       )}
@@ -2483,7 +2483,7 @@ export default function ContentPage() {
               <div style={{ padding: "12px 28px 18px", borderTop: "1px solid #F0EEE8" }}>
                 {!showDeleteSlot ? (
                   <button onClick={() => setShowDeleteSlot(true)}
-                    style={{ fontSize: 12, color: "#DC2626", background: "none", border: "none",
+                    style={{ fontSize: 12, color: "#FF6B5E", background: "none", border: "none",
                       cursor: "pointer", padding: 0, textDecoration: "underline" }}>
                     Удалить пост
                   </button>
@@ -2492,7 +2492,7 @@ export default function ContentPage() {
                     <div style={{ fontSize: 12, color: "#888" }}>Потяните вправо для подтверждения удаления</div>
                     <SlideToConfirm
                       label="→ Удалить пост"
-                      color="#DC2626"
+                      color="#FF6B5E"
                       onConfirm={deleteCurrentSlot}
                     />
                   </div>
@@ -2743,7 +2743,7 @@ export default function ContentPage() {
               {evEditingId && (
                 <SlideToConfirm
                   label="→ Удалить событие и все посты"
-                  color="#DC2626"
+                  color="#FF6B5E"
                   onConfirm={async () => {
                     setEvDeleting(true);
                     try {

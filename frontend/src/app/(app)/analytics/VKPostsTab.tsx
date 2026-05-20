@@ -104,7 +104,7 @@ export default function VKPostsTab({ businessId }: { businessId: string }) {
           </button>
         )}
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-          {msg && <span style={{ fontSize: 12, color: msg.startsWith("✓") ? "#0F6E56" : "#A32D2D" }}>{msg}</span>}
+          {msg && <span style={{ fontSize: 12, color: msg.startsWith("✓") ? "#00B5A6" : "#A32D2D" }}>{msg}</span>}
           <button onClick={collect} disabled={collecting}
             style={{ padding: "7px 16px", background: collecting ? "#888" : "#4680C2",
               color: "#fff", border: "none", borderRadius: 8, fontSize: 13,
@@ -169,7 +169,7 @@ export default function VKPostsTab({ businessId }: { businessId: string }) {
             <div style={{ padding: "16px 24px", borderBottom: "1px solid #EAE8E2",
               display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a1a" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#0D1B2A" }}>
                   {selected.group_name}
                 </div>
                 <div style={{ fontSize: 11, color: "#aaa" }}>
@@ -213,7 +213,7 @@ export default function VKPostsTab({ businessId }: { businessId: string }) {
                   <div key={m.label} style={{ display: "flex", justifyContent: "space-between",
                     padding: "10px 0", borderBottom: "1px solid #F0EEE8" }}>
                     <span style={{ fontSize: 13, color: "#666" }}>{m.label}</span>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a" }}>{m.val}</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: "#0D1B2A" }}>{m.val}</span>
                   </div>
                 ))}
                 {selected.text && (

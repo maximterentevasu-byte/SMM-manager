@@ -18,7 +18,7 @@ type PlatformSetup = {
 };
 
 const code: React.CSSProperties = {
-  background: "#F1EFE8", padding: "1px 6px", borderRadius: 4,
+  background: "#F5F7FA", padding: "1px 6px", borderRadius: 4,
   fontFamily: "monospace", fontSize: 12, color: "#333",
 };
 
@@ -238,7 +238,7 @@ export default function PlatformsPage() {
       {!isMobile && (
         <div style={{ background: "#fff", borderBottom: "1px solid #EAE8E2", padding: "0 2rem" }}>
           <div style={{ maxWidth: 860, margin: "0 auto", height: 64, display: "flex", alignItems: "center", gap: 16 }}>
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Подключение платформ</h1>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Подключение платформ</h1>
             <span style={{ fontSize: 13, color: "#888" }}>
               Подключи каналы для автоматической публикации постов
             </span>
@@ -247,7 +247,7 @@ export default function PlatformsPage() {
       )}
       {isMobile && (
         <div style={{ padding: "14px 16px 10px", background: "#fff", borderBottom: "1px solid #F3F4F6" }}>
-          <h1 style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Подключение платформ</h1>
+          <h1 style={{ fontSize: 17, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Подключение платформ</h1>
           <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>Подключи каналы для автопубликации</div>
         </div>
       )}
@@ -275,7 +275,7 @@ export default function PlatformsPage() {
                     {pl.icon}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 16, fontWeight: 600, color: "#1a1a1a" }}>{pl.name}</div>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: "#0D1B2A" }}>{pl.name}</div>
                     <div style={{ fontSize: 13, color: "#999", marginTop: 2 }}>
                       {conn ? conn.page_name : pl.description}
                     </div>
@@ -289,7 +289,7 @@ export default function PlatformsPage() {
                           ✓ Подключён
                         </span>
                         <button onClick={() => testPost(pl.id)} disabled={testing === pl.id}
-                          style={{ padding: "8px 16px", background: "#F1EFE8", color: "#444",
+                          style={{ padding: "8px 16px", background: "#F5F7FA", color: "#444",
                             border: "1px solid #E0DED8", borderRadius: 10, cursor: "pointer",
                             fontSize: 13, fontWeight: 500 }}>
                           {testing === pl.id ? "Отправка..." : "Тест"}
@@ -304,12 +304,12 @@ export default function PlatformsPage() {
                     ) : (
                       <>
                         <span style={{ fontSize: 12, padding: "4px 12px", borderRadius: 20,
-                          background: "#F1EFE8", color: "#888" }}>
+                          background: "#F5F7FA", color: "#888" }}>
                           Не подключён
                         </span>
                         <button
                           onClick={() => setExpanded(isExpanded ? null : pl.id)}
-                          style={{ padding: "8px 20px", background: "#1a1a1a", color: "#fff",
+                          style={{ padding: "8px 20px", background: "#0D1B2A", color: "#fff",
                             border: "none", borderRadius: 10, cursor: "pointer",
                             fontSize: 13, fontWeight: 600 }}>
                           {isExpanded ? "Свернуть" : "Подключить"}
@@ -347,13 +347,13 @@ export default function PlatformsPage() {
                                   gap: 12, cursor: "pointer", userSelect: "none",
                                   background: isOpen ? "#F8F7F4" : "#fff" }}>
                                 <span style={{ width: 24, height: 24, borderRadius: "50%",
-                                  background: isOpen ? "#1a1a1a" : "#F1EFE8",
+                                  background: isOpen ? "#0D1B2A" : "#F5F7FA",
                                   color: isOpen ? "#fff" : "#888",
                                   display: "flex", alignItems: "center", justifyContent: "center",
                                   fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
                                   {si + 1}
                                 </span>
-                                <span style={{ fontSize: 14, fontWeight: 500, color: "#1a1a1a", flex: 1 }}>
+                                <span style={{ fontSize: 14, fontWeight: 500, color: "#0D1B2A", flex: 1 }}>
                                   {step.title}
                                 </span>
                                 <span style={{ fontSize: 12, color: "#bbb" }}>{isOpen ? "▲" : "▼"}</span>
@@ -540,7 +540,7 @@ export default function PlatformsPage() {
           padding: "20px 24px", display: "flex", gap: 16 }}>
           <span style={{ fontSize: 24, flexShrink: 0 }}>🔒</span>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "#1a1a1a", marginBottom: 4 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#0D1B2A", marginBottom: 4 }}>
               Безопасность токенов
             </div>
             <div style={{ fontSize: 13, color: "#888", lineHeight: 1.6 }}>

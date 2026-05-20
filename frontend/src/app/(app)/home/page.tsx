@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useMobile } from "@/hooks/useMobile";
+import { Aist } from "@/components/Aist";
+import { SkeletonCard, SkeletonKpi } from "@/components/Skeleton";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -42,13 +44,13 @@ const PLATFORM_COLOR: Record<string, string> = { vk: "#4680C2", tg: "#2AABEE", o
 const PLATFORM_LABEL: Record<string, string> = { vk: "ВК", tg: "TG", ok: "ОК" };
 
 const STATUS_COLOR: Record<string, { bg: string; color: string }> = {
-  planned:         { bg: "#FEF3C7", color: "#B45309" },
-  idea_ready:      { bg: "#FEF3C7", color: "#B45309" },
-  needs_info:      { bg: "#FEF3C7", color: "#B45309" },
-  pending_approval:{ bg: "#EDE9FE", color: "#5B21B6" },
-  content_ready:   { bg: "#D1FAE5", color: "#065F46" },
-  published:       { bg: "#DBEAFE", color: "#1E40AF" },
-  failed:          { bg: "#FEE2E2", color: "#991B1B" },
+  planned:          { bg: "#F2E8D5", color: "#92400E" },
+  idea_ready:       { bg: "#F2E8D5", color: "#92400E" },
+  needs_info:       { bg: "#F2E8D5", color: "#92400E" },
+  pending_approval: { bg: "#EAF4FF", color: "#3478F6" },
+  content_ready:    { bg: "#E0F7F6", color: "#00B5A6" },
+  published:        { bg: "#E0F7F6", color: "#008F84" },
+  failed:           { bg: "#FFF0EF", color: "#FF6B5E" },
 };
 
 function fmtNum(v: number | null, fmt: string): string {
@@ -103,7 +105,7 @@ function Delta({ pct }: { pct: number | null }) {
   return (
     <span style={{
       fontSize: 11, fontWeight: 600,
-      color: up ? "#059669" : "#DC2626",
+      color: up ? "#00B5A6" : "#FF6B5E",
       display: "inline-flex", alignItems: "center", gap: 2,
     }}>
       {up ? "▲" : "▼"} {Math.abs(pct).toFixed(1)}%
@@ -130,13 +132,8 @@ function SectionCard({ title, children, action }: {
   );
 }
 
-function EmptyState({ icon, text }: { icon: string; text: string }) {
-  return (
-    <div style={{ textAlign: "center", padding: "24px 0", color: "#9CA3AF", fontSize: 13 }}>
-      <div style={{ fontSize: 28, marginBottom: 8 }}>{icon}</div>
-      {text}
-    </div>
-  );
+function EmptyState({ text, sub }: { text: string; sub?: string }) {
+  return <Aist size={60} message={text} submessage={sub} />;
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -206,14 +203,11 @@ export default function HomePage() {
 
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "12px 12px" : "24px 2rem" }}>
         {loading ? (
-          <div style={{ textAlign: "center", padding: 80, color: "#9CA3AF", fontSize: 14 }}>
-            Загружаем дашборд...
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginBottom: 20 }}>
+            {Array.from({ length: isMobile ? 4 : 6 }).map((_, i) => <SkeletonKpi key={i} />)}
           </div>
         ) : !data ? (
-          <div style={{ textAlign: "center", padding: 80 }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>🐦</div>
-            <div style={{ fontSize: 16, color: "#6B7280" }}>Не удалось загрузить данные</div>
-          </div>
+          <Aist size={90} message="Не удалось загрузить данные" submessage="Обновите страницу или проверьте подключение" />
         ) : (
           <>
             {/* ── KPI Block ─────────────────────────────────────────────────── */}
@@ -237,12 +231,8 @@ export default function HomePage() {
               </div>
 
               {(data.kpi[kpiPeriod] || []).length === 0 ? (
-                <div style={{
-                  background: "#fff", borderRadius: 16, padding: "28px 24px", textAlign: "center",
-                  border: "1px solid #E5E7EB", color: "#9CA3AF", fontSize: 13,
-                }}>
-                  <div style={{ fontSize: 28, marginBottom: 8 }}>📊</div>
-                  Настройте приоритетные метрики в онбординге и подключите площадки — данные появятся автоматически
+                <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #E5E7EB" }}>
+                  <Aist size={70} message="Нет данных за этот период" submessage="Настройте метрики в онбординге и подключите площадки" />
                 </div>
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(auto-fill, minmax(200px, 1fr))", gap: isMobile ? 8 : 12 }}>
@@ -270,13 +260,13 @@ export default function HomePage() {
               {/* Analytics block */}
               <SectionCard title="📈 Аналитика за неделю">
                 {!data.analytics.has_data ? (
-                  <EmptyState icon="📉" text="Подключите VK или Telegram и соберите аналитику — здесь появятся данные по неделям" />
+                  <EmptyState text="Аналитика появится после первого сбора данных" sub="Подключите VK или Telegram в разделе Платформы" />
                 ) : (
                   <div>
                     {/* Growing */}
                     {data.analytics.growing.length > 0 && (
                       <div style={{ marginBottom: 16 }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: "#059669", marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: "#00B5A6", marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
                           <span>▲</span> Топ 5 растущих
                         </div>
                         {data.analytics.growing.map((c, i) => (
@@ -288,7 +278,7 @@ export default function HomePage() {
                             </div>
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                               <span style={{ fontSize: 12, color: "#6B7280" }}>{fmtNum(c.value, "float")}</span>
-                              <span style={{ fontSize: 11, fontWeight: 700, color: "#059669" }}>+{c.change_pct}%</span>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: "#00B5A6" }}>+{c.change_pct}%</span>
                             </div>
                           </div>
                         ))}
@@ -298,7 +288,7 @@ export default function HomePage() {
                     {/* Falling */}
                     {data.analytics.falling.length > 0 && (
                       <div style={{ marginBottom: 16 }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: "#DC2626", marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: "#FF6B5E", marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
                           <span>▼</span> Топ 5 падающих
                         </div>
                         {data.analytics.falling.map((c, i) => (
@@ -310,7 +300,7 @@ export default function HomePage() {
                             </div>
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                               <span style={{ fontSize: 12, color: "#6B7280" }}>{fmtNum(c.value, "float")}</span>
-                              <span style={{ fontSize: 11, fontWeight: 700, color: "#DC2626" }}>{c.change_pct}%</span>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: "#FF6B5E" }}>{c.change_pct}%</span>
                             </div>
                           </div>
                         ))}
@@ -334,7 +324,7 @@ export default function HomePage() {
                     )}
 
                     {data.analytics.growing.length === 0 && data.analytics.falling.length === 0 && (
-                      <EmptyState icon="📊" text="Нужно минимум 2 недели аналитики для сравнения показателей" />
+                      <EmptyState text="Нужно минимум 2 недели аналитики для сравнения" />
                     )}
                   </div>
                 )}
@@ -353,7 +343,7 @@ export default function HomePage() {
                 }
               >
                 {data.scheduled_5d.length === 0 ? (
-                  <EmptyState icon="✅" text="Все посты готовы — ничего не требует внимания" />
+                  <EmptyState text="Всё готово" sub="Ничего не требует внимания" />
                 ) : (
                   <div>
                     {Array.from(groupBy5d(data.scheduled_5d).entries()).map(([dateLabel, slots]) => (
@@ -416,7 +406,7 @@ export default function HomePage() {
                 }
               >
                 {(data.top_content[topPeriod] || []).length === 0 ? (
-                  <EmptyState icon="📝" text="Подключите площадки и соберите аналитику — здесь появятся лучшие посты" />
+                  <EmptyState text="Лучшие посты появятся здесь" sub="Подключите площадки и соберите аналитику" />
                 ) : (
                   <div>
                     {data.top_content[topPeriod].map((post, i) => (
@@ -458,7 +448,7 @@ export default function HomePage() {
                 }
               >
                 {data.upcoming_7d.length === 0 ? (
-                  <EmptyState icon="📅" text="Нет запланированных постов на ближайшие 7 дней" />
+                  <EmptyState text="Нет запланированных постов" sub="На ближайшие 7 дней расписание пусто" />
                 ) : (
                   <div>
                     {data.upcoming_7d.map((s, i) => {

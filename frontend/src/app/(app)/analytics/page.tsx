@@ -252,12 +252,12 @@ export default function AnalyticsPage() {
       <div style={{ fontSize: 11, color: "#999", fontWeight: 600, letterSpacing: 0.5, marginBottom: 8 }}>
         {label.toUpperCase()}
       </div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: "#1a1a1a" }}>
+      <div style={{ fontSize: 22, fontWeight: 700, color: "#0D1B2A" }}>
         {value}<span style={{ fontSize: 14, fontWeight: 400, color: "#888", marginLeft: 3 }}>{suffix}</span>
       </div>
       {trend != null && (
         <div style={{ fontSize: 12, marginTop: 6,
-          color: trend > 0 ? "#0F6E56" : trend < 0 ? "#A32D2D" : "#888" }}>
+          color: trend > 0 ? "#00B5A6" : trend < 0 ? "#A32D2D" : "#888" }}>
           {trend > 0 ? "▲" : trend < 0 ? "▼" : "•"} {Math.abs(trend).toFixed(1)}% к прошлой неделе
         </div>
       )}
@@ -311,7 +311,7 @@ export default function AnalyticsPage() {
   const vk_cols = [
     { key: "week_start",          label: "Период",          render: (r: VKWeek) => `${r.week_start} — ${r.week_end}`, w: 200 },
     { key: "members",             label: "Участников",      render: (r: VKWeek) => dash(r.members),                   w: 110 },
-    { key: "subscribed",          label: "Подписались",     render: (r: VKWeek) => r.subscribed != null ? <span style={{ color: "#0F6E56", fontWeight: 600 }}>+{r.subscribed}</span> : <span style={{ color: "#ccc" }}>н/д</span>, w: 105 },
+    { key: "subscribed",          label: "Подписались",     render: (r: VKWeek) => r.subscribed != null ? <span style={{ color: "#00B5A6", fontWeight: 600 }}>+{r.subscribed}</span> : <span style={{ color: "#ccc" }}>н/д</span>, w: 105 },
     { key: "unsubscribed",        label: "Отписались",      render: (r: VKWeek) => r.unsubscribed != null ? <span style={{ color: "#A32D2D", fontWeight: 600 }}>−{r.unsubscribed}</span> : <span style={{ color: "#ccc" }}>н/д</span>, w: 105 },
     { key: "avg_views",           label: "Ср. просмотр",    render: (r: VKWeek) => dash(r.avg_views, 0),              w: 120 },
     { key: "median_views",        label: "Медиана просм.",  render: (r: VKWeek) => dash(r.median_views, 0),           w: 130 },
@@ -348,14 +348,14 @@ export default function AnalyticsPage() {
           <div style={{ maxWidth: 1100, margin: "0 auto", height: 64,
             display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Аналитика</h1>
+              <h1 style={{ fontSize: 20, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Аналитика</h1>
               <div style={{ display: "flex", gap: 4 }}>
                 {(["tg", "vk"] as const).map((t) => (
                   <button key={t} onClick={() => setTab(t)}
                     style={{ padding: "6px 18px", borderRadius: 20, border: "1px solid",
                       cursor: "pointer", fontSize: 13, fontWeight: tab === t ? 600 : 400,
-                      borderColor: tab === t ? "#1a1a1a" : "#E0DED8",
-                      background: tab === t ? "#1a1a1a" : "#fff",
+                      borderColor: tab === t ? "#0D1B2A" : "#E0DED8",
+                      background: tab === t ? "#0D1B2A" : "#fff",
                       color: tab === t ? "#fff" : "#666" }}>
                     {t === "tg" ? "✈ Telegram" : "В ВКонтакте"}
                   </button>
@@ -369,13 +369,13 @@ export default function AnalyticsPage() {
                 </span>
               )}
               <button onClick={collect} disabled={collecting}
-                style={{ padding: "8px 16px", background: collecting ? "#888" : "#1a1a1a",
+                style={{ padding: "8px 16px", background: collecting ? "#888" : "#0D1B2A",
                   color: "#fff", border: "none", borderRadius: 10,
                   cursor: collecting ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600 }}>
                 {collecting ? "Запускаю..." : "⟳ Собрать сейчас"}
               </button>
               <button onClick={() => exportExcel(tab)}
-                style={{ padding: "8px 16px", background: "#0F6E56", color: "#fff",
+                style={{ padding: "8px 16px", background: "#00B5A6", color: "#fff",
                   border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
                 ⬇ Excel
               </button>
@@ -385,16 +385,16 @@ export default function AnalyticsPage() {
       ) : (
         <div style={{ background: "#fff", borderBottom: "1px solid #EAE8E2", padding: "12px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-            <h1 style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Аналитика</h1>
+            <h1 style={{ fontSize: 17, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Аналитика</h1>
             <div style={{ display: "flex", gap: 6 }}>
               <button onClick={collect} disabled={collecting}
-                style={{ padding: "7px 12px", background: collecting ? "#888" : "#1a1a1a",
+                style={{ padding: "7px 12px", background: collecting ? "#888" : "#0D1B2A",
                   color: "#fff", border: "none", borderRadius: 10,
                   cursor: collecting ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 600 }}>
                 {collecting ? "..." : "⟳ Собрать"}
               </button>
               <button onClick={() => exportExcel(tab)}
-                style={{ padding: "7px 12px", background: "#0F6E56", color: "#fff",
+                style={{ padding: "7px 12px", background: "#00B5A6", color: "#fff",
                   border: "none", borderRadius: 10, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
                 ⬇ Excel
               </button>
@@ -405,8 +405,8 @@ export default function AnalyticsPage() {
               <button key={t} onClick={() => setTab(t)}
                 style={{ flex: 1, padding: "8px", borderRadius: 10, border: "1px solid",
                   cursor: "pointer", fontSize: 13, fontWeight: tab === t ? 600 : 400,
-                  borderColor: tab === t ? "#1a1a1a" : "#E0DED8",
-                  background: tab === t ? "#1a1a1a" : "#fff",
+                  borderColor: tab === t ? "#0D1B2A" : "#E0DED8",
+                  background: tab === t ? "#0D1B2A" : "#fff",
                   color: tab === t ? "#fff" : "#666" }}>
                 {t === "tg" ? "✈ Telegram" : "В ВКонтакте"}
               </button>
@@ -418,8 +418,8 @@ export default function AnalyticsPage() {
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: isMobile ? "12px 12px" : "2rem" }}>
         {collectMsg && (
           <div style={{ marginBottom: 16, padding: "12px 16px", borderRadius: 10, fontSize: 13,
-            background: collectMsg.startsWith("✓") ? "#E1F5EE" : "#FFF3CD",
-            color: collectMsg.startsWith("✓") ? "#0F6E56" : "#856404" }}>
+            background: collectMsg.startsWith("✓") ? "#E0F7F6" : "#FFF3CD",
+            color: collectMsg.startsWith("✓") ? "#00B5A6" : "#856404" }}>
             {collectMsg}
           </div>
         )}
@@ -567,7 +567,7 @@ export default function AnalyticsPage() {
                             Отмена
                           </button>
                           {subsMsg && (
-                            <span style={{ fontSize: 12, color: subsMsg.startsWith("✓") ? "#0F6E56" : "#A32D2D" }}>
+                            <span style={{ fontSize: 12, color: subsMsg.startsWith("✓") ? "#00B5A6" : "#A32D2D" }}>
                               {subsMsg}
                             </span>
                           )}
@@ -633,7 +633,7 @@ export default function AnalyticsPage() {
               <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
                 padding: "40px 32px", textAlign: "center" }}>
                 <div style={{ fontSize: 32, marginBottom: 12 }}>В</div>
-                <h3 style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", margin: "0 0 8px" }}>
+                <h3 style={{ fontSize: 17, fontWeight: 700, color: "#0D1B2A", margin: "0 0 8px" }}>
                   Сообщество подключено
                 </h3>
                 <p style={{ color: "#888", fontSize: 14, margin: "0 0 20px", lineHeight: 1.6 }}>
@@ -665,7 +665,7 @@ export default function AnalyticsPage() {
               letterSpacing: 0.7, marginBottom: 6 }}>
               СТАТУС НЕДЕЛИ
             </div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a1a", marginBottom: 20 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#0D1B2A", marginBottom: 20 }}>
               {aiModal.period}
             </div>
             <div style={{ fontSize: 14, color: "#444", lineHeight: 1.7 }}>
@@ -709,7 +709,7 @@ function WeeklyTable({ rows, cols, emptyText }: { rows: any[]; cols: any[]; empt
               background: i === 0 ? "#FFFEF8" : "transparent" }}>
               {cols.map((c) => (
                 <td key={c.key} style={{
-                  padding: "11px 14px", color: i === 0 ? "#1a1a1a" : "#444",
+                  padding: "11px 14px", color: i === 0 ? "#0D1B2A" : "#444",
                   fontWeight: i === 0 ? 500 : 400,
                   whiteSpace: c.wrap ? "normal" : "nowrap",
                   lineHeight: c.wrap ? 1.5 : undefined,
@@ -742,12 +742,12 @@ function NoConnectionState({ platform }: { platform: string }) {
     <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
       padding: "40px 32px", textAlign: "center" }}>
       <div style={{ fontSize: 32, marginBottom: 12 }}>🔗</div>
-      <h3 style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", margin: "0 0 8px" }}>
+      <h3 style={{ fontSize: 17, fontWeight: 700, color: "#0D1B2A", margin: "0 0 8px" }}>
         {platform} не подключён
       </h3>
       <p style={{ color: "#888", fontSize: 14, margin: 0 }}>
         Сначала подключи {platform} в разделе{" "}
-        <a href="/platforms" style={{ color: "#1a1a1a", fontWeight: 600 }}>Подключение платформ</a>.
+        <a href="/platforms" style={{ color: "#0D1B2A", fontWeight: 600 }}>Подключение платформ</a>.
       </p>
     </div>
   );
@@ -781,7 +781,7 @@ function TGPhoneForm({ step, phone, code, password, loading, msg, onPhoneChange,
   return (
     <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16, padding: "32px", maxWidth: 480 }}>
       <div style={{ fontSize: 28, marginBottom: 10 }}>✈</div>
-      <h3 style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", margin: "0 0 6px" }}>
+      <h3 style={{ fontSize: 18, fontWeight: 700, color: "#0D1B2A", margin: "0 0 6px" }}>
         Подключи аналитику Telegram
       </h3>
       <p style={{ color: "#888", fontSize: 14, margin: "0 0 24px", lineHeight: 1.6 }}>
@@ -892,9 +892,9 @@ function TGPhoneForm({ step, phone, code, password, loading, msg, onPhoneChange,
 
       {msg && (
         <div style={{ marginTop: 14, fontSize: 13,
-          color: msg.startsWith("✓") ? "#059669"
+          color: msg.startsWith("✓") ? "#00B5A6"
             : msg.startsWith("На аккаунте") || msg.startsWith("Код отправлен") ? "#7A5700"
-            : "#DC2626" }}>
+            : "#FF6B5E" }}>
           {msg}
         </div>
       )}
@@ -929,7 +929,7 @@ function VKUserTokenForm({ token, onChange, onSave, saving, msg, configured }: V
   return (
     <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16, padding: "32px", maxWidth: 520 }}>
       <div style={{ fontSize: 28, marginBottom: 10 }}>В</div>
-      <h3 style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", margin: "0 0 8px" }}>
+      <h3 style={{ fontSize: 18, fontWeight: 700, color: "#0D1B2A", margin: "0 0 8px" }}>
         Подключи аналитику ВКонтакте
       </h3>
       <p style={{ color: "#888", fontSize: 14, margin: "0 0 24px", lineHeight: 1.6 }}>
@@ -937,8 +937,8 @@ function VKUserTokenForm({ token, onChange, onSave, saving, msg, configured }: V
       </p>
 
       {configured && (
-        <div style={{ background: "#E1F5EE", borderRadius: 10, padding: "10px 14px",
-          fontSize: 13, color: "#0F6E56", marginBottom: 20 }}>
+        <div style={{ background: "#E0F7F6", borderRadius: 10, padding: "10px 14px",
+          fontSize: 13, color: "#00B5A6", marginBottom: 20 }}>
           ✓ Токен сохранён. Нажмите «Собрать сейчас» для обновления данных.
         </div>
       )}
@@ -995,7 +995,7 @@ function VKUserTokenForm({ token, onChange, onSave, saving, msg, configured }: V
 
       {msg && (
         <div style={{ marginTop: 12, fontSize: 13,
-          color: msg.startsWith("✓") ? "#0F6E56" : "#A32D2D" }}>
+          color: msg.startsWith("✓") ? "#00B5A6" : "#A32D2D" }}>
           {msg}
         </div>
       )}
@@ -1010,12 +1010,12 @@ function VKEmptyState() {
     <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
       padding: "40px 32px" }}>
       <div style={{ fontSize: 28, marginBottom: 10 }}>В</div>
-      <h3 style={{ fontSize: 18, fontWeight: 700, color: "#1a1a1a", margin: "0 0 8px" }}>
+      <h3 style={{ fontSize: 18, fontWeight: 700, color: "#0D1B2A", margin: "0 0 8px" }}>
         Данных по ВКонтакте ещё нет
       </h3>
       <p style={{ color: "#555", fontSize: 14, margin: "0 0 16px", lineHeight: 1.6 }}>
         Убедись что сообщество подключено в разделе{" "}
-        <a href="/platforms" style={{ color: "#1a1a1a", fontWeight: 600 }}>Подключение платформ</a>,
+        <a href="/platforms" style={{ color: "#0D1B2A", fontWeight: 600 }}>Подключение платформ</a>,
         затем нажми <strong>«⟳ Собрать сейчас»</strong> вверху страницы.
       </p>
       <div style={{ background: "#FFF8E6", border: "1px solid #F5E6A0", borderRadius: 10,
@@ -1031,7 +1031,7 @@ function VKEmptyState() {
 
 function CelerySetupGuide() {
   const pre = (text: string, color = "#4ade80") => (
-    <pre style={{ background: "#1a1a1a", color, padding: "12px 16px",
+    <pre style={{ background: "#0D1B2A", color, padding: "12px 16px",
       borderRadius: 10, fontFamily: "monospace", fontSize: 12,
       margin: "8px 0", overflowX: "auto", whiteSpace: "pre-wrap" }}>
       {text}
@@ -1048,9 +1048,9 @@ function CelerySetupGuide() {
         Кнопка «Собрать сейчас» работает без Celery. Celery нужен только для
         <strong> еженедельного автосбора</strong> (каждый понедельник в 06:00 МСК).
       </p>
-      <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 4 }}>Запуск вручную</div>
+      <div style={{ fontWeight: 600, color: "#0D1B2A", marginBottom: 4 }}>Запуск вручную</div>
       {pre(`# Воркер\ncelery -A app.workers.celery_app worker -l info -Q default,generation,posting\n\n# Beat-планировщик (в отдельном терминале)\ncelery -A app.workers.celery_app beat -l info`)}
-      <div style={{ fontWeight: 600, color: "#1a1a1a", marginBottom: 4, marginTop: 16 }}>Docker Compose</div>
+      <div style={{ fontWeight: 600, color: "#0D1B2A", marginBottom: 4, marginTop: 16 }}>Docker Compose</div>
       {pre(`celery_worker:\n  build: ./backend\n  command: celery -A app.workers.celery_app worker -l info\n  depends_on: [redis, db]\n  env_file: .env\n\ncelery_beat:\n  build: ./backend\n  command: celery -A app.workers.celery_app beat -l info\n  depends_on: [redis]\n  env_file: .env`, "#93c5fd")}
       <div style={{ background: "#FFF8E6", border: "1px solid #F5E6A0", borderRadius: 8,
         padding: "10px 14px", marginTop: 12, fontSize: 12, color: "#7A5C00" }}>
@@ -1078,7 +1078,7 @@ function PeriodFilter({ value, onChange }: { value: number; onChange: (v: number
           style={{ padding: "5px 13px", borderRadius: 8, border: "none", cursor: "pointer",
             fontSize: 12, fontWeight: o.v === value ? 600 : 400,
             background: o.v === value ? "#fff" : "transparent",
-            color: o.v === value ? "#1a1a1a" : "#999",
+            color: o.v === value ? "#0D1B2A" : "#999",
             boxShadow: o.v === value ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
             transition: "all 0.15s" }}>
           {o.label}
@@ -1110,7 +1110,7 @@ function DashCard({ label, value, suffix = "", trend, sparkVals, compact = false
   label: string; value: number | null; suffix?: string;
   trend?: number | null; sparkVals: number[]; compact?: boolean;
 }) {
-  const trendColor = trend == null ? "#aaa" : trend > 0 ? "#0F6E56" : trend < 0 ? "#A32D2D" : "#888";
+  const trendColor = trend == null ? "#aaa" : trend > 0 ? "#00B5A6" : trend < 0 ? "#A32D2D" : "#888";
   const v = value ?? 0;
   return (
     <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 14,
@@ -1119,7 +1119,7 @@ function DashCard({ label, value, suffix = "", trend, sparkVals, compact = false
         marginBottom: compact ? 4 : 6 }}>
         {label.toUpperCase()}
       </div>
-      <div style={{ fontSize: compact ? 20 : 24, fontWeight: 700, color: "#1a1a1a",
+      <div style={{ fontSize: compact ? 20 : 24, fontWeight: 700, color: "#0D1B2A",
         lineHeight: 1, marginBottom: compact ? 4 : 6 }}>
         {v.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}
         {suffix && <span style={{ fontSize: compact ? 11 : 13, fontWeight: 400,
@@ -1186,7 +1186,7 @@ function BarChartInner({ data, getValue, getLabel, color, suffix, h }: {
             </text>
             {isHov && (
               <g>
-                <rect x={tipX} y={tipY} width={tipW} height={17} fill="#1a1a1a" rx={4} opacity={0.88} />
+                <rect x={tipX} y={tipY} width={tipW} height={17} fill="#0D1B2A" rx={4} opacity={0.88} />
                 <text x={tipX + tipW / 2} y={tipY + 12} textAnchor="middle" fontSize={9.5} fill="#fff" fontWeight="700">
                   {v.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}{suffix}
                 </text>
@@ -1239,7 +1239,7 @@ function BarChartSVG({ data, getValue, getLabel, color, title, suffix = "" }: {
               width: "min(92vw, 1100px)", maxHeight: "85vh", overflow: "auto",
               boxShadow: "0 24px 80px rgba(0,0,0,0.25)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a", letterSpacing: 0.3 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#0D1B2A", letterSpacing: 0.3 }}>
                 {title}
               </div>
               <button
@@ -1368,9 +1368,9 @@ function TGDashboard({ data, numWeeks, onNumWeeksChange }: {
       {/* Ряд 1: охват / ER просмотры / подписчики */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.avg_views || 0} getLabel={lbl}
-          color="#1a1a1a" title="Средний охват по неделям" />
+          color="#0D1B2A" title="Средний охват по неделям" />
         <BarChartSVG data={filtered} getValue={d => d.er_reach_pct || 0} getLabel={lbl}
-          color="#0F6E56" title="ER (просмотры) %" suffix="%" />
+          color="#00B5A6" title="ER (просмотры) %" suffix="%" />
         <BarChartSVG data={filtered} getValue={d => d.subscribers || 0} getLabel={lbl}
           color="#3478F6" title="Подписчики" />
       </div>
@@ -1538,7 +1538,7 @@ function BestTimingView({ data }: { data: (TGWeek | VKWeek)[] }) {
             ЧАСТОТА ПО ЧАСАМ
           </div>
           {sortedHours.map(([hour, count]) => (
-            <HBar key={hour} label={hour} count={count} max={maxHour} color="#059669" />
+            <HBar key={hour} label={hour} count={count} max={maxHour} color="#00B5A6" />
           ))}
           {!sortedHours.length && <div style={{ color: "#ccc", fontSize: 13 }}>Нет данных</div>}
         </div>
@@ -1574,7 +1574,7 @@ function BestTimingView({ data }: { data: (TGWeek | VKWeek)[] }) {
                     {w.best_day || "—"}
                   </span>
                 </td>
-                <td style={{ padding: "10px 20px", color: "#059669", fontWeight: 500 }}>
+                <td style={{ padding: "10px 20px", color: "#00B5A6", fontWeight: 500 }}>
                   {w.best_hour || "—"}
                 </td>
               </tr>
@@ -1613,13 +1613,13 @@ function renderAIMarkdown(text: string): React.ReactNode {
   const lines = text.split("\n");
   return lines.map((line, i) => {
     if (/^##\s/.test(line)) {
-      return <h3 key={i} style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a",
+      return <h3 key={i} style={{ fontSize: 15, fontWeight: 700, color: "#0D1B2A",
         margin: "20px 0 8px", borderBottom: "1px solid #F0EEE8", paddingBottom: 6 }}>
         {line.replace(/^##\s/, "")}
       </h3>;
     }
     if (/^#\s/.test(line)) {
-      return <h2 key={i} style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", margin: "0 0 16px" }}>
+      return <h2 key={i} style={{ fontSize: 17, fontWeight: 700, color: "#0D1B2A", margin: "0 0 16px" }}>
         {line.replace(/^#\s/, "")}
       </h2>;
     }
@@ -1640,15 +1640,15 @@ function inlineBold(text: string): React.ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((part, i) =>
     part.startsWith("**") && part.endsWith("**")
-      ? <strong key={i} style={{ color: "#1a1a1a" }}>{part.slice(2, -2)}</strong>
+      ? <strong key={i} style={{ color: "#0D1B2A" }}>{part.slice(2, -2)}</strong>
       : part
   );
 }
 
 function AIPostCard({ post, rank, type }: { post: AIPost; rank: number; type: "top" | "worst" }) {
   const isTop = type === "top";
-  const scoreColor = isTop ? "#0F6E56" : "#A32D2D";
-  const scoreBg   = isTop ? "#E1F5EE" : "#FEF2F2";
+  const scoreColor = isTop ? "#00B5A6" : "#A32D2D";
+  const scoreBg   = isTop ? "#E0F7F6" : "#FFF0EF";
   const ekb = new Date(new Date(post.published_at).getTime() + 5 * 3600 * 1000);
   const dateStr = ekb.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
 
@@ -1754,7 +1754,7 @@ function AIAnalyticsTab({ businessId, platform = "tg" }: { businessId: string; p
               style={{ padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer",
                 fontSize: 12, fontWeight: o.v === weeks ? 600 : 400,
                 background: o.v === weeks ? "#fff" : "transparent",
-                color: o.v === weeks ? "#1a1a1a" : "#999",
+                color: o.v === weeks ? "#0D1B2A" : "#999",
                 boxShadow: o.v === weeks ? "0 1px 4px rgba(0,0,0,0.08)" : "none" }}>
               {o.label}
             </button>
@@ -1797,7 +1797,7 @@ function AIAnalyticsTab({ businessId, platform = "tg" }: { businessId: string; p
         <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
           padding: "48px 32px", textAlign: "center" }}>
           <div style={{ fontSize: 28, marginBottom: 16 }}>✦</div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", marginBottom: 8 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#0D1B2A", marginBottom: 8 }}>
             ИИ анализирует канал
           </div>
           <div style={{ fontSize: 13, color: "#888" }}>Обычно занимает 15–30 секунд</div>
@@ -1806,7 +1806,7 @@ function AIAnalyticsTab({ businessId, platform = "tg" }: { businessId: string; p
 
       {/* Ошибка */}
       {error && (
-        <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 12,
+        <div style={{ background: "#FFF0EF", border: "1px solid #FECACA", borderRadius: 12,
           padding: "14px 18px", color: "#A32D2D", fontSize: 13 }}>
           {error}
         </div>
@@ -1836,7 +1836,7 @@ function AIAnalyticsTab({ businessId, platform = "tg" }: { businessId: string; p
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
               padding: "20px 20px" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#0F6E56",
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#00B5A6",
                 letterSpacing: 0.7, marginBottom: 14 }}>
                 ТОП ПОСТОВ
               </div>
@@ -1867,7 +1867,7 @@ function AIAnalyticsTab({ businessId, platform = "tg" }: { businessId: string; p
         <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 16,
           padding: "56px 32px", textAlign: "center" }}>
           <div style={{ fontSize: 36, marginBottom: 16 }}>✦</div>
-          <h3 style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", margin: "0 0 10px" }}>
+          <h3 style={{ fontSize: 17, fontWeight: 700, color: "#0D1B2A", margin: "0 0 10px" }}>
             ИИ-разбор канала
           </h3>
           <p style={{ color: "#6B7280", fontSize: 14, margin: "0 auto", maxWidth: 440, lineHeight: 1.6 }}>
@@ -1923,9 +1923,9 @@ function VKDashboard({ data, numWeeks, onNumWeeksChange }: {
       {/* Ряд 1: охват / охват % / участники */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 10 }}>
         <BarChartSVG data={filtered} getValue={d => d.avg_views || 0} getLabel={lbl}
-          color="#1a1a1a" title="Средний охват (просмотры)" />
+          color="#0D1B2A" title="Средний охват (просмотры)" />
         <BarChartSVG data={filtered} getValue={d => d.reach_pct || 0} getLabel={lbl}
-          color="#0F6E56" title="Охват % (просм./участников)" suffix="%" />
+          color="#00B5A6" title="Охват % (просм./участников)" suffix="%" />
         <BarChartSVG data={filtered} getValue={d => d.members || 0} getLabel={lbl}
           color="#3478F6" title="Участники" />
       </div>
@@ -1952,7 +1952,7 @@ function VKDashboard({ data, numWeeks, onNumWeeksChange }: {
       {filtered.some(d => d.subscribed != null) && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10, marginBottom: 10 }}>
           <BarChartSVG data={filtered} getValue={d => d.subscribed ?? 0} getLabel={lbl}
-            color="#0F6E56" title="Подписались" />
+            color="#00B5A6" title="Подписались" />
           <BarChartSVG data={filtered} getValue={d => d.unsubscribed ?? 0} getLabel={lbl}
             color="#A32D2D" title="Отписались" />
         </div>

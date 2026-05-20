@@ -181,7 +181,7 @@ export default function PostsTab({ businessId }: { businessId: string }) {
       {collectMsg && (
         <div style={{ padding: "10px 14px", borderRadius: 10, fontSize: 13,
           background: collectMsg.startsWith("✓") ? "#ECFDF5" : "#FEF2F2",
-          color: collectMsg.startsWith("✓") ? "#059669" : "#DC2626" }}>
+          color: collectMsg.startsWith("✓") ? "#00B5A6" : "#DC2626" }}>
           {collectMsg}
         </div>
       )}
@@ -268,7 +268,7 @@ export default function PostsTab({ businessId }: { businessId: string }) {
                       <td style={tdStyle}>{fmt(p.reactions)}</td>
                       <td style={tdStyle}>{fmt(p.comments)}</td>
                       <td style={tdStyle}>{fmt(p.reposts)}</td>
-                      <td style={{ ...tdStyle, color: p.er_pct > 5 ? "#059669" : p.er_pct > 2 ? "#D97706" : "#374151" }}>
+                      <td style={{ ...tdStyle, color: p.er_pct > 5 ? "#00B5A6" : p.er_pct > 2 ? "#D97706" : "#374151" }}>
                         {fmt(p.er_pct, 2)}%
                       </td>
                       <td style={tdStyle}>{fmt(p.virality_pct, 2)}%</td>
@@ -393,7 +393,7 @@ function PostDetail({ post, onClose }: { post: TGPost; onClose: () => void }) {
               display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ fontSize: 13, color: "#6B7280" }}>ER поста</div>
               <div style={{ fontSize: 24, fontWeight: 700,
-                color: post.er_pct > 5 ? "#059669" : post.er_pct > 2 ? "#D97706" : "#0D1B2A" }}>
+                color: post.er_pct > 5 ? "#00B5A6" : post.er_pct > 2 ? "#D97706" : "#0D1B2A" }}>
                 {post.er_pct.toFixed(2)}%
               </div>
             </div>

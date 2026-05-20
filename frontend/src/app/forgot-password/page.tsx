@@ -105,9 +105,9 @@ export default function ForgotPasswordPage() {
             </div>
 
             {error && (
-              <div style={{ padding: "10px 14px", background: "#FEF2F2",
-                borderRadius: 8, fontSize: 13, color: "#DC2626",
-                border: "1px solid #FECACA" }}>{error}</div>
+              <div style={{ padding: "10px 14px", background: "#FFF0EF",
+                borderRadius: 8, fontSize: 13, color: "#FF6B5E",
+                border: "1px solid #FFBDB9" }}>{error}</div>
             )}
 
             <button onClick={sendCode} disabled={loading}
@@ -199,9 +199,9 @@ export default function ForgotPasswordPage() {
             </div>
 
             {error && (
-              <div style={{ padding: "10px 14px", background: "#FEF2F2",
-                borderRadius: 8, fontSize: 13, color: "#DC2626",
-                border: "1px solid #FECACA" }}>{error}</div>
+              <div style={{ padding: "10px 14px", background: "#FFF0EF",
+                borderRadius: 8, fontSize: 13, color: "#FF6B5E",
+                border: "1px solid #FFBDB9" }}>{error}</div>
             )}
 
             {success && (

@@ -12,7 +12,7 @@ type ImageMode = "prompt" | "upload" | "edit" | "video" | null;
 interface UploadSlot { data: string; mime: string }
 
 const MODEL_LABELS: Record<ModelKey, string> = { claude: "Claude Sonnet 4.6", gpt: "GPT-5.4" };
-const MODEL_COLORS: Record<ModelKey, string> = { claude: "#D97706", gpt: "#059669" };
+const MODEL_COLORS: Record<ModelKey, string> = { claude: "#D97706", gpt: "#00B5A6" };
 
 const MAX_TEXT_ATTEMPTS = 3;
 const MAX_IMAGE_ATTEMPTS = 3;
@@ -77,17 +77,17 @@ const card: React.CSSProperties = { background: "#fff", border: "1px solid #EAE8
 function SectionTitle({ n, label, done }: { n: number; label: string; done: boolean }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
-      <div style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, background: done ? "#0F6E56" : "#1a1a1a", color: "#fff" }}>
+      <div style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, background: done ? "#0F6E56" : "#0D1B2A", color: "#fff" }}>
         {done ? "✓" : n}
       </div>
-      <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a1a" }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 700, color: "#0D1B2A" }}>{label}</div>
     </div>
   );
 }
 
 function Btn({ label, onClick, disabled, loading, color, small }: { label: string; onClick: () => void; disabled?: boolean; loading?: boolean; color?: string; small?: boolean }) {
   return (
-    <button onClick={onClick} disabled={disabled || loading} style={{ padding: small ? "7px 16px" : "10px 22px", background: (disabled || loading) ? "#E0DED8" : (color || "#1a1a1a"), color: (disabled || loading) ? "#aaa" : "#fff", border: "none", borderRadius: 10, cursor: (disabled || loading) ? "not-allowed" : "pointer", fontSize: small ? 12 : 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6, opacity: loading ? 0.7 : 1 }}>
+    <button onClick={onClick} disabled={disabled || loading} style={{ padding: small ? "7px 16px" : "10px 22px", background: (disabled || loading) ? "#E0DED8" : (color || "#0D1B2A"), color: (disabled || loading) ? "#aaa" : "#fff", border: "none", borderRadius: 10, cursor: (disabled || loading) ? "not-allowed" : "pointer", fontSize: small ? 12 : 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6, opacity: loading ? 0.7 : 1 }}>
       {loading ? "⏳ " : ""}{label}
     </button>
   );
@@ -99,7 +99,7 @@ function Textarea({ value, onChange, placeholder, rows = 5 }: { value: string; o
 
 function AttemptBadge({ current, max, label }: { current: number; max: number; label: string }) {
   const left = max - current;
-  const color = left === 0 ? "#DC2626" : left === 1 ? "#D97706" : "#0F6E56";
+  const color = left === 0 ? "#FF6B5E" : left === 1 ? "#D97706" : "#0F6E56";
   return <span style={{ fontSize: 11, color, background: color + "15", border: `1px solid ${color}30`, borderRadius: 12, padding: "2px 9px", fontWeight: 600 }}>{label}: {current}/{max}</span>;
 }
 
@@ -328,7 +328,7 @@ function AiImagePreview({
       )}
       <div style={{ marginTop: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a" }}>Редактировать изображение</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#0D1B2A" }}>Редактировать изображение</div>
           <AttemptBadge current={inlineEditCount} max={MAX_INLINE_EDITS} label="Правок" />
         </div>
         {!showInlineEdit && inlineEditCount < MAX_INLINE_EDITS && (
@@ -344,7 +344,7 @@ function AiImagePreview({
             </div>
           </>
         )}
-        {inlineEditCount >= MAX_INLINE_EDITS && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 6 }}>Достигнут лимит правок ({MAX_INLINE_EDITS}).</div>}
+        {inlineEditCount >= MAX_INLINE_EDITS && <div style={{ fontSize: 12, color: "#FF6B5E", marginTop: 6 }}>Достигнут лимит правок ({MAX_INLINE_EDITS}).</div>}
       </div>
     </div>
   );
@@ -950,11 +950,11 @@ export default function PostCreatorPage() {
           <div style={{ maxWidth: 780, margin: "0 auto", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{ fontSize: 20 }}>⚡</span>
-              <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Быстрый пост</h1>
+              <h1 style={{ fontSize: 20, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Быстрый пост</h1>
               {draftSaved && <span style={{ fontSize: 11, color: "#0F6E56", background: "#E1F5EE", borderRadius: 8, padding: "2px 8px", fontWeight: 600 }}>Черновик сохранён</span>}
             </div>
             {(hasText || idea) && (
-              <button onClick={deletePost} style={{ padding: "7px 16px", background: "none", border: "1.5px solid #DC2626", borderRadius: 10, color: "#DC2626", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Удалить пост</button>
+              <button onClick={deletePost} style={{ padding: "7px 16px", background: "none", border: "1.5px solid #DC2626", borderRadius: 10, color: "#FF6B5E", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Удалить пост</button>
             )}
           </div>
         </div>
@@ -962,11 +962,11 @@ export default function PostCreatorPage() {
         <div style={{ background: "#fff", borderBottom: "1px solid #F3F4F6", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 18 }}>⚡</span>
-            <h1 style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Быстрый пост</h1>
+            <h1 style={{ fontSize: 17, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Быстрый пост</h1>
             {draftSaved && <span style={{ fontSize: 10, color: "#0F6E56", background: "#E1F5EE", borderRadius: 6, padding: "2px 6px", fontWeight: 600 }}>✓ Сохранён</span>}
           </div>
           {(hasText || idea) && (
-            <button onClick={deletePost} style={{ padding: "6px 12px", background: "none", border: "1.5px solid #DC2626", borderRadius: 8, color: "#DC2626", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Удалить</button>
+            <button onClick={deletePost} style={{ padding: "6px 12px", background: "none", border: "1.5px solid #DC2626", borderRadius: 8, color: "#FF6B5E", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Удалить</button>
           )}
         </div>
       )}
@@ -1005,7 +1005,7 @@ export default function PostCreatorPage() {
               {ideaFilePreviews.map((src, idx) => (
                 <div key={idx} style={{ position: "relative" }}>
                   <img src={src} alt={`f-${idx}`} style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, border: "1px solid #EAE8E2" }} />
-                  <button onClick={() => removeIdeaFile(idx)} style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: "50%", background: "#1a1a1a", border: "none", color: "#fff", cursor: "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>✕</button>
+                  <button onClick={() => removeIdeaFile(idx)} style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: "50%", background: "#0D1B2A", border: "none", color: "#fff", cursor: "pointer", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>✕</button>
                 </div>
               ))}
             </div>
@@ -1014,7 +1014,7 @@ export default function PostCreatorPage() {
             <Btn label={loadingText ? "Генерирую текст..." : "✨ Сгенерировать текст"} onClick={generateText} disabled={!idea.trim() || loadingText || textGenCount >= MAX_TEXT_ATTEMPTS} loading={loadingText} />
             {textGenCount > 0 && <AttemptBadge current={textGenCount} max={MAX_TEXT_ATTEMPTS} label="Попыток" />}
           </div>
-          {textGenCount >= MAX_TEXT_ATTEMPTS && <div style={{ marginTop: 8, fontSize: 12, color: "#DC2626" }}>Достигнут лимит попыток генерации текста ({MAX_TEXT_ATTEMPTS}).</div>}
+          {textGenCount >= MAX_TEXT_ATTEMPTS && <div style={{ marginTop: 8, fontSize: 12, color: "#FF6B5E" }}>Достигнут лимит попыток генерации текста ({MAX_TEXT_ATTEMPTS}).</div>}
         </div>
 
         {/* ── 2. Текст поста ── */}
@@ -1022,8 +1022,8 @@ export default function PostCreatorPage() {
           <div style={card}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, background: hasText ? "#0F6E56" : "#1a1a1a", color: "#fff" }}>{hasText ? "✓" : 2}</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a1a" }}>Текст поста</div>
+                <div style={{ width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, background: hasText ? "#0F6E56" : "#0D1B2A", color: "#fff" }}>{hasText ? "✓" : 2}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "#0D1B2A" }}>Текст поста</div>
               </div>
               {hasText && <span style={{ fontSize: 11, color: MODEL_COLORS[usedModel], background: MODEL_COLORS[usedModel] + "15", border: `1px solid ${MODEL_COLORS[usedModel]}30`, borderRadius: 12, padding: "2px 9px", fontWeight: 600 }}>{MODEL_LABELS[usedModel]}</span>}
             </div>
@@ -1093,7 +1093,7 @@ export default function PostCreatorPage() {
               {imagePrompt.trim() && <Btn label={loadingImage ? `Генерирую... ${imgElapsed}с` : "🖼 Сгенерировать изображение"} onClick={generateImage} disabled={loadingImage || imageGenCount >= MAX_IMAGE_ATTEMPTS} loading={loadingImage} color="#4680C2" />}
               {imageGenCount > 0 && <AttemptBadge current={imageGenCount} max={MAX_IMAGE_ATTEMPTS} label="Генераций" />}
             </div>
-            {imageGenCount >= MAX_IMAGE_ATTEMPTS && <div style={{ marginTop: 8, fontSize: 12, color: "#DC2626" }}>Достигнут лимит генераций ({MAX_IMAGE_ATTEMPTS}).</div>}
+            {imageGenCount >= MAX_IMAGE_ATTEMPTS && <div style={{ marginTop: 8, fontSize: 12, color: "#FF6B5E" }}>Достигнут лимит генераций ({MAX_IMAGE_ATTEMPTS}).</div>}
 
             {/* Предпросмотр внутри блока */}
             <AiImagePreview
@@ -1144,7 +1144,7 @@ export default function PostCreatorPage() {
             {uploadFilled.length > 0 && (
               <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #F0EEE8" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a" }}>Предпросмотр</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#0D1B2A" }}>Предпросмотр</div>
                   {uploadFilled.length > 1 && <span style={{ fontSize: 11, color: "#4680C2", background: "#EFF6FF", borderRadius: 12, padding: "2px 9px", fontWeight: 600 }}>Альбом: {uploadFilled.length} фото</span>}
                 </div>
                 <UploadCarousel slots={uploadSlots} carouselIdx={uploadCarouselIdx} setCarouselIdx={setUploadCarouselIdx} />
@@ -1296,7 +1296,7 @@ export default function PostCreatorPage() {
             {/* ── Обложка для видео ── */}
             {videoFiles.some(Boolean) && (
               <div style={{ marginTop: 20, paddingTop: 18, borderTop: "1px solid #F0EEE8" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", marginBottom: 14 }}>Обложка для видео</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#0D1B2A", marginBottom: 14 }}>Обложка для видео</div>
                 <div style={{ display: "flex", gap: 18, alignItems: "flex-start", flexWrap: "wrap" }}>
 
                   {/* Превью обложки */}
@@ -1377,14 +1377,14 @@ export default function PostCreatorPage() {
             <SectionTitle n={4} label="Куда публиковать" done={selectedPlatforms.length > 0} />
             <p style={{ color: "#888", fontSize: 13, margin: "0 0 16px" }}>Выберите одну или несколько подключённых платформ.</p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {connectedPlatforms.length === 0 && <div style={{ fontSize: 13, color: "#aaa" }}>Нет подключённых платформ. <a href="/platforms" style={{ color: "#1a1a1a", fontWeight: 600 }}>Подключить →</a></div>}
+              {connectedPlatforms.length === 0 && <div style={{ fontSize: 13, color: "#aaa" }}>Нет подключённых платформ. <a href="/platforms" style={{ color: "#0D1B2A", fontWeight: 600 }}>Подключить →</a></div>}
               {connectedPlatforms.map(({ platform, page_name }) => {
                 const meta = PLATFORM_META[platform]; const active = selectedPlatforms.includes(platform);
                 return (
                   <button key={platform} onClick={() => togglePlatform(platform)} style={{ padding: "10px 20px", borderRadius: 12, border: "2px solid", borderColor: active ? meta.color : "#E0DED8", background: active ? meta.color + "18" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 15, fontWeight: 700, color: meta.color }}>{meta.icon}</span>
                     <div style={{ textAlign: "left" }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: active ? meta.color : "#1a1a1a" }}>{meta.label}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: active ? meta.color : "#0D1B2A" }}>{meta.label}</div>
                       <div style={{ fontSize: 11, color: "#aaa" }}>{page_name}</div>
                     </div>
                     {active && <span style={{ marginLeft: 4, fontSize: 13, color: meta.color }}>✓</span>}
@@ -1401,7 +1401,7 @@ export default function PostCreatorPage() {
             <SectionTitle n={5} label="Время публикации" done={false} />
             <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
               {[{ v: true, l: "⚡ Опубликовать сейчас" }, { v: false, l: "📅 Запланировать" }].map(o => (
-                <button key={String(o.v)} onClick={() => setPublishNow(o.v)} style={{ padding: "9px 20px", borderRadius: 10, border: "2px solid", borderColor: publishNow === o.v ? "#1a1a1a" : "#E0DED8", background: publishNow === o.v ? "#1a1a1a" : "#fff", color: publishNow === o.v ? "#fff" : "#666", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>{o.l}</button>
+                <button key={String(o.v)} onClick={() => setPublishNow(o.v)} style={{ padding: "9px 20px", borderRadius: 10, border: "2px solid", borderColor: publishNow === o.v ? "#0D1B2A" : "#E0DED8", background: publishNow === o.v ? "#0D1B2A" : "#fff", color: publishNow === o.v ? "#fff" : "#666", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>{o.l}</button>
               ))}
             </div>
             {!publishNow && (
@@ -1416,7 +1416,7 @@ export default function PostCreatorPage() {
         {/* ── Публикация ── */}
         {hasText && selectedPlatforms.length > 0 && (
           <div style={{ marginTop: 8 }}>
-            <button onClick={publish} disabled={publishing} style={{ width: "100%", padding: "16px", borderRadius: 14, border: "none", background: publishing ? "#888" : "#1a1a1a", color: "#fff", fontSize: 16, fontWeight: 700, cursor: publishing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+            <button onClick={publish} disabled={publishing} style={{ width: "100%", padding: "16px", borderRadius: 14, border: "none", background: publishing ? "#888" : "#0D1B2A", color: "#fff", fontSize: 16, fontWeight: 700, cursor: publishing ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
               {publishing ? "⏳ Публикую..." : "🚀 Отправить на публикацию"}
             </button>
             {publishMsg && (
@@ -1437,7 +1437,7 @@ export default function PostCreatorPage() {
 
         {(hasText || idea.trim()) && (
           <div style={{ marginTop: 24, textAlign: "center" }}>
-            <button onClick={deletePost} style={{ padding: "10px 28px", background: "none", border: "1.5px solid #DC2626", borderRadius: 10, color: "#DC2626", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>🗑 Удалить пост</button>
+            <button onClick={deletePost} style={{ padding: "10px 28px", background: "none", border: "1.5px solid #DC2626", borderRadius: 10, color: "#FF6B5E", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>🗑 Удалить пост</button>
           </div>
         )}
 

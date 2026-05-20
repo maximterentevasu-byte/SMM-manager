@@ -9,8 +9,8 @@ const PLANS = [
     name: "Демо",
     price: "0 ₽",
     period: "3 дня",
-    color: "#5F5E5A",
-    bg: "#F1EFE8",
+    color: "#6B7280",
+    bg: "#F5F7FA",
     badge: "Без карты",
     available: true,
     features: [
@@ -27,8 +27,8 @@ const PLANS = [
     name: "Старт",
     price: "2 990 ₽",
     period: "месяц",
-    color: "#185FA5",
-    bg: "#E6F1FB",
+    color: "#3478F6",
+    bg: "#EAF4FF",
     badge: null,
     available: false,
     features: [
@@ -46,8 +46,8 @@ const PLANS = [
     name: "Бизнес",
     price: "5 990 ₽",
     period: "месяц",
-    color: "#0F6E56",
-    bg: "#E1F5EE",
+    color: "#00B5A6",
+    bg: "#E0F7F6",
     badge: "Популярный",
     available: false,
     features: [
@@ -66,8 +66,8 @@ const PLANS = [
     name: "Про",
     price: "11 990 ₽",
     period: "месяц",
-    color: "#533AB7",
-    bg: "#EEEDFE",
+    color: "#1F2937",
+    bg: "#F5F7FA",
     badge: "Максимум",
     available: false,
     features: [
@@ -107,8 +107,8 @@ export default function PlansPage() {
 
   return (
     <div style={{
-      minHeight: "100vh", background: "#F8F7F4",
-      fontFamily: "'Inter', 'Segoe UI', sans-serif", padding: "3rem 1rem",
+      minHeight: "100vh", background: "#F5F7FA",
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif", padding: "3rem 1rem",
     }}>
       <div style={{ textAlign: "center", marginBottom: 48 }}>
         <div style={{
@@ -117,16 +117,16 @@ export default function PlansPage() {
         }}>
           smm<span style={{ color: "#3478F6" }}>platform</span>
         </div>
-        <h1 style={{ fontSize: 28, fontWeight: 700, color: "#1a1a1a", margin: "0 0 10px" }}>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: "#0D1B2A", margin: "0 0 10px" }}>
           Выберите тариф
         </h1>
-        <p style={{ color: "#888", fontSize: 15, margin: "0 0 8px" }}>
+        <p style={{ color: "#6B7280", fontSize: 15, margin: "0 0 8px" }}>
           Начните бесплатно — демо на 3 дня, карта не нужна
         </p>
         <div style={{
           display: "inline-flex", alignItems: "center", gap: 6,
-          background: "#FFF8E1", border: "1px solid #FFD54F",
-          borderRadius: 20, padding: "5px 14px", fontSize: 13, color: "#7B6200",
+          background: "#EAF4FF", border: "1px solid #93C3FD",
+          borderRadius: 20, padding: "5px 14px", fontSize: 13, color: "#3478F6",
         }}>
           <span>🔒</span>
           <span>Платные тарифы скоро будут доступны</span>
@@ -152,7 +152,7 @@ export default function PlansPage() {
             background: plan.available ? "#fff" : "#FAFAFA",
             border: plan.id === "business" && plan.available
               ? `2px solid ${plan.color}`
-              : "1px solid #EAE8E2",
+              : "1px solid #E5E7EB",
             borderRadius: 20, padding: "28px 24px", position: "relative",
             display: "flex", flexDirection: "column",
             opacity: plan.available ? 1 : 0.65,
@@ -191,7 +191,7 @@ export default function PlansPage() {
             </span>
 
             <div style={{ marginBottom: 24 }}>
-              <span style={{ fontSize: 32, fontWeight: 700, color: plan.available ? "#1a1a1a" : "#9CA3AF" }}>
+              <span style={{ fontSize: 32, fontWeight: 700, color: plan.available ? "#0D1B2A" : "#9CA3AF" }}>
                 {plan.price}
               </span>
               <span style={{ fontSize: 14, color: "#999", marginLeft: 4 }}>/ {plan.period}</span>
@@ -201,7 +201,7 @@ export default function PlansPage() {
               {plan.features.map((f) => (
                 <div key={f} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
                   <span style={{ color: plan.available ? plan.color : "#9CA3AF", fontSize: 15, marginTop: 1 }}>✓</span>
-                  <span style={{ fontSize: 14, color: plan.available ? "#444" : "#9CA3AF", lineHeight: 1.4 }}>{f}</span>
+                  <span style={{ fontSize: 14, color: plan.available ? "#1F2937" : "#9CA3AF", lineHeight: 1.4 }}>{f}</span>
                 </div>
               ))}
             </div>
@@ -213,7 +213,7 @@ export default function PlansPage() {
                 width: "100%", padding: "13px",
                 background: !plan.available
                   ? "#E5E7EB"
-                  : loading === plan.id ? "#888" : plan.id === "business" ? plan.color : "#1a1a1a",
+                  : loading === plan.id ? "#6B7280" : plan.color,
                 color: !plan.available ? "#9CA3AF" : "#fff",
                 border: "none", borderRadius: 12,
                 cursor: !plan.available ? "not-allowed" : loading !== null ? "not-allowed" : "pointer",
@@ -229,8 +229,8 @@ export default function PlansPage() {
         ))}
       </div>
 
-      <p style={{ textAlign: "center", color: "#bbb", fontSize: 13, marginTop: 32 }}>
-        По вопросам: <a href="mailto:support@smmplatform.ru" style={{ color: "#9CA3AF", textDecoration: "none" }}>support@smmplatform.ru</a>
+      <p style={{ textAlign: "center", color: "#9CA3AF", fontSize: 13, marginTop: 32 }}>
+        По вопросам: <a href="mailto:support@smmplatform.ru" style={{ color: "#3478F6", textDecoration: "none" }}>support@smmplatform.ru</a>
       </p>
     </div>
   );

@@ -179,7 +179,7 @@ export default function StoriesTab({ businessId }: { businessId: string }) {
       {collectMsg && (
         <div style={{ padding: "10px 14px", borderRadius: 10, fontSize: 13,
           background: collectMsg.startsWith("✓") ? "#ECFDF5" : "#FEF2F2",
-          color: collectMsg.startsWith("✓") ? "#059669" : "#DC2626" }}>
+          color: collectMsg.startsWith("✓") ? "#00B5A6" : "#FF6B5E" }}>
           {collectMsg}
         </div>
       )}
@@ -264,7 +264,7 @@ export default function StoriesTab({ businessId }: { businessId: string }) {
                       <td style={{ ...tdStyle, fontWeight: 600 }}>{fmt(s.views)}</td>
                       <td style={tdStyle}>{fmt(s.reactions)}</td>
                       <td style={tdStyle}>{fmt(s.forwards)}</td>
-                      <td style={{ ...tdStyle, color: s.er_pct > 5 ? "#059669" : s.er_pct > 2 ? "#D97706" : "#374151" }}>
+                      <td style={{ ...tdStyle, color: s.er_pct > 5 ? "#00B5A6" : s.er_pct > 2 ? "#D97706" : "#374151" }}>
                         {fmt(s.er_pct, 2)}%
                       </td>
                     </tr>
@@ -410,7 +410,7 @@ function StoryDetail({ story, onClose }: { story: TGStory; onClose: () => void }
               display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ fontSize: 13, color: "#6B7280" }}>ER истории</div>
               <div style={{ fontSize: 24, fontWeight: 700,
-                color: story.er_pct > 5 ? "#059669" : story.er_pct > 2 ? "#D97706" : "#0D1B2A" }}>
+                color: story.er_pct > 5 ? "#00B5A6" : story.er_pct > 2 ? "#D97706" : "#0D1B2A" }}>
                 {story.er_pct.toFixed(2)}%
               </div>
             </div>
