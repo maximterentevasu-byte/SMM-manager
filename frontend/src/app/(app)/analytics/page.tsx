@@ -101,7 +101,11 @@ export default function AnalyticsPage() {
   const [subsMsg, setSubsMsg] = useState("");
 
   useEffect(() => {
-    if (!businessId) return;
+    if (!businessId) {
+      setLoadingTg(false);
+      setLoadingVk(false);
+      return;
+    }
     api.get(`/analytics/${businessId}/tg`)
       .then(({ data }) => setTgData(data))
       .catch(() => {})
@@ -146,7 +150,11 @@ export default function AnalyticsPage() {
         if (vkRes.status === "fulfilled") setVkData(vkRes.value.data);
       }
     } catch (e: any) {
-      setCollectMsg("⚠ " + (e?.response?.data?.detail || "Ошибка сбора"));
+      const detail = e?.response?.data?.detail;
+      const msg = !detail || detail === "Not Found"
+        ? "Платформы не подключены или бизнес не найден"
+        : detail;
+      setCollectMsg("⚠ " + msg);
     } finally {
       setCollecting(false);
     }

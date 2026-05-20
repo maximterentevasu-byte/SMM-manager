@@ -561,16 +561,17 @@ export default function ContentPage() {
   }, [expanded]);
 
   const load = useCallback(async () => {
+    if (!businessId) { setLoading(false); return; }
     try {
       const now = new Date();
       const { data } = await api.get(`/content/${businessId}/plan`, {
         params: { year: now.getFullYear(), month: now.getMonth() + 1 },
       });
       setSlots(data);
-    } catch (e: any) {
-      if (e?.response?.status === 401) router.push("/login");
+    } catch {
+      // errors handled globally by api interceptor
     } finally { setLoading(false); }
-  }, [businessId, router]);
+  }, [businessId]);
 
   useEffect(() => {
     load();
