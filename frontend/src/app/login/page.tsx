@@ -27,6 +27,7 @@ export default function LoginPage() {
         return;
       }
 
+      localStorage.removeItem("businessId");
       try {
         const { data: businesses } = await api.get("/businesses/");
         if (businesses.length > 0) {

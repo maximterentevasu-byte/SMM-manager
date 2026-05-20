@@ -118,6 +118,11 @@ async def list_connections(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    biz = await db.execute(
+        select(Business).where(Business.id == business_id, Business.user_id == current_user.id)
+    )
+    if not biz.scalar_one_or_none():
+        raise HTTPException(404, "Business not found")
     result = await db.execute(
         select(PlatformConnection).where(PlatformConnection.business_id == business_id)
     )
