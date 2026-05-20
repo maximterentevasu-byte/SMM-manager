@@ -80,7 +80,7 @@ function PaywallScreen({ demoUsed, onLogout }: { demoUsed: boolean; onLogout: ()
     setError("");
     try {
       await api.post("/subscriptions/activate", { plan: "demo" });
-      router.push("/onboarding");
+      router.push("/home");
     } catch (e: any) {
       setError(e.response?.data?.detail || "Ошибка активации");
     } finally {

@@ -27,11 +27,6 @@ export default function LoginPage() {
         return;
       }
 
-      if (!data.has_business) {
-        router.push("/onboarding");
-        return;
-      }
-
       try {
         const { data: businesses } = await api.get("/businesses/");
         if (businesses.length > 0) {

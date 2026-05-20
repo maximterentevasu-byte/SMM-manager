@@ -97,7 +97,7 @@ export default function PlansPage() {
       if (data.payment_url) {
         window.location.href = data.payment_url;
       } else {
-        router.push("/onboarding");
+        router.push("/home");
       }
     } catch (e: any) {
       setError(e.response?.data?.detail || "Ошибка. Попробуйте ещё раз.");
