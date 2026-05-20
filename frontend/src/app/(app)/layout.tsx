@@ -174,8 +174,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-    if (!token) { router.push("/login"); return; }
     api.get("/subscriptions/my")
       .then(({ data }) => {
         setHasActiveSub(data.has_subscription ?? false);
@@ -189,8 +187,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Close drawer on route change
   useEffect(() => { setDrawerOpen(false); }, [pathname]);
 
-  const logout = () => {
-    localStorage.removeItem("token");
+  const logout = async () => {
+    try { await api.post("/auth/logout"); } catch {}
     localStorage.removeItem("businessId");
     router.push("/login");
   };
