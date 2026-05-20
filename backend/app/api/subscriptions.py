@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import uuid
 
 from app.database import get_db
-from app.models.models import User, Subscription, SubscriptionPlan, Business
+from app.models.models import User, Subscription, SubscriptionPlan
 from app.api.auth import get_current_user
 from app.config import settings
 
@@ -132,11 +132,6 @@ async def get_my_subscription(
     )
     demo_used = demo_result.scalar_one_or_none() is not None
 
-    biz_result = await db.execute(
-        select(Business).where(Business.user_id == current_user.id)
-    )
-    has_business = biz_result.scalars().first() is not None
-
     result = await db.execute(
         select(Subscription).where(
             Subscription.user_id == current_user.id,
@@ -146,13 +141,13 @@ async def get_my_subscription(
     sub = result.scalar_one_or_none()
 
     if not sub:
-        return {"has_subscription": False, "plan": None, "demo_used": demo_used, "has_business": has_business}
+        return {"has_subscription": False, "plan": None, "demo_used": demo_used}
 
     # Проверяем не истёк ли
     if sub.current_period_end < datetime.utcnow():
         sub.status = "expired"
         await db.commit()
-        return {"has_subscription": False, "plan": None, "demo_used": demo_used, "has_business": has_business}
+        return {"has_subscription": False, "plan": None, "demo_used": demo_used}
 
     days_left = (sub.current_period_end - datetime.utcnow()).days
 
@@ -165,7 +160,6 @@ async def get_my_subscription(
         "posts_limit": sub.posts_limit,
         "platforms_limit": sub.platforms_limit,
         "demo_used": demo_used,
-        "has_business": has_business,
     }
 
 

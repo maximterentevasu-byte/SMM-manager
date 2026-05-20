@@ -167,7 +167,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const [subChecked, setSubChecked] = useState(false);
   const [hasActiveSub, setHasActiveSub] = useState(true);
-  const [hasBusiness, setHasBusiness] = useState(true);
   const [demoUsed, setDemoUsed] = useState(false);
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
 
@@ -178,7 +177,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     api.get("/subscriptions/my")
       .then(({ data }) => {
         setHasActiveSub(data.has_subscription ?? false);
-        setHasBusiness(data.has_business ?? false);
         setDemoUsed(data.demo_used ?? false);
         setDaysLeft(data.days_left ?? null);
       })
@@ -197,7 +195,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (!subChecked) return null;
   if (!hasActiveSub) return <PaywallScreen demoUsed={demoUsed} onLogout={logout} />;
-  if (hasActiveSub && !hasBusiness) { router.push("/onboarding"); return null; }
 
   // ── MOBILE LAYOUT ────────────────────────────────────────────────────────
   if (isMobile) {
