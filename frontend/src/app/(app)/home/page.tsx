@@ -211,7 +211,7 @@ export default function HomePage() {
         ) : (
           <>
             {/* ── KPI Block ─────────────────────────────────────────────────── */}
-            <div style={{ marginBottom: 20 }}>
+            <div id="tour-kpi-block" style={{ marginBottom: 20 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
                 <div style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: isMobile ? 14 : 15, color: "#0D1B2A" }}>
                   Ключевые показатели

@@ -2,8 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import api from "@/lib/api";
 import { useMobile } from "@/hooks/useMobile";
+
+const OnboardingTour = dynamic(
+  () => import("@/components/OnboardingTour").then((m) => ({ default: m.OnboardingTour })),
+  { ssr: false }
+);
 
 const NAV = [
   {
@@ -169,6 +175,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [hasActiveSub, setHasActiveSub] = useState(true);
   const [demoUsed, setDemoUsed] = useState(false);
   const [daysLeft, setDaysLeft] = useState<number | null>(null);
+  const [tourKey, setTourKey] = useState(0);
 
   // Mobile nav state
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -182,6 +189,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       })
       .catch(() => {})
       .finally(() => setSubChecked(true));
+  }, []);
+
+  // Auto-start tour for new users
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const done = localStorage.getItem("tourDone");
+    if (!done) {
+      setTimeout(() => setTourKey(1), 1200);
+    }
   }, []);
 
   // Close drawer on route change
@@ -200,6 +216,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (isMobile) {
     return (
       <div style={{ minHeight: "100vh", background: "#F5F7FA", fontFamily: "'Inter', sans-serif" }}>
+        <OnboardingTour tourKey={tourKey} />
 
         {/* Top bar */}
         <div style={{
@@ -277,10 +294,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               )}
 
               {/* АИСТ */}
-              <div style={{ padding: "8px 12px", borderRadius: 10, background: "rgba(52,120,246,0.12)", marginBottom: 8 }}>
+              <div style={{ padding: "8px 12px", borderRadius: 10, background: "rgba(52,120,246,0.12)", marginBottom: 4 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "#3478F6", marginBottom: 1 }}>АИСТ</div>
                 <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", lineHeight: 1.4 }}>Авто-генерация · Идеи · Стратегия · Тексты</div>
               </div>
+
+              <button onClick={() => { setDrawerOpen(false); setTourKey(p => p + 1); }}
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 10,
+                  border: "none", cursor: "pointer", background: "transparent",
+                  color: "rgba(255,255,255,0.3)", fontSize: 12, marginBottom: 4, width: "100%" }}>
+                🦢 Повторить тур
+              </button>
 
               <button onClick={logout} style={{
                 display: "flex", alignItems: "center", gap: 10,
@@ -345,9 +369,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // ── DESKTOP LAYOUT (без изменений) ──────────────────────────────────────
+  // ── DESKTOP LAYOUT ───────────────────────────────────────────────────────
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#F5F7FA", fontFamily: "'Inter', sans-serif" }}>
+      <OnboardingTour tourKey={tourKey} />
       <nav style={{
         width: 224, background: "#0D1B2A",
         padding: "20px 12px", display: "flex", flexDirection: "column", gap: 2,
@@ -392,10 +417,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <div style={{ padding: "10px 12px", borderRadius: 10, background: "rgba(52,120,246,0.12)", marginBottom: 8 }}>
+        <div style={{ padding: "10px 12px", borderRadius: 10, background: "rgba(52,120,246,0.12)", marginBottom: 4 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: "#3478F6", marginBottom: 2 }}>АИСТ</div>
           <div style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", lineHeight: 1.4 }}>Авто-генерация · Идеи · Стратегия · Тексты</div>
         </div>
+
+        <button onClick={() => setTourKey(p => p + 1)}
+          style={{
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "7px 12px", borderRadius: 10, border: "none",
+            cursor: "pointer", width: "100%", textAlign: "left",
+            background: "transparent", color: "rgba(255,255,255,0.3)",
+            fontSize: 12, fontWeight: 400, marginBottom: 4,
+          }}>
+          🦢 Повторить тур
+        </button>
 
         <button onClick={logout} style={{
           display: "flex", alignItems: "center", gap: 10,

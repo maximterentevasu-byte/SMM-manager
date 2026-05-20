@@ -176,7 +176,7 @@ export default function StrategyPage() {
       {!isMobile ? (
         <div style={{ background: "#fff", borderBottom: "1px solid #E5E7EB", padding: "0 2rem" }}>
           <div style={{ maxWidth: 900, margin: "0 auto", height: 64, display: "flex", alignItems: "center", gap: 24 }}>
-            <h1 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 20, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Стратегия и онбординг</h1>
+            <h1 id="tour-generate-strategy" style={{ fontFamily: "'Manrope', sans-serif", fontSize: 20, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Стратегия и онбординг</h1>
             <div style={{ display: "flex", gap: 4 }}>
               {(["strategy", "profile"] as const).map((t) => (
                 <button key={t} onClick={() => setTab(t)}

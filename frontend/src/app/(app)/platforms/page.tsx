@@ -252,7 +252,7 @@ export default function PlatformsPage() {
         </div>
       )}
 
-      <div style={{ maxWidth: 860, margin: "0 auto", padding: isMobile ? "12px 12px" : "2rem", display: "flex", flexDirection: "column", gap: isMobile ? 12 : 20 }}>
+      <div id="tour-add-platform" style={{ maxWidth: 860, margin: "0 auto", padding: isMobile ? "12px 12px" : "2rem", display: "flex", flexDirection: "column", gap: isMobile ? 12 : 20 }}>
         {loading ? (
           <div style={{ textAlign: "center", padding: "3rem", color: "#888" }}>Загружаем...</div>
         ) : (

@@ -1254,7 +1254,7 @@ export default function ContentPage() {
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: isMobile ? "10px 12px" : "2rem" }}>
 
         {/* ── Filters + view toggle ── */}
-        <div style={{ display: "flex", gap: isMobile ? 6 : 8, marginBottom: isMobile ? 12 : 24, flexWrap: "wrap", alignItems: "center" }}>
+        <div id="tour-content-plan" style={{ display: "flex", gap: isMobile ? 6 : 8, marginBottom: isMobile ? 12 : 24, flexWrap: "wrap", alignItems: "center" }}>
           {([
             { key: "all",               label: isMobile ? "Все" : "Все" },
             { key: "needs_info_group",  label: isMobile ? "⚠ Инфо" : "Нужна информация" },

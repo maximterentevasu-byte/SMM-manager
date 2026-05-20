@@ -348,7 +348,7 @@ export default function AnalyticsPage() {
           <div style={{ maxWidth: 1100, margin: "0 auto", height: 64,
             display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <h1 style={{ fontSize: 20, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Аналитика</h1>
+              <h1 id="tour-analytics-header" style={{ fontSize: 20, fontWeight: 700, color: "#0D1B2A", margin: 0 }}>Аналитика</h1>
               <div style={{ display: "flex", gap: 4 }}>
                 {(["tg", "vk"] as const).map((t) => (
                   <button key={t} onClick={() => setTab(t)}
