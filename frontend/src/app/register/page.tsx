@@ -38,7 +38,7 @@ export default function RegisterPage() {
     setError("");
     try {
       const { data } = await api.post("/auth/verify-email", { email, code: fullCode });
-      localStorage.setItem("token", data.access_token);
+      // токен хранится в httpOnly cookie, установленном сервером
       router.push("/plans");
     } catch (e: any) {
       setError(e.response?.data?.detail || "Неверный код");

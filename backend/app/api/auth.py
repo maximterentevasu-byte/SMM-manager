@@ -1,10 +1,13 @@
 import uuid
 import random
 import string
+import logging
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+log = logging.getLogger(__name__)
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.security import OAuth2PasswordRequestForm
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -22,10 +25,10 @@ from app.config import settings
 router = APIRouter()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
+_COOKIE_NAME = "auth_token"
 
 
 def create_token(user_id: str) -> str:
@@ -41,10 +44,36 @@ def generate_code() -> str:
     return "".join(random.choices(string.digits, k=6))
 
 
+def _set_auth_cookie(response: Response, token: str) -> None:
+    is_prod = bool(settings.DOMAIN)
+    response.set_cookie(
+        key=_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=is_prod,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+    )
+
+
+def _clear_auth_cookie(response: Response) -> None:
+    response.delete_cookie(key=_COOKIE_NAME, path="/")
+
+
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
+    request: Request,
+    db: AsyncSession = Depends(get_db),
 ) -> User:
+    # httpOnly cookie имеет приоритет; Authorization header — запасной путь
+    # (для существующих сессий и API-клиентов)
+    token = request.cookies.get(_COOKIE_NAME)
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
@@ -157,13 +186,13 @@ async def register(request: Request, data: RegisterRequest, db: AsyncSession = D
     await db.commit()
 
     await _send_code(db, data.email, "register")
-    print(f"[REGISTER] New user: {data.email}, code sent")
+    log.info("[REGISTER] New user registered, code sent")
     return {"status": "code_sent", "email": data.email}
 
 
 @router.post("/verify-email", response_model=TokenResponse)
 @limiter.limit("10/minute")
-async def verify_email(request: Request, data: VerifyEmailRequest, db: AsyncSession = Depends(get_db)):
+async def verify_email(request: Request, response: Response, data: VerifyEmailRequest, db: AsyncSession = Depends(get_db)):
     verification = await _check_code(db, data.email, data.code, "register")
 
     user_result = await db.execute(select(User).where(User.email == data.email))
@@ -175,8 +204,10 @@ async def verify_email(request: Request, data: VerifyEmailRequest, db: AsyncSess
     verification.is_used = True
     await db.commit()
 
+    token = create_token(str(user.id))
+    _set_auth_cookie(response, token)
     return {
-        "access_token": create_token(str(user.id)),
+        "access_token": token,
         "is_verified": True,
         "has_business": False,
     }
@@ -186,6 +217,7 @@ async def verify_email(request: Request, data: VerifyEmailRequest, db: AsyncSess
 @limiter.limit("10/minute")
 async def login(
     request: Request,
+    response: Response,
     form: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
@@ -203,8 +235,10 @@ async def login(
     )
     has_business = biz_result.scalars().first() is not None
 
+    token = create_token(str(user.id))
+    _set_auth_cookie(response, token)
     return {
-        "access_token": create_token(str(user.id)),
+        "access_token": token,
         "is_verified": True,
         "has_business": has_business,
     }
@@ -239,6 +273,12 @@ async def reset_password(request: Request, data: ResetPasswordRequest, db: Async
     await db.commit()
 
     return {"status": "password_updated"}
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    _clear_auth_cookie(response)
+    return {"status": "logged_out"}
 
 
 @router.get("/me")

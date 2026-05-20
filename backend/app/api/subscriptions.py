@@ -91,7 +91,7 @@ async def activate_plan(
         "amount": {"value": f"{config['price'] / 100:.2f}", "currency": "RUB"},
         "confirmation": {
             "type": "redirect",
-            "return_url": f"http://localhost:3000/payment/success?plan={plan}"
+            "return_url": f"https://{settings.DOMAIN}/payment/success?plan={plan}" if settings.DOMAIN else f"http://localhost:3000/payment/success?plan={plan}"
         },
         "capture": True,
         "description": f"SMM Platform — тариф {plan.capitalize()}",

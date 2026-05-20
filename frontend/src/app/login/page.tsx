@@ -20,7 +20,7 @@ export default function LoginPage() {
       form.append("username", email);
       form.append("password", password);
       const { data } = await api.post("/auth/login", form);
-      localStorage.setItem("token", data.access_token);
+      // токен хранится в httpOnly cookie, установленном сервером
 
       if (!data.is_verified) {
         router.push("/register");

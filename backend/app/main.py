@@ -39,9 +39,16 @@ _MIGRATIONS = [
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        # CREATE TYPE IF NOT EXISTS для всех enum-ов перед create_all
+        await conn.execute(text("CREATE TYPE IF NOT EXISTS platform AS ENUM ('vk', 'telegram', 'ok')"))
+        await conn.execute(text("CREATE TYPE IF NOT EXISTS planstatus AS ENUM ('planned', 'idea_ready', 'pending_approval', 'needs_info', 'content_ready', 'published', 'failed')"))
+        await conn.execute(text("CREATE TYPE IF NOT EXISTS subscriptionplan AS ENUM ('demo', 'start', 'business', 'pro')"))
+        await conn.run_sync(lambda c: Base.metadata.create_all(c))
         for migration in _MIGRATIONS:
-            await conn.execute(text(migration))
+            try:
+                await conn.execute(text(migration))
+            except Exception:
+                pass
     yield
 
 
@@ -66,17 +73,18 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 if _is_prod:
     _origins = [
         f"https://{settings.DOMAIN}",
-        f"http://{settings.DOMAIN}",
         f"https://www.{settings.DOMAIN}",
-        f"http://www.{settings.DOMAIN}",
     ]
 else:
-    _origins = ["*"]
+    _origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
-    allow_credentials=False,
+    allow_credentials=True,   # необходимо для httpOnly cookie
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -117,10 +125,11 @@ async def health():
 
 
 def _check_debug_token(request: Request):
-    """Debug-эндпоинты защищены статическим токеном из SECRET_KEY."""
-    from fastapi import HTTPException
+    """Debug-эндпоинты защищены токеном = SHA-256(SECRET_KEY)[:32]."""
+    import hmac, hashlib
+    expected = hashlib.sha256(settings.SECRET_KEY.encode()).hexdigest()[:32]
     token = request.headers.get("X-Debug-Token") or request.query_params.get("token")
-    if not token or token != settings.SECRET_KEY[:16]:
+    if not token or not hmac.compare_digest(token, expected):
         raise HTTPException(403, "Forbidden")
 
 
