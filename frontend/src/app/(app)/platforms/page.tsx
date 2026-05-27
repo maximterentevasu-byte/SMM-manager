@@ -146,8 +146,13 @@ export default function PlatformsPage() {
   };
 
   const parseTgError = (detail: string, platformId: string): string => {
-    if (!detail) return "Ошибка подключения — проверьте токен и ID";
+    if (!detail) return "❌ Ошибка подключения — проверьте токен и ID канала";
     const d = detail.toLowerCase();
+
+    // Сетевые ошибки (от нашего бэкенда)
+    if (d.startsWith("network_error:") || d.startsWith("timeout:"))
+      return `⚠️ Сервер не смог подключиться к ${platformId === "telegram" ? "Telegram" : "VK"} API. Попробуйте через минуту или обратитесь в поддержку.`;
+
     if (platformId === "telegram") {
       if (d.includes("unauthorized"))
         return "❌ Неверный токен бота — проверьте его в @BotFather (команда /mybots)";
@@ -159,6 +164,8 @@ export default function PlatformsPage() {
         return "❌ Бот заблокирован — напишите боту в личку /start, затем попробуйте снова";
       if (d.includes("business not found"))
         return "⚠️ Сессия устарела — обновите страницу или войдите заново";
+      if (d.includes("bad request"))
+        return "❌ Неверный запрос — проверьте формат ID канала (должно быть отрицательное число, например -1001234567890, или @username)";
     }
     if (platformId === "vk") {
       if (d.includes("invalid access_token") || d.includes("access token"))

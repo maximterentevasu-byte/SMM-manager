@@ -38,12 +38,20 @@ async def connect_platform(
 
     # Верифицируем токен и получаем имя страницы автоматически
     if data.platform == "telegram":
-        async with aiohttp.ClientSession() as session:
-            resp = await session.get(
-                f"https://api.telegram.org/bot{data.token}/getChat",
-                params={"chat_id": data.page_id}
-            )
-            tg = await resp.json()
+        try:
+            timeout = aiohttp.ClientTimeout(total=15)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                resp = await session.get(
+                    f"https://api.telegram.org/bot{data.token}/getChat",
+                    params={"chat_id": data.page_id}
+                )
+                tg = await resp.json()
+        except aiohttp.ClientConnectorError:
+            raise HTTPException(400, "network_error: Не удалось подключиться к серверам Telegram. Проверьте подключение к интернету на сервере.")
+        except aiohttp.ServerTimeoutError:
+            raise HTTPException(400, "timeout: Сервер Telegram не ответил вовремя. Попробуйте ещё раз.")
+        except Exception as e:
+            raise HTTPException(400, f"network_error: Ошибка сети при проверке токена: {str(e)}")
         if not tg.get("ok"):
             raise HTTPException(400, tg.get("description", "Неверный токен или chat_id"))
         chat = tg["result"]
@@ -51,23 +59,30 @@ async def connect_platform(
 
     elif data.platform == "vk":
         group_id_clean = data.page_id.lstrip("-")
-        async with aiohttp.ClientSession() as session:
-            resp = await session.get(
-                "https://api.vk.com/method/groups.getById",
-                params={"group_id": group_id_clean, "fields": "members_count",
-                        "access_token": data.token, "v": "5.199"}
-            )
-            vk = await resp.json()
+        try:
+            timeout = aiohttp.ClientTimeout(total=15)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                resp = await session.get(
+                    "https://api.vk.com/method/groups.getById",
+                    params={"group_id": group_id_clean, "fields": "members_count",
+                            "access_token": data.token, "v": "5.199"}
+                )
+                vk = await resp.json()
+        except Exception as e:
+            raise HTTPException(400, f"network_error: Ошибка сети при проверке VK токена: {str(e)}")
 
         if "error" in vk:
             # Fallback: проверяем токен через wall.get (работает с любым community token)
-            async with aiohttp.ClientSession() as session:
-                resp2 = await session.get(
-                    "https://api.vk.com/method/wall.get",
-                    params={"owner_id": f"-{group_id_clean}", "count": 1,
-                            "access_token": data.token, "v": "5.199"}
-                )
-                vk2 = await resp2.json()
+            try:
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    resp2 = await session.get(
+                        "https://api.vk.com/method/wall.get",
+                        params={"owner_id": f"-{group_id_clean}", "count": 1,
+                                "access_token": data.token, "v": "5.199"}
+                    )
+                    vk2 = await resp2.json()
+            except Exception as e:
+                raise HTTPException(400, f"network_error: Ошибка сети при проверке VK: {str(e)}")
             if "error" in vk2:
                 raise HTTPException(400, vk2["error"]["error_msg"])
             # Токен рабочий, имя берём из поля запроса
