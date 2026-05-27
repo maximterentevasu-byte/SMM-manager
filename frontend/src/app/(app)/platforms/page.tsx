@@ -51,17 +51,18 @@ const PLATFORMS = [
       {
         title: "Получи ID канала",
         items: [
-          <>Перешли любое сообщение из канала боту <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" style={{ color: "#2AABEE" }}>@userinfobot</a></>,
-          <>Он вернёт ID вида <code style={code}>-1001234567890</code> (отрицательное число)</>,
-          <>Вставь этот ID в поле «ID канала / чата» ниже</>,
+          <><strong>Способ 1 (проще):</strong> если канал публичный — просто введи его username: <code style={code}>@mycannel</code></>,
+          <><strong>Способ 2 (для приватных каналов):</strong> перешли любое сообщение из канала боту <a href="https://t.me/JsonDumpBot" target="_blank" rel="noreferrer" style={{ color: "#2AABEE" }}>@JsonDumpBot</a></>,
+          <>В ответе найди <code style={code}>"chat"</code> → <code style={code}>"id"</code> — это отрицательное число вида <code style={code}>-1001234567890</code></>,
+          <>⚠️ <strong>Важно:</strong> бот должен быть добавлен в канал (шаг 2) <em>до</em> этого шага, иначе подключение не пройдёт</>,
         ],
       },
     ],
     tokenLabel: "Токен бота",
     tokenPlaceholder: "7123456789:AAFxxxxxxxxxxxxxxxx",
     pageIdLabel: "ID канала / чата",
-    pageIdPlaceholder: "-1001234567890",
-    pageIdHint: "Отрицательное число для каналов и групп",
+    pageIdPlaceholder: "-1001234567890 или @username",
+    pageIdHint: "Отрицательное число (-1001234567890) или @username публичного канала",
   },
   {
     id: "vk",
@@ -144,10 +145,40 @@ export default function PlatformsPage() {
     setTimeout(() => setSuccess((p) => ({ ...p, [id]: "" })), 4000);
   };
 
+  const parseTgError = (detail: string, platformId: string): string => {
+    if (!detail) return "Ошибка подключения — проверьте токен и ID";
+    const d = detail.toLowerCase();
+    if (platformId === "telegram") {
+      if (d.includes("unauthorized"))
+        return "❌ Неверный токен бота — проверьте его в @BotFather (команда /mybots)";
+      if (d.includes("chat not found") || d.includes("peer_id_invalid"))
+        return "❌ Канал не найден — убедитесь что: 1) бот добавлен в канал как администратор, 2) ID канала введён верно";
+      if (d.includes("not a member") || d.includes("kicked") || d.includes("forbidden"))
+        return "❌ Бот не является участником канала — добавьте бота в канал как администратора (Настройки → Администраторы)";
+      if (d.includes("bot was blocked"))
+        return "❌ Бот заблокирован — напишите боту в личку /start, затем попробуйте снова";
+      if (d.includes("business not found"))
+        return "⚠️ Сессия устарела — обновите страницу или войдите заново";
+    }
+    if (platformId === "vk") {
+      if (d.includes("invalid access_token") || d.includes("access token"))
+        return "❌ Неверный токен VK — получите новый по инструкции выше";
+      if (d.includes("access denied") || d.includes("not admin"))
+        return "❌ Нет прав администратора — токен должен принадлежать администратору сообщества";
+      if (d.includes("invalid group id") || d.includes("group_id"))
+        return "❌ Неверный ID сообщества — только цифры, без минуса и «club»";
+    }
+    return detail;
+  };
+
   const connect = async (platformId: string) => {
     const f = form[platformId];
     if (!f.token.trim() || !f.pageId.trim()) {
       setErr(platformId, "Заполните оба поля");
+      return;
+    }
+    if (!businessId) {
+      setErr(platformId, "⚠️ Бизнес не найден — обновите страницу или войдите заново");
       return;
     }
     setConnecting(platformId);
@@ -171,9 +202,10 @@ export default function PlatformsPage() {
       });
       setForm((p) => ({ ...p, [platformId]: { token: "", pageId: "" } }));
       setExpanded(null);
-      setOk(platformId, `Подключено: ${data.page_name}`);
+      setOk(platformId, `✅ Подключено: ${data.page_name}`);
     } catch (e: any) {
-      setErr(platformId, e.response?.data?.detail || "Ошибка подключения. Проверьте токен и ID.");
+      const raw = e.response?.data?.detail || "";
+      setErr(platformId, parseTgError(raw, platformId));
     } finally {
       setConnecting(null);
     }
@@ -225,7 +257,14 @@ export default function PlatformsPage() {
       setAdminChatId("");
       setOk("telegram", `Уведомления настроены → ${data.chat_name}`);
     } catch (e: any) {
-      setErr("telegram", e.response?.data?.detail || "Ошибка сохранения");
+      const raw = e.response?.data?.detail || "";
+      const d = raw.toLowerCase();
+      let msg = raw || "Ошибка сохранения";
+      if (d.includes("chat not found") || d.includes("peer_id_invalid"))
+        msg = "❌ Чат не найден — напишите боту /start в личку, затем вставьте свой числовой ID";
+      else if (d.includes("forbidden") || d.includes("blocked"))
+        msg = "❌ Бот заблокирован — напишите ему /start в личку и попробуйте снова";
+      setErr("telegram", msg);
     } finally {
       setSavingAdminChat(false);
     }
