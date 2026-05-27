@@ -202,6 +202,24 @@ async def verify_email(request: Request, response: Response, data: VerifyEmailRe
 
     user.is_verified = True
     verification.is_used = True
+
+    # Автоматически создаём пустой бизнес, если его ещё нет.
+    # Это гарантирует, что businessId всегда есть у каждого пользователя,
+    # даже если они пропустят онбординг.
+    from app.models.models import Business
+    biz_result = await db.execute(select(Business).where(Business.user_id == user.id))
+    existing_biz = biz_result.scalars().first()
+    if not existing_biz:
+        new_biz = Business(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            name="",
+            profile={},
+            strategy=None,
+            onboarding_done=False,
+        )
+        db.add(new_biz)
+
     await db.commit()
 
     token = create_token(str(user.id))
@@ -209,7 +227,7 @@ async def verify_email(request: Request, response: Response, data: VerifyEmailRe
     return {
         "access_token": token,
         "is_verified": True,
-        "has_business": False,
+        "has_business": True,
     }
 
 

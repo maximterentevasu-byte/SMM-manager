@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useMobile } from "@/hooks/useMobile";
 
@@ -107,7 +106,6 @@ const PLATFORMS = [
 
 export default function PlatformsPage() {
   const isMobile = useMobile();
-  const router = useRouter();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -139,31 +137,6 @@ export default function PlatformsPage() {
       .finally(() => setLoading(false));
   }, [businessId]);
 
-  // Если businessId не установлен — пользователь не прошёл онбординг
-  if (!loading && !businessId) {
-    return (
-      <div style={{ minHeight: "100vh", background: "#F8F7F4", display: "flex",
-        alignItems: "center", justifyContent: "center", fontFamily: "'Segoe UI', sans-serif" }}>
-        <div style={{ background: "#fff", border: "1px solid #EAE8E2", borderRadius: 20,
-          padding: "2.5rem", maxWidth: 420, width: "100%", textAlign: "center" }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>⚙️</div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: "#0D1B2A", margin: "0 0 8px" }}>
-            Сначала настройте профиль
-          </h2>
-          <p style={{ fontSize: 14, color: "#888", lineHeight: 1.6, margin: "0 0 24px" }}>
-            Чтобы подключить платформы, нужно пройти быстрый онбординг и создать бизнес-профиль.
-          </p>
-          <button
-            onClick={() => router.push("/onboarding")}
-            style={{ padding: "13px 32px", background: "#3478F6", color: "#fff",
-              border: "none", borderRadius: 12, cursor: "pointer",
-              fontSize: 15, fontWeight: 600, width: "100%" }}>
-            Пройти настройку →
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   const getConn = (id: string) => connections.find((c) => c.platform === id) || null;
 
@@ -213,7 +186,7 @@ export default function PlatformsPage() {
       return;
     }
     if (!businessId) {
-      router.push("/onboarding");
+      setErr(platformId, "⚠️ Бизнес не найден — обновите страницу или войдите заново");
       return;
     }
     setConnecting(platformId);

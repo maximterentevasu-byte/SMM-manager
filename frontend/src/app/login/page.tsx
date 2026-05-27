@@ -28,17 +28,14 @@ export default function LoginPage() {
       }
 
       localStorage.removeItem("businessId");
-      let hasBusiness = false;
       try {
         const { data: businesses } = await api.get("/businesses/");
         if (businesses.length > 0) {
           localStorage.setItem("businessId", businesses[0].id);
-          hasBusiness = true;
         }
       } catch {}
 
-      // Если у пользователя нет бизнеса — отправляем на онбординг
-      router.push(hasBusiness ? "/home" : "/onboarding");
+      router.push("/home");
     } catch (e: any) {
       const detail = e.response?.data?.detail || "";
       if (detail.includes("не подтверждён")) {
