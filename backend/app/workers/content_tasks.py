@@ -4,8 +4,11 @@ from datetime import datetime, timedelta, date as date_type
 
 from app.workers.celery_app import celery_app
 from app.workers.db import get_worker_db
-from app.models.models import Business, ContentSlot, PlanStatus
+from app.models.models import Business, ContentSlot, PlanStatus, Platform
 from app.agents.planner_agent import build_content_plan, generate_ideas_for_slots
+
+# Только платформы, поддерживаемые БД и системой публикации
+SUPPORTED_PLATFORMS = {p.value for p in Platform}  # {"vk", "telegram", "ok"}
 from app.agents.analytics_context import get_company_analytics_context, format_analytics_for_prompt
 from app.agents.market_research import get_market_insights, format_market_insights_for_prompt
 from app.config import settings
@@ -70,14 +73,23 @@ async def _generate_plan(business_id: str):
             key = (s.platform.value, _week_monday(d))
             existing_by_week.setdefault(key, set()).add(d)
 
-        # Целевое кол-во постов в неделю для каждой платформы из стратегии
+        # Целевое кол-во постов в неделю — только для поддерживаемых платформ
         target_ppw: dict[str, int] = {
             ps["platform"]: ps.get("posts_per_week", 3)
             for ps in (business.strategy or [])
-            if ps.get("platform")
+            if ps.get("platform") and ps["platform"] in SUPPORTED_PLATFORMS
         }
 
-        all_slots_meta = build_content_plan(business.strategy, business.profile, start_date=start_date)
+        # Фильтруем стратегию — передаём только поддерживаемые платформы
+        supported_strategy = [
+            ps for ps in (business.strategy or [])
+            if ps.get("platform") in SUPPORTED_PLATFORMS
+        ]
+        if not supported_strategy:
+            print(f"✗ Нет поддерживаемых платформ (vk/telegram/ok) в стратегии для {business.name}")
+            return
+
+        all_slots_meta = build_content_plan(supported_strategy, business.profile, start_date=start_date)
 
         # Группируем новые слоты по (platform, week_monday)
         new_by_week: dict[tuple, list] = {}
