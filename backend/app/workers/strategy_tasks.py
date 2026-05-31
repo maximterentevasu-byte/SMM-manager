@@ -42,11 +42,19 @@ async def _run(business_id: str):
                 market_insights=market_text,
             )
             if not strategy or not isinstance(strategy, list) or len(strategy) == 0:
-                print(f"✗ Стратегия пустая или невалидная — не перезаписываем")
+                print(f"✗ Стратегия пустая или невалидная — сбрасываем sentinel")
+                business.strategy = None
+                await db.commit()
                 return
             business.strategy = strategy
             await db.commit()
             print(f"✓ Стратегия сгенерирована для бизнеса {business.name}: {len(strategy)} платформ")
         except Exception as e:
+            # Сбрасываем sentinel чтобы не блокировать интерфейс
+            try:
+                business.strategy = None
+                await db.commit()
+            except Exception:
+                pass
             print(f"✗ Ошибка генерации стратегии: {e}")
             raise

@@ -61,9 +61,12 @@ async def get_strategy(
     if not business:
         raise HTTPException(404, "Не найдено")
 
+    strategy = business.strategy
+    generating = bool(strategy and len(strategy) == 1 and strategy[0].get("_generating"))
     return {
-        "strategy": business.strategy,
-        "ready": business.strategy is not None
+        "strategy": None if generating else strategy,
+        "ready": bool(strategy) and not generating,
+        "generating": generating,
     }
 
 
@@ -208,8 +211,15 @@ async def trigger_strategy(
             Business.user_id == current_user.id
         )
     )
-    if not result.scalar_one_or_none():
+    business = result.scalar_one_or_none()
+    if not business:
         raise HTTPException(404, "Не найдено")
+
+    # Ставим sentinel-маркер чтобы GET /strategy возвращал generating=true
+    # пока Celery-задача не перезапишет стратегию реальными данными
+    business.strategy = [{"_generating": True}]
+    flag_modified(business, "strategy")
+    await db.commit()
 
     generate_strategy_task.delay(business_id)
     return {"status": "started"}
