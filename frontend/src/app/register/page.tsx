@@ -37,8 +37,14 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
     try {
-      const { data } = await api.post("/auth/verify-email", { email, code: fullCode });
+      await api.post("/auth/verify-email", { email, code: fullCode });
       // токен хранится в httpOnly cookie, установленном сервером
+      try {
+        const { data: businesses } = await api.get("/businesses/");
+        if (businesses.length > 0) {
+          localStorage.setItem("businessId", businesses[0].id);
+        }
+      } catch {}
       router.push("/plans");
     } catch (e: any) {
       setError(e.response?.data?.detail || "Неверный код");

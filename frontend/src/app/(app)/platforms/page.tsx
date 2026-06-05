@@ -122,20 +122,34 @@ export default function PlatformsPage() {
   const [adminChatId, setAdminChatId] = useState("");
   const [savingAdminChat, setSavingAdminChat] = useState(false);
 
-  const [businessId] = useState(() =>
+  const [businessId, setBusinessId] = useState(() =>
     typeof window !== "undefined" ? localStorage.getItem("businessId") || "" : ""
   );
 
   useEffect(() => {
-    if (!businessId) {
-      setLoading(false);
-      return;
-    }
-    api.get(`/platforms/list/${businessId}`)
-      .then(({ data }) => setConnections(data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [businessId]);
+    const load = async () => {
+      let bId = businessId;
+      if (!bId) {
+        try {
+          const { data: businesses } = await api.get("/businesses/");
+          if (businesses.length > 0) {
+            bId = businesses[0].id;
+            localStorage.setItem("businessId", bId);
+            setBusinessId(bId);
+          }
+        } catch {}
+      }
+      if (!bId) {
+        setLoading(false);
+        return;
+      }
+      api.get(`/platforms/list/${bId}`)
+        .then(({ data }) => setConnections(data))
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    };
+    load();
+  }, []);
 
 
   const getConn = (id: string) => connections.find((c) => c.platform === id) || null;
@@ -146,8 +160,9 @@ export default function PlatformsPage() {
     setTimeout(() => setSuccess((p) => ({ ...p, [id]: "" })), 4000);
   };
 
-  const parseTgError = (detail: string, platformId: string): string => {
+  const parseTgError = (detail: unknown, platformId: string): string => {
     if (!detail) return "❌ Ошибка подключения — проверьте токен и ID канала";
+    if (typeof detail !== "string") return "❌ Ошибка подключения — проверьте токен и ID канала";
     const d = detail.toLowerCase();
 
     // Сетевые ошибки (от нашего бэкенда)
@@ -212,8 +227,7 @@ export default function PlatformsPage() {
       setExpanded(null);
       setOk(platformId, `✅ Подключено: ${data.page_name}`);
     } catch (e: any) {
-      const raw = e.response?.data?.detail || "";
-      setErr(platformId, parseTgError(raw, platformId));
+      setErr(platformId, parseTgError(e.response?.data?.detail, platformId));
     } finally {
       setConnecting(null);
     }
@@ -265,7 +279,8 @@ export default function PlatformsPage() {
       setAdminChatId("");
       setOk("telegram", `Уведомления настроены → ${data.chat_name}`);
     } catch (e: any) {
-      const raw = e.response?.data?.detail || "";
+      const rawDetail = e.response?.data?.detail;
+      const raw = typeof rawDetail === "string" ? rawDetail : "";
       const d = raw.toLowerCase();
       let msg = raw || "Ошибка сохранения";
       if (d.includes("chat not found") || d.includes("peer_id_invalid"))

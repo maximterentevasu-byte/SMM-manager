@@ -678,6 +678,13 @@ export default function ContentPage() {
   };
 
   const publishNow = async (slot: Slot) => {
+    const scheduled = new Date(slot.scheduled_at);
+    const now = new Date();
+    if (scheduled > now) {
+      const dateStr = scheduled.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      const ok = window.confirm(`Этот пост запланирован на ${dateStr}.\nОпубликовать сейчас, до наступления даты публикации?`);
+      if (!ok) return;
+    }
     try {
       await api.post(`/content/slot/${slot.id}/publish`);
       setSlots(prev => prev.map(s => s.id === slot.id ? { ...s, status: "published" } : s));
@@ -834,6 +841,13 @@ export default function ContentPage() {
 
   const publishModal = async () => {
     if (!expanded) return;
+    const scheduled = new Date(expanded.scheduled_at);
+    const now = new Date();
+    if (scheduled > now) {
+      const dateStr = scheduled.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      const ok = window.confirm(`Этот пост запланирован на ${dateStr}.\nОпубликовать сейчас, до наступления даты публикации?`);
+      if (!ok) return;
+    }
     try {
       await api.post(`/content/slot/${expanded.id}/publish`);
       setSlots(prev => prev.map(s => s.id === expanded.id ? { ...s, status: "published" } : s));

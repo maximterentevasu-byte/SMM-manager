@@ -24,27 +24,37 @@ router = APIRouter()
 
 PROFILE_FIELDS = [
     # (section, key, label, hint, is_list)
-    ("Бизнес",     "name",                "Название бизнеса",                    "Официальное название компании",                                     False),
-    ("Бизнес",     "niche",               "Ниша / сфера деятельности",           "Например: ресторан, интернет-магазин одежды, студия красоты",       False),
-    ("Бизнес",     "usp",                 "УТП (уникальное торговое предложение)","Чем вы отличаетесь от конкурентов",                                 False),
-    ("Бизнес",     "price_segment",       "Ценовой сегмент",                     "economy / middle / premium / luxury",                               False),
-    ("Бизнес",     "geo",                 "Город / район",                       "Москва, Марьино",                                                   False),
-    ("Бизнес",     "address",             "Адрес",                               "ул. Ленина, 12 (если есть физический адрес)",                       False),
-    ("Бизнес",     "contact_info",        "Контакты",                            "Телефон, сайт, Telegram-бот через запятую",                         False),
-    ("Бизнес",     "products",            "Товары и услуги",                     "Каждый пункт через ; (Пицца; Паста; Суп)",                          True),
-    ("Акции",      "active_promotions",   "Акции и спецпредложения на месяц",    "Оставьте пустым если акций нет",                                    False),
-    ("Аудитория",  "audience_primary",    "Основная целевая аудитория",          "Пол, возраст, интересы, образ жизни",                               False),
-    ("Аудитория",  "audience_non_target", "Кто НЕ является вашей ЦА",           "Кого точно не нужно привлекать",                                    False),
-    ("Аудитория",  "audience_pains",      "Боли клиентов / задачи продукта",     "Через ; (Нет времени готовить; Хочется вкусно и быстро)",           True),
-    ("Аудитория",  "audience_objections", "Возражения клиентов",                 "Через ; (Дорого; Не знаю о вас; Не доверяю)",                       True),
-    ("Конкуренты", "competitors",         "Конкуренты",                          "Название|Сайт через ; (МакДак|mcdonalds.ru; KFC|kfc.ru)",           True),
-    ("Платформы",  "platforms",           "Платформы публикаций",                "Через ; (telegram; vk; ok)",                                        True),
-    ("Бренд",      "brand_voice",         "Голос бренда / тональность",          "friendly / expert / innovator / family / luxury / fun",             False),
-    ("Бренд",      "visual_style",        "Визуальный стиль",                    "Тёплые цвета, живые фото, минимализм...",                           False),
-    ("Бренд",      "content_restrictions","Ограничения контента",                "Через ; (Политика; Алкоголь; Скидки)",                              True),
-    ("Цели",       "business_goals",      "Цели бизнеса на 6 месяцев",           "Рост продаж на 30%, открыть вторую точку...",                       False),
-    ("Цели",       "new_directions",      "Новые направления / продукты",        "Что планируете запустить в ближайшие месяцы",                       False),
-    ("Цели",       "smm_metrics",         "Ключевые показатели SMM",             "Через ; (Подписчики; Охваты/Показы; ER вовлечённость ЦА)",          True),
+    # === Шаг 1: Бизнес ===
+    ("Бизнес",    "name",              "Название бизнеса",                        "Официальное название компании",                                              False),
+    ("Бизнес",    "niche",             "Ниша / сфера деятельности",               "Например: ресторан, интернет-магазин одежды, студия красоты",                False),
+    ("Бизнес",    "usp",               "УТП (уникальное торговое предложение)",    "Чем вы отличаетесь от конкурентов",                                          False),
+    ("Бизнес",    "price_segment",     "Ценовой сегмент",                         "budget / economy / middle / premium",                                        False),
+    ("Бизнес",    "geo",               "Город / район",                           "Москва, Марьино",                                                            False),
+    ("Бизнес",    "address",           "Адрес",                                   "ул. Ленина, 12 (если есть физический адрес)",                                False),
+    ("Бизнес",    "contact_info",      "Контакты",                                "Телефон, сайт, Telegram-бот через запятую",                                  False),
+    ("Бизнес",    "business_goals",    "Тактические цели бизнеса",                "Рост продаж на 30%, открыть вторую точку...",                                 False),
+    ("Бизнес",    "survey_clients",    "Провести опрос клиентов",                 "да — хочу провести опрос / нет — не нужно",                                  False),
+    ("Бизнес",    "new_directions",    "Операционные задачи бизнеса",             "Что планируете запустить в ближайшие 1–3 месяца",                            False),
+    ("Бизнес",    "tools_description", "Инструменты выполнения задач",            "Акция, лотерея, скидки, кэшбэк, новый ассортимент...",                       False),
+    ("Бизнес",    "monthly_message",   "Важно рассказать клиентам в этом месяце", "Акция, бонусная программа, новинки, мероприятия...",                         False),
+    # === Шаг 2: Аудитория ===
+    ("Аудитория", "audience_primary",    "Основная целевая аудитория",            "Пол, возраст, интересы, образ жизни",                                        False),
+    ("Аудитория", "audience_non_target", "Кто НЕ является вашей ЦА",             "Кого точно не нужно привлекать",                                             False),
+    ("Аудитория", "audience_pains",      "Боли клиентов / задачи продукта",       "Через ; (Нет времени готовить; Хочется вкусно и быстро)",                    True),
+    ("Аудитория", "audience_objections", "Возражения клиентов",                   "Через ; (Дорого; Не знаю о вас; Не доверяю)",                                True),
+    ("Аудитория", "smm_metrics",         "Ключевые показатели SMM",               "Через ; (Подписчики; Охваты/Показы; ER вовлечённость ЦА)",                   True),
+    # === Конкуренты ===
+    ("Конкуренты","competitors",          "Конкуренты",                            "Название|Сайт через ; (МакДак|mcdonalds.ru; KFC|kfc.ru)",                    True),
+    # === Шаг 3: Площадки ===
+    ("Площадки",  "platforms",            "Платформы публикаций",                  "Через ; (telegram; vk; tiktok; instagram; max)",                             True),
+    ("Площадки",  "platform_goals",       "Цели по площадкам",                     "Формат платформа:цель через ; (telegram:loyalty; vk:sales; tiktok:reach)",   False),
+    # === Шаг 4: Голос бренда ===
+    ("Голос бренда", "brand_voice",          "Голос бренда / тональность",         "friendly / expert / innovator / family / luxury / fun",                      False),
+    ("Голос бренда", "content_restrictions", "Ограничения контента",               "Через ; (Политика; Алкоголь; Скидки)",                                       True),
+    # === Шаг 5: Стиль ===
+    ("Стиль",     "visual_style",         "Визуальный стиль",                      "Тёплые цвета, живые фото, минимализм...",                                    False),
+    ("Стиль",     "brand_colors_fonts",   "Фирменные цвета и шрифты",              "RGB (255, 87, 51); Шрифт: Montserrat Bold...",                               False),
+    ("Стиль",     "social_references",    "Референсы соцсетей",                    "Ссылки на аккаунты-референсы через запятую или перенос строки",              False),
 ]
 
 _LABEL_TO_KEY: dict[str, str] = {row[2]: row[1] for row in PROFILE_FIELDS}
@@ -81,7 +91,14 @@ def _build_workbook(profile: dict | None) -> openpyxl.Workbook:
         value = ""
         if profile:
             raw = profile.get(key)
-            if is_list and isinstance(raw, list):
+            if key == "survey_clients":
+                if raw is True or str(raw).lower() in ("true", "да", "yes", "1"):
+                    value = "да"
+                elif raw is not None:
+                    value = "нет"
+            elif key == "platform_goals" and isinstance(raw, dict):
+                value = "; ".join(f"{k}:{v}" for k, v in raw.items() if k and v)
+            elif is_list and isinstance(raw, list):
                 if key == "competitors":
                     value = "; ".join(
                         f"{c.get('name','') if isinstance(c, dict) else c}|{c.get('url','') if isinstance(c, dict) else ''}"
@@ -127,7 +144,18 @@ def _parse_workbook(wb: openpyxl.Workbook) -> dict:
         key   = _LABEL_TO_KEY.get(label)
         if not key or not value:
             continue
-        if _KEY_IS_LIST.get(key):
+        if key == "survey_clients":
+            result[key] = value.lower() in ("да", "yes", "true", "1")
+        elif key == "platform_goals":
+            goals: dict = {}
+            for pair in value.split(";"):
+                pair = pair.strip()
+                if ":" in pair:
+                    k, v = pair.split(":", 1)
+                    goals[k.strip()] = v.strip()
+            if goals:
+                result[key] = goals
+        elif _KEY_IS_LIST.get(key):
             if key == "competitors":
                 result[key] = [
                     {"name": p.split("|")[0].strip(), "url": p.split("|")[1].strip() if "|" in p else ""}
@@ -164,8 +192,13 @@ class BusinessProfileRequest(BaseModel):
     logo_url: Optional[str] = None
     brand_colors: list[str] = []
     business_goals: Optional[str] = None
+    survey_clients: Optional[bool] = False
     new_directions: Optional[str] = None
+    tools_description: Optional[str] = None
+    monthly_message: Optional[str] = None
     smm_metrics: list[str] = []
+    brand_colors_fonts: Optional[str] = None
+    social_references: Optional[str] = None
     brand_assets_labels: list[dict] = []
 
 

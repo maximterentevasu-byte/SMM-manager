@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import logging
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 import aiohttp
@@ -9,6 +10,8 @@ from app.workers.db import get_worker_db
 from app.models.models import ContentSlot, PlatformConnection, PlanStatus
 from app.config import settings
 from sqlalchemy import select, and_
+
+log = logging.getLogger(__name__)
 
 
 def decrypt_token(encrypted: str) -> str:
@@ -24,17 +27,24 @@ def check_publish_queue():
 async def _check_queue():
     async with get_worker_db() as db:
         now = datetime.utcnow()
+        # Публикуем только посты, чья дата публикации наступила (scheduled_at <= now)
+        # и не позднее чем 30 минут назад (защита от публикации устаревших постов).
+        # Если Celery пропустил окно — пост остаётся content_ready для ручной публикации.
+        window_start = now - timedelta(minutes=30)
         result = await db.execute(
             select(ContentSlot).where(
                 and_(
                     ContentSlot.status == PlanStatus.content_ready,
                     ContentSlot.scheduled_at <= now,
-                    ContentSlot.scheduled_at >= now - timedelta(minutes=15),
+                    ContentSlot.scheduled_at >= window_start,
                 )
             )
         )
         slots = result.scalars().all()
+        if slots:
+            log.info("[posting] found %d slot(s) to publish", len(slots))
         for slot in slots:
+            log.info("[posting] queuing slot=%s scheduled=%s", str(slot.id)[:8], slot.scheduled_at)
             publish_post_task.delay(str(slot.id))
 
 

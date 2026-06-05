@@ -646,11 +646,34 @@ async def _handle_callback(
 
     if action == "approve":
         if slot.status == PlanStatus.pending_approval:
+            now = datetime.utcnow()
             slot.status = PlanStatus.content_ready
             await db.commit()
             await _remove_inline_buttons(session, bot_token, chat_id, message_id)
-            await _answer_callback(session, bot_token, callback_id, "✅ Пост согласован и готов к публикации!")
-            log.info("Пост согласован через TG: slot=%s", str(slot_id)[:8])
+
+            if slot.scheduled_at <= now:
+                # Дата уже прошла — пост одобрен, но автопубликация не произойдёт
+                date_str = (slot.scheduled_at + timedelta(hours=3)).strftime("%d.%m.%Y %H:%M")
+                confirm_text = (
+                    f"✅ Пост согласован.\n\n"
+                    f"⚠️ Дата публикации {date_str} (МСК) уже прошла.\n"
+                    f"Автопубликация невозможна — зайдите в контент-план и опубликуйте вручную или перенесите дату."
+                )
+            else:
+                # Дата в будущем — Celery опубликует в нужное время
+                date_str = (slot.scheduled_at + timedelta(hours=3)).strftime("%d.%m.%Y в %H:%M")
+                confirm_text = f"✅ Пост согласован. Будет опубликован автоматически {date_str} (МСК)."
+
+            await _answer_callback(session, bot_token, callback_id, confirm_text)
+            try:
+                await session.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                    json={"chat_id": chat_id, "text": confirm_text},
+                )
+            except Exception:
+                pass
+            log.info("Пост согласован через TG: slot=%s scheduled=%s overdue=%s",
+                     str(slot_id)[:8], slot.scheduled_at.isoformat(), slot.scheduled_at <= now)
         else:
             await _answer_callback(session, bot_token, callback_id, "Пост уже обработан")
 
