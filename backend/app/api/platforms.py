@@ -170,6 +170,8 @@ async def set_admin_chat(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    import redis.asyncio as aioredis
+
     result = await db.execute(
         select(PlatformConnection).where(
             PlatformConnection.business_id == business_id,
@@ -181,22 +183,47 @@ async def set_admin_chat(
     if not connection:
         raise HTTPException(404, "Telegram не подключён")
 
-    # Verify chat_id is reachable with the bot token
-    token = decrypt_token(connection.token_encrypted)
-    async with aiohttp.ClientSession() as session:
-        resp = await session.get(
-            f"https://api.telegram.org/bot{token}/getChat",
-            params={"chat_id": body.admin_chat_id}
-        )
-        tg = await resp.json()
-    if not tg.get("ok"):
-        raise HTTPException(400, f"Не удалось найти чат: {tg.get('description', 'Проверьте ID')}")
+    raw = body.admin_chat_id.strip()
+    chat_name = raw
 
-    connection.admin_chat_id = body.admin_chat_id
+    if raw.startswith("@"):
+        # Резолвим @username через Redis (сохраняется когда пользователь пишет боту /start)
+        username_key = raw.lstrip("@").lower()
+        try:
+            async with aioredis.from_url(settings.REDIS_URL, decode_responses=True) as r:
+                resolved = await r.get(f"tg_username:{username_key}")
+        except Exception:
+            resolved = None
+
+        if not resolved:
+            raise HTTPException(
+                400,
+                f"Пользователь {raw} не найден — напишите боту @smmplatformb_bot команду /start, "
+                "затем попробуйте снова"
+            )
+        resolved_chat_id = resolved
+        chat_name = raw
+    else:
+        # Числовой ID — проверяем через бота
+        resolved_chat_id = raw
+        token = settings.SHARED_TG_BOT_TOKEN or decrypt_token(connection.token_encrypted)
+        async with aiohttp.ClientSession() as session:
+            resp = await session.get(
+                f"https://api.telegram.org/bot{token}/getChat",
+                params={"chat_id": resolved_chat_id}
+            )
+            tg = await resp.json()
+        if not tg.get("ok"):
+            raise HTTPException(
+                400,
+                f"Чат не найден — напишите боту @smmplatformb_bot команду /start, "
+                "затем вставьте свой числовой ID"
+            )
+        chat = tg["result"]
+        chat_name = chat.get("first_name") or chat.get("username") or raw
+
+    connection.admin_chat_id = resolved_chat_id
     await db.commit()
-
-    chat = tg["result"]
-    chat_name = chat.get("first_name") or chat.get("username") or body.admin_chat_id
     return {"status": "saved", "chat_name": chat_name}
 
 

@@ -7,7 +7,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from app.database import engine, Base
 from app.config import settings
-from app.api import auth, businesses, onboarding, content, platforms, subscriptions, analytics, post_creator, events, home, leads, story_bot
+from app.api import auth, businesses, onboarding, content, platforms, subscriptions, analytics, post_creator, events, home, leads, story_bot, admin_bot
 
 # Колонки для миграций без Alembic — добавляются через ADD COLUMN IF NOT EXISTS
 _MIGRATIONS = [
@@ -59,13 +59,21 @@ async def lifespan(app: FastAPI):
             except Exception:
                 pass
 
-    # Регистрируем webhook Stories-бота при наличии токена и домена
+    import aiohttp
+    # Регистрируем webhook Stories-бота
     if settings.STORY_BOT_TOKEN and settings.DOMAIN:
-        import aiohttp
         webhook_url = f"https://{settings.DOMAIN}/api/story-bot/webhook"
         async with aiohttp.ClientSession() as s:
             await s.post(
                 f"https://api.telegram.org/bot{settings.STORY_BOT_TOKEN}/setWebhook",
+                json={"url": webhook_url, "drop_pending_updates": True},
+            )
+    # Регистрируем webhook общего бота (@smmplatformb_bot) для username→chat_id маппинга
+    if settings.SHARED_TG_BOT_TOKEN and settings.DOMAIN:
+        webhook_url = f"https://{settings.DOMAIN}/api/admin-bot/webhook"
+        async with aiohttp.ClientSession() as s:
+            await s.post(
+                f"https://api.telegram.org/bot{settings.SHARED_TG_BOT_TOKEN}/setWebhook",
                 json={"url": webhook_url, "drop_pending_updates": True},
             )
     yield
@@ -133,6 +141,7 @@ app.include_router(events.router,         prefix="/api/events",          tags=["
 app.include_router(home.router,           prefix="/api/home",            tags=["home"])
 app.include_router(leads.router,          prefix="/api/leads",           tags=["leads"])
 app.include_router(story_bot.router,      prefix="/api/story-bot",       tags=["story-bot"])
+app.include_router(admin_bot.router,      prefix="/api/admin-bot",        tags=["admin-bot"])
 
 @app.get("/")
 async def root():

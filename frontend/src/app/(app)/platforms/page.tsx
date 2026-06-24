@@ -279,8 +279,8 @@ export default function PlatformsPage() {
       const raw = typeof rawDetail === "string" ? rawDetail : "";
       const d = raw.toLowerCase();
       let msg = raw || "Ошибка сохранения";
-      if (d.includes("chat not found") || d.includes("peer_id_invalid"))
-        msg = "❌ Чат не найден — напишите боту /start в личку, затем вставьте свой числовой ID";
+      if (d.includes("не найден") || d.includes("chat not found") || d.includes("peer_id_invalid"))
+        msg = raw || "❌ Пользователь не найден — напишите /start боту @smmplatformb_bot, затем попробуйте снова";
       else if (d.includes("forbidden") || d.includes("blocked"))
         msg = "❌ Бот заблокирован — напишите ему /start в личку и попробуйте снова";
       setErr("telegram", msg);
@@ -541,21 +541,18 @@ export default function PlatformsPage() {
                         {(!conn.admin_chat_id || adminChatId) && (
                           <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
                             <div style={{ fontSize: 12, color: "#888", lineHeight: 1.6 }}>
-                              Чтобы бот присылал вам уведомления о постах, ожидающих согласования:<br />
-                              1. Напишите{" "}
+                              Чтобы получать уведомления о постах, ожидающих согласования:<br />
+                              1. Напишите боту{" "}
                               <a href="https://t.me/smmplatformb_bot" target="_blank" rel="noreferrer" style={{ color: "#2AABEE" }}>@smmplatformb_bot</a>{" "}
-                              в личку — отправьте любое сообщение<br />
-                              2. Узнайте свой ID: напишите <code style={code}>/start</code> боту{" "}
-                              <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" style={{ color: "#2AABEE" }}>@userinfobot</a>{" "}
-                              — он вернёт ваш ID (положительное число)<br />
-                              3. Вставьте ID ниже
+                              команду <code style={code}>/start</code><br />
+                              2. Введите ваш <code style={code}>@username</code> ниже
                             </div>
                             <div style={{ display: "flex", gap: 10 }}>
                               <input
                                 value={adminChatId}
                                 onChange={(e) => setAdminChatId(e.target.value)}
-                                placeholder="123456789"
-                                style={{ ...inp, fontFamily: "monospace", maxWidth: 220 }}
+                                placeholder="@username или числовой ID"
+                                style={{ ...inp, fontFamily: "monospace", maxWidth: 260 }}
                               />
                               <button
                                 onClick={saveAdminChat}
