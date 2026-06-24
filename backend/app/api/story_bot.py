@@ -245,7 +245,17 @@ async def webhook(request: Request, db: AsyncSession = Depends(get_db)):
                 )
             except Exception as e:
                 log.error("Story post error: %s", e)
-                await _send(chat_id, f"❌ Ошибка публикации: {str(e)[:200]}")
+                err = str(e)
+                if "BOOSTS_REQUIRED" in err:
+                    await _send(
+                        chat_id,
+                        "❌ <b>Недостаточно бустов</b>\n\n"
+                        "Канал должен быть заboosted пользователями с Telegram Premium, "
+                        "чтобы получить функцию историй.\n\n"
+                        "Как собрать бусты: Настройки канала → Бусты → поделиться ссылкой с подписчиками.",
+                    )
+                else:
+                    await _send(chat_id, f"❌ Ошибка публикации: {err[:200]}")
 
             return {"ok": True}
 
