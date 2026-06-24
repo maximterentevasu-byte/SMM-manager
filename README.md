@@ -132,6 +132,44 @@ planned → idea_ready → pending_approval → needs_info → content_ready →
 
 ---
 
+## Stories Bot
+
+Telegram-бот `@bot_storis_pick_me_bot` — интерфейс публикации историй напрямую из Telegram.
+
+### Бот-флоу
+1. `/start` → бот просит указать `@username` канала
+2. Бот проверяет канал через `getChat` → ищет в `platform_connections`
+3. Бот запрашивает у пользователя разрешение на отправку запроса (показывает `@username`, имя)
+4. Пользователь подтверждает → запрос попадает в раздел **Сторис** веб-платформы
+5. Владелец одобряет / отклоняет
+6. После одобрения: пользователь нажимает «📤 Отправить пост в сторис» и присылает фото
+7. Бот публикует фото как историю через Telethon MTProto
+
+### Хранение состояний (`story_bot_sessions`)
+| State | Описание |
+|-------|----------|
+| `waiting_channel` | Пользователь не указал канал |
+| `waiting_confirm` | Канал найден, ждёт согласия на отправку запроса |
+| `pending_approval` | Запрос на рассмотрении у владельца |
+| `active` | Одобрен, может постить |
+| `rejected` | Отклонён |
+
+### API
+- `POST /api/story-bot/webhook` — webhook от Telegram
+- `GET /api/story-bot/info` — username бота
+- `GET /api/story-bot/sessions` — список сессий по бизнесам пользователя
+- `POST /api/story-bot/approve/{id}` — одобрить + уведомить пользователя в боте
+- `POST /api/story-bot/reject/{id}` — отклонить + уведомить
+- `DELETE /api/story-bot/session/{id}` — удалить
+
+### .env
+```
+STORY_BOT_TOKEN=<BotFather token>
+```
+Webhook регистрируется автоматически при старте бэкенда (если `STORY_BOT_TOKEN` и `DOMAIN` заданы).
+
+---
+
 ## Фронтенд
 
 ### Страницы (`/src/app`)
