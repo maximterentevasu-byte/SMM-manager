@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+import json
 from io import BytesIO
 from datetime import datetime
 
@@ -8,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
+import redis.asyncio as aioredis
 
 from app.database import get_db
 from app.models.models import (
@@ -17,11 +19,27 @@ from app.models.models import (
 )
 from app.api.auth import get_current_user
 from app.services.publishers import decrypt_token, encrypt_token
+from app.config import settings
 
 router = APIRouter()
 
-# Хранит api_id/api_hash между send-code → sign-in (только примитивы, не клиенты)
-_pending_tg_meta: dict = {}
+_TG_META_TTL = 600  # 10 минут — достаточно для ввода кода
+
+
+async def _set_pending(business_id: str, data: dict):
+    async with aioredis.from_url(settings.REDIS_URL, decode_responses=True) as r:
+        await r.set(f"tg_pending:{business_id}", json.dumps(data), ex=_TG_META_TTL)
+
+
+async def _get_pending(business_id: str) -> dict:
+    async with aioredis.from_url(settings.REDIS_URL, decode_responses=True) as r:
+        raw = await r.get(f"tg_pending:{business_id}")
+    return json.loads(raw) if raw else {}
+
+
+async def _del_pending(business_id: str):
+    async with aioredis.from_url(settings.REDIS_URL, decode_responses=True) as r:
+        await r.delete(f"tg_pending:{business_id}")
 
 
 # ─── helpers ────────────────────────────────────────────────────────────────
@@ -258,7 +276,7 @@ async def tg_send_code(
         phone_code_hash, temp_session = await asyncio.to_thread(
             _tg_send_code_sync, api_id, api_hash, req.phone
         )
-        _pending_tg_meta[business_id] = {"api_id": api_id, "api_hash": api_hash, "session": temp_session}
+        await _set_pending(business_id, {"api_id": api_id, "api_hash": api_hash, "session": temp_session})
         return {"phone_code_hash": phone_code_hash, "status": "code_sent"}
     except Exception as e:
         raise HTTPException(400, f"Ошибка отправки кода: {str(e)}")
@@ -280,19 +298,17 @@ async def tg_sign_in(
     api_hash = settings.TG_API_HASH or ""
     if not api_id or not api_hash:
         raise HTTPException(400, "TG_API_ID / TG_API_HASH не настроены на сервере.")
-    temp_session = (_pending_tg_meta.get(business_id) or {}).get("session", "")
+    pending = await _get_pending(business_id)
+    temp_session = pending.get("session", "")
     try:
         result = await asyncio.to_thread(
             _tg_sign_in_sync, api_id, api_hash, req.phone, req.code, req.phone_code_hash, temp_session
         )
         if result.startswith(_2FA_MARKER):
-            # Двухэтапная проверка — нужен пароль
             partial_session = result[len(_2FA_MARKER) + 1:]
-            _pending_tg_meta[business_id] = {
-                "api_id": api_id, "api_hash": api_hash, "session": partial_session
-            }
+            await _set_pending(business_id, {"api_id": api_id, "api_hash": api_hash, "session": partial_session})
             return {"status": "password_required"}
-        _pending_tg_meta.pop(business_id, None)
+        await _del_pending(business_id)
         conn.tg_api_id = str(api_id)
         conn.tg_api_hash = api_hash
         conn.tg_session_encrypted = encrypt_token(result)
@@ -313,7 +329,7 @@ async def tg_sign_in_2fa(
     conn = await _get_connection(business_id, "telegram", db)
     if not conn:
         raise HTTPException(400, "Telegram-канал не подключён.")
-    pending = _pending_tg_meta.get(business_id)
+    pending = await _get_pending(business_id)
     if not pending:
         raise HTTPException(400, "Сессия устарела. Начните авторизацию заново.")
     api_id = pending["api_id"]
@@ -323,7 +339,7 @@ async def tg_sign_in_2fa(
         session_str = await asyncio.to_thread(
             _tg_sign_in_2fa_sync, api_id, api_hash, req.password, partial_session
         )
-        _pending_tg_meta.pop(business_id, None)
+        await _del_pending(business_id)
         conn.tg_api_id = str(api_id)
         conn.tg_api_hash = api_hash
         conn.tg_session_encrypted = encrypt_token(session_str)
