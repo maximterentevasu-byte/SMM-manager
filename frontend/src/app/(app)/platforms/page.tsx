@@ -32,34 +32,29 @@ const PLATFORMS = [
     description: "Канал или группа",
     steps: [
       {
-        title: "Создай бота через @BotFather",
-        items: [
-          <>Открой <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" style={{ color: "#2AABEE" }}>@BotFather</a> в Telegram</>,
-          <>Напиши <code style={code}>/newbot</code> и следуй инструкциям</>,
-          <>Получишь токен вида: <code style={code}>7123456789:AAFxxxxxxxx</code></>,
-          <>Вставь его в поле «Токен бота» ниже</>,
-        ],
-      },
-      {
-        title: "Добавь бота в канал как администратора",
+        title: "Добавь нашего бота администратором канала",
         items: [
           <>Открой свой канал → Настройки → Администраторы</>,
-          <>Нажми «Добавить администратора» и найди своего бота по username</>,
+          <>Нажми «Добавить администратора» и найди бота:{" "}
+            <a href="https://t.me/smmplatformb_bot" target="_blank" rel="noreferrer" style={{ color: "#2AABEE" }}>@smmplatformb_bot</a>
+          </>,
           <>Достаточно прав: <strong>Публикация сообщений</strong></>,
         ],
       },
       {
-        title: "Получи ID канала",
+        title: "Введи ID канала",
         items: [
-          <><strong>Способ 1 (проще):</strong> если канал публичный — просто введи его username: <code style={code}>@mycannel</code></>,
-          <><strong>Способ 2 (для приватных каналов):</strong> перешли любое сообщение из канала боту <a href="https://t.me/JsonDumpBot" target="_blank" rel="noreferrer" style={{ color: "#2AABEE" }}>@JsonDumpBot</a></>,
-          <>В ответе найди <code style={code}>"chat"</code> → <code style={code}>"id"</code> — это отрицательное число вида <code style={code}>-1001234567890</code></>,
-          <>⚠️ <strong>Важно:</strong> бот должен быть добавлен в канал (шаг 2) <em>до</em> этого шага, иначе подключение не пройдёт</>,
+          <><strong>Публичный канал:</strong> просто введи username: <code style={code}>@mychannel</code></>,
+          <><strong>Приватный канал:</strong> перешли любое сообщение из канала боту{" "}
+            <a href="https://t.me/JsonDumpBot" target="_blank" rel="noreferrer" style={{ color: "#2AABEE" }}>@JsonDumpBot</a>
+          </>,
+          <>В ответе найди <code style={code}>"chat"</code> → <code style={code}>"id"</code> — отрицательное число вида <code style={code}>-1001234567890</code></>,
+          <>⚠️ <strong>Важно:</strong> бот должен быть добавлен (шаг 1) <em>до</em> подключения, иначе проверка не пройдёт</>,
         ],
       },
     ],
-    tokenLabel: "Токен бота",
-    tokenPlaceholder: "7123456789:AAFxxxxxxxxxxxxxxxx",
+    tokenLabel: "",
+    tokenPlaceholder: "",
     pageIdLabel: "ID канала / чата",
     pageIdPlaceholder: "-1001234567890 или @username",
     pageIdHint: "Отрицательное число (-1001234567890) или @username публичного канала",
@@ -196,8 +191,9 @@ export default function PlatformsPage() {
 
   const connect = async (platformId: string) => {
     const f = form[platformId];
-    if (!f.token.trim() || !f.pageId.trim()) {
-      setErr(platformId, "Заполните оба поля");
+    const needsToken = platformId !== "telegram";
+    if ((needsToken && !f.token.trim()) || !f.pageId.trim()) {
+      setErr(platformId, needsToken ? "Заполните оба поля" : "Введите ID канала");
       return;
     }
     if (!businessId) {
@@ -447,22 +443,24 @@ export default function PlatformsPage() {
                         marginBottom: 16, letterSpacing: 0.5 }}>ДАННЫЕ ДЛЯ ПОДКЛЮЧЕНИЯ</div>
 
                       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                        <div>
-                          <label style={{ fontSize: 13, fontWeight: 500, color: "#444",
-                            display: "block", marginBottom: 6 }}>
-                            {pl.tokenLabel}
-                          </label>
-                          <input
-                            type="password"
-                            value={f.token}
-                            onChange={(e) => setForm((p) => ({ ...p, [pl.id]: { ...f, token: e.target.value } }))}
-                            placeholder={pl.tokenPlaceholder}
-                            style={{ ...inp, fontFamily: "monospace" }}
-                          />
-                          <p style={{ fontSize: 12, color: "#999", marginTop: 4 }}>
-                            Хранится в зашифрованном виде
-                          </p>
-                        </div>
+                        {pl.tokenLabel && (
+                          <div>
+                            <label style={{ fontSize: 13, fontWeight: 500, color: "#444",
+                              display: "block", marginBottom: 6 }}>
+                              {pl.tokenLabel}
+                            </label>
+                            <input
+                              type="password"
+                              value={f.token}
+                              onChange={(e) => setForm((p) => ({ ...p, [pl.id]: { ...f, token: e.target.value } }))}
+                              placeholder={pl.tokenPlaceholder}
+                              style={{ ...inp, fontFamily: "monospace" }}
+                            />
+                            <p style={{ fontSize: 12, color: "#999", marginTop: 4 }}>
+                              Хранится в зашифрованном виде
+                            </p>
+                          </div>
+                        )}
 
                         <div>
                           <label style={{ fontSize: 13, fontWeight: 500, color: "#444",
@@ -480,10 +478,10 @@ export default function PlatformsPage() {
 
                         <button
                           onClick={() => connect(pl.id)}
-                          disabled={connecting === pl.id || !f.token.trim() || !f.pageId.trim()}
+                          disabled={connecting === pl.id || (pl.id !== "telegram" && !f.token.trim()) || !f.pageId.trim()}
                           style={{
                             padding: "12px", fontSize: 14, fontWeight: 600, color: "#fff",
-                            background: connecting === pl.id || !f.token.trim() || !f.pageId.trim()
+                            background: connecting === pl.id || (pl.id !== "telegram" && !f.token.trim()) || !f.pageId.trim()
                               ? "#bbb" : pl.color,
                             border: "none", borderRadius: 12, cursor: "pointer",
                           }}>
@@ -544,7 +542,9 @@ export default function PlatformsPage() {
                           <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
                             <div style={{ fontSize: 12, color: "#888", lineHeight: 1.6 }}>
                               Чтобы бот присылал вам уведомления о постах, ожидающих согласования:<br />
-                              1. Напишите боту <strong>{conn.page_name ? `@${conn.page_name}` : "любое сообщение"}</strong> в личку<br />
+                              1. Напишите{" "}
+                              <a href="https://t.me/smmplatformb_bot" target="_blank" rel="noreferrer" style={{ color: "#2AABEE" }}>@smmplatformb_bot</a>{" "}
+                              в личку — отправьте любое сообщение<br />
                               2. Узнайте свой ID: напишите <code style={code}>/start</code> боту{" "}
                               <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" style={{ color: "#2AABEE" }}>@userinfobot</a>{" "}
                               — он вернёт ваш ID (положительное число)<br />
@@ -613,7 +613,7 @@ export default function PlatformsPage() {
             </div>
             <div style={{ fontSize: 13, color: "#888", lineHeight: 1.6 }}>
               Все токены хранятся в зашифрованном виде (Fernet AES-128). Мы никогда не передаём их третьим лицам.
-              Токен бота Telegram можно отозвать в @BotFather командой <code style={code}>/revoke</code>.
+              Для Telegram используется общий бот платформы — отозвать его доступ можно удалив бота из администраторов канала.
               Токен ВКонтакте — в настройках сообщества → Работа с API.
             </div>
           </div>

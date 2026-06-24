@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models.models import User, Business, PlatformConnection
 from app.api.auth import get_current_user
 from app.services.publishers import encrypt_token, decrypt_token
+from app.config import settings
 
 router = APIRouter()
 
@@ -17,7 +18,7 @@ router = APIRouter()
 class ConnectPlatformRequest(BaseModel):
     business_id: str
     platform: str   # telegram / vk
-    token: str
+    token: str = ""  # не нужен для Telegram — используется SHARED_TG_BOT_TOKEN
     page_id: str
     page_name: str = ""
 
@@ -38,11 +39,14 @@ async def connect_platform(
 
     # Верифицируем токен и получаем имя страницы автоматически
     if data.platform == "telegram":
+        tg_token = settings.SHARED_TG_BOT_TOKEN or data.token
+        if not tg_token:
+            raise HTTPException(400, "Токен бота не настроен на сервере")
         try:
             timeout = aiohttp.ClientTimeout(total=15)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 resp = await session.get(
-                    f"https://api.telegram.org/bot{data.token}/getChat",
+                    f"https://api.telegram.org/bot{tg_token}/getChat",
                     params={"chat_id": data.page_id}
                 )
                 tg = await resp.json()
@@ -104,7 +108,9 @@ async def connect_platform(
         )
     )
     connection = existing.scalar_one_or_none()
-    encrypted = encrypt_token(data.token)
+    # Для Telegram — шифруем общий токен; для VK — токен пользователя
+    token_to_save = tg_token if data.platform == "telegram" else data.token
+    encrypted = encrypt_token(token_to_save)
 
     if connection:
         connection.token_encrypted = encrypted

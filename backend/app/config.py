@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # Telegram Stories Bot
     STORY_BOT_TOKEN: str = ""
 
+    # Shared Telegram Bot for channel posting (users add @smmplatformb_bot as admin)
+    SHARED_TG_BOT_TOKEN: str = ""
+
     # Telegram Analytics (MTProto — отдельно от Bot API)
     # Получить: https://my.telegram.org → API development tools
     TG_API_ID: int = 0
