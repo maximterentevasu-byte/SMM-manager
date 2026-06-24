@@ -125,6 +125,11 @@ planned → idea_ready → pending_approval → needs_info → content_ready →
 - Backend проверяет: не более 3 бизнесов на аккаунт (HTTP 400 при превышении)
 - `POST /onboarding/save-profile/new?force_new=true` — всегда создаёт новый бизнес (без антидубль-поиска)
 
+### Заградительный барьер (анти-дубль)
+- `save-profile` без `force_new` → **всегда ищет существующий бизнес** пользователя (`ORDER BY created_at DESC`)
+- Повторный онбординг N раз = обновление профиля, НЕ создание нового бизнеса
+- Frontend layout: если `localStorage.businessId` указывает на удалённый бизнес → автопереключение на первый доступный
+
 ---
 
 ## Фронтенд
