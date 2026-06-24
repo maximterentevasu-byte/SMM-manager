@@ -123,7 +123,6 @@ app.include_router(events.router,         prefix="/api/events",          tags=["
 app.include_router(home.router,           prefix="/api/home",            tags=["home"])
 app.include_router(leads.router,          prefix="/api/leads",           tags=["leads"])
 
-
 @app.get("/")
 async def root():
     return {"status": "ok"}

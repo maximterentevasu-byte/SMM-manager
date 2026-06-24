@@ -311,3 +311,5 @@ class Lead(Base):
     phone: Mapped[str] = mapped_column(String(50), nullable=True)
     source: Mapped[str] = mapped_column(String(100), default="landing")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+

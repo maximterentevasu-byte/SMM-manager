@@ -1,137 +1,236 @@
-# SMM Platform — Инструкция запуска
+# smm**platform** — AI-платформа для системного SMM
 
-## ШАГ 1 — Подготовка (5 минут)
-
-### 1.1 Скопируй .env файл
-```bash
-cp .env.example .env
-```
-
-### 1.2 Открой .env в VS Code и заполни обязательные поля:
-
-**POSTGRES_PASSWORD** — придумай любой пароль (например: MyStr0ngPass123)
-Обязательно замени его же в DATABASE_URL!
-
-**SECRET_KEY** — случайная строка. Запусти в терминале:
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-**FERNET_KEY** — специальный ключ шифрования. После старта контейнеров:
-```bash
-docker-compose run --rm backend python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
-
-**ANTHROPIC_API_KEY** — получи на https://console.anthropic.com
-(Нажми "Get API Keys" → Create Key)
+**Домен:** https://smmplatform.pro  
+**Сервер:** `root@178.105.159.177` → `/opt/smm-platform`  
+**Бренд:** Platform Blue `#3478F6`, фон `#0D1B2A`, маскот АИСТ  
+**Шрифты:** Manrope (заголовки) + Inter (текст)
 
 ---
 
-## ШАГ 2 — Запуск бэкенда (2 минуты)
+## Стек
 
-```bash
-# Запускаем только базу данных и Redis сначала
-docker-compose up -d postgres redis
+| Слой | Технологии |
+|------|-----------|
+| Backend | FastAPI (async), SQLAlchemy 2.0, PostgreSQL 16, Redis 7, Celery |
+| Frontend | Next.js 14 (App Router), TypeScript, inline CSS (без Tailwind) |
+| AI | Claude (Anthropic) — тексты/стратегия, Gemini (Google Imagen 3) — картинки |
+| Инфраструктура | Docker Compose, Nginx (reverse proxy), Let's Encrypt (SSL) |
+| Email | Brevo (основной), Resend (резерв) |
+| Аналитика TG | Telethon (MTProto) — сбор статистики канала |
+| Аналитика VK | VK API (wall.get) — user token |
 
-# Ждём 10 секунд пока поднимутся
+---
 
-# Запускаем бэкенд
-docker-compose up -d backend celery_worker celery_beat flower
+## Архитектура
+
 ```
+Nginx (443/80)
+  ├── /api/  → backend:8000  (FastAPI, 2 workers)
+  └── /      → frontend:3000 (Next.js)
 
-### Проверка что всё работает:
-Открой в браузере: http://localhost:8000
-Должно показать: {"message": "SMM Platform API работает ✓"}
-
-Документация API: http://localhost:8000/docs
-Мониторинг задач: http://localhost:5555
-
----
-
-## ШАГ 3 — Запуск фронтенда (3 минуты)
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Открой: http://localhost:3000
-
----
-
-## ШАГ 4 — Первый тест
-
-1. Открой http://localhost:8000/docs
-2. Найди POST /api/auth/register
-3. Нажми "Try it out"
-4. Введи email и пароль
-5. Нажми Execute
-6. Должен вернуться access_token — это значит всё работает!
-
----
-
-## Полезные команды
-
-```bash
-# Посмотреть логи бэкенда
-docker-compose logs -f backend
-
-# Посмотреть логи воркера (фоновые задачи)
-docker-compose logs -f celery_worker
-
-# Перезапустить бэкенд после изменений кода
-docker-compose restart backend
-
-# Остановить всё
-docker-compose down
-
-# Остановить и удалить данные БД (ОСТОРОЖНО)
-docker-compose down -v
+Docker Compose (prod):
+  postgres       — БД smm_platform
+  redis          — брокер задач + кэш
+  backend        — FastAPI API
+  celery_worker  — фоновые задачи (concurrency=2)
+  celery_beat    — планировщик (cron-задачи)
+  frontend       — Next.js SSR
 ```
 
 ---
 
-## Структура проекта
+## Бэкенд
+
+### API роуты (`/api/...`)
+
+| Роут | Описание |
+|------|----------|
+| `/auth` | Регистрация, логин, logout, верификация email, сброс пароля |
+| `/businesses` | CRUD бизнес-профилей |
+| `/onboarding` | Онбординг нового бизнеса (AI-стратегия) |
+| `/content` | Контент-план: слоты, генерация, согласование |
+| `/platforms` | Подключение VK / Telegram / ОК |
+| `/subscriptions` | Тарифы, активация демо, вебхук ЮКасса |
+| `/analytics` | Аналитика постов и историй VK + Telegram |
+| `/post-creator` | Быстрый пост с AI-текстом и картинкой |
+| `/events` | Маркетинговые события (акции, ивенты) |
+| `/home` | Дашборд: KPI, топ-контент, расписание |
+| `/leads` | Лиды с лендинга |
+
+### Модели БД
 
 ```
-smm-platform/
-├── docker-compose.yml    ← конфигурация всех сервисов
-├── .env                  ← секреты (НЕ коммить в git!)
-├── .env.example          ← шаблон .env
-├── backend/
-│   ├── app/
-│   │   ├── main.py       ← точка входа FastAPI
-│   │   ├── config.py     ← настройки из .env
-│   │   ├── database.py   ← подключение к PostgreSQL
-│   │   ├── models/       ← структура таблиц БД
-│   │   ├── api/          ← HTTP роуты (auth, onboarding, content)
-│   │   ├── agents/       ← AI агенты (стратег, копирайтер, etc)
-│   │   └── workers/      ← фоновые задачи Celery
-│   └── requirements.txt  ← Python зависимости
-└── frontend/
-    └── src/              ← Next.js приложение
+users               — аккаунты (email, пароль, is_verified, tour_completed)
+email_verifications — коды верификации/сброса пароля
+businesses          — профили бизнесов (profile JSON, strategy JSON)
+platform_connections — подключения VK/TG/ОК (токены шифруются Fernet)
+content_slots       — посты в контент-плане
+events              — маркетинговые события с авто-постами
+slot_notifications  — трекинг TG-уведомлений (message_id → slot_id)
+subscriptions       — тарифы пользователей
+leads               — заявки с лендинга
+
+-- Аналитика:
+telegram_posts / telegram_stories
+vk_stories
+analytics_tg_weekly / analytics_vk_weekly
+```
+
+### Статусы контент-слота
+
+```
+planned → idea_ready → pending_approval → needs_info → content_ready → published
+                                                                      ↘ failed
+```
+
+### AI агенты (`/agents`)
+
+| Агент | Назначение |
+|-------|-----------|
+| `onboarding_agent` | Анализирует бизнес, генерирует стратегию при онбординге |
+| `strategy_agent` | Пересчёт/обновление стратегии |
+| `planner_agent` | Генерация контент-плана (рубрики + расписание) |
+| `copywriter_agent` | Написание текстов постов |
+| `image_agent` | Подбор/генерация промптов для картинок |
+| `market_research` | Анализ конкурентов и рынка |
+| `analytics_context` | AI-сводка по аналитике за период |
+
+### Celery задачи
+
+| Очередь | Задачи |
+|---------|--------|
+| `generation` | Генерация контент-плана, текстов, картинок |
+| `posting` | Автопостинг в VK и Telegram по расписанию |
+| `default` | Уведомления (needs_info, согласование), аналитика |
+| `celery` | Системные задачи beat |
+
+---
+
+## Фронтенд
+
+### Страницы (`/src/app`)
+
+| Путь | Описание |
+|------|----------|
+| `/landing` | Лендинг (публичный) |
+| `/login`, `/register` | Авторизация |
+| `/forgot-password` | Сброс пароля |
+| `/onboarding` | Онбординг нового бизнеса |
+| `/plans` | Страница тарифов |
+| `/payment/success` | Страница после оплаты |
+| `/(app)/home` | Главный дашборд (KPI, аналитика, расписание) |
+| `/(app)/content` | Контент-план (календарь слотов) |
+| `/(app)/post-creator` | Быстрый пост с AI |
+| `/(app)/analytics` | Аналитика TG + VK (посты, истории) |
+| `/(app)/strategy` | Стратегия бизнеса |
+| `/(app)/platforms` | Подключение соцсетей |
+
+### Навигация
+
+**Desktop:** фиксированный сайдбар слева (224px), тёмный `#0D1B2A`  
+**Mobile:** top bar + bottom nav (4 пункта) + slide-out drawer ("Ещё")  
+**Хук:** `useMobile()` — breakpoint 768px
+
+### Компоненты
+
+- `Aist.tsx` — маскот-заглушка для пустых состояний
+- `Skeleton.tsx` — скелетоны загрузки (SkeletonCard, SkeletonKpi)
+
+---
+
+## Тарифы
+
+| Тариф | Цена | Посты | Платформы |
+|-------|------|-------|-----------|
+| Демо | 0 ₽ (3 дня) | 10 | 1 |
+| Старт | 2 990 ₽/мес | 12 | 1 |
+| Бизнес | 5 990 ₽/мес | 30 | 3 |
+| Про | 11 990 ₽/мес | ∞ | все |
+
+> Платные тарифы в UI помечены "Скоро" — ЮКасса не настроена на сервере.
+
+---
+
+## Деплой
+
+### Локальная разработка
+
+```bash
+cp .env.example .env   # заполнить переменные
+docker compose up -d
+# backend:  http://localhost:8000/docs
+# frontend: http://localhost:3000
+```
+
+### Продакшн (на сервере)
+
+```bash
+cd /opt/smm-platform
+git pull origin main
+docker compose -f docker-compose.prod.yml up -d --build backend frontend
+```
+
+### Через SSH с машины разработчика
+
+```bash
+ssh -i ~/.ssh/id_ed25519 root@178.105.159.177 \
+  "cd /opt/smm-platform && git pull origin main && \
+   docker compose -f docker-compose.prod.yml up -d --build backend frontend 2>&1 | tail -10"
+```
+
+### Мониторинг
+
+```bash
+# Статус контейнеров
+docker compose -f docker-compose.prod.yml ps
+
+# Логи
+docker logs smm-platform-backend-1 --tail=50
+docker logs smm-platform-celery_worker-1 --tail=50
+
+# Health check
+curl http://localhost:8000/health
 ```
 
 ---
 
-## Что делать если что-то не работает
+## Переменные окружения (`.env`)
 
-**Ошибка подключения к БД:**
-```bash
-docker-compose logs postgres
-# Убедись что POSTGRES_PASSWORD в .env совпадает с тем что в DATABASE_URL
+| Переменная | Назначение |
+|-----------|-----------|
+| `DATABASE_URL` | PostgreSQL DSN |
+| `REDIS_URL` | Redis DSN |
+| `SECRET_KEY` | JWT подписи |
+| `FERNET_KEY` | Шифрование токенов соцсетей |
+| `ANTHROPIC_API_KEY` | Claude API (тексты, стратегия) |
+| `GEMINI_API_KEY` | Google Imagen 3 (картинки) |
+| `VK_APP_ID` / `VK_APP_SECRET` | VK OAuth |
+| `BREVO_API_KEY` | Email-рассылка |
+| `YOOKASSA_SHOP_ID` / `YOOKASSA_SECRET_KEY` | Приём платежей |
+| `TG_API_ID` / `TG_API_HASH` / `TG_STRING_SESSION` | TG аналитика (MTProto) |
+| `S3_*` | Yandex Object Storage (картинки) |
+| `DOMAIN` | Домен прода (включает prod-режим: скрывает /docs, HSTS) |
+
+---
+
+## Debug эндпоинты (только прод, защищены токеном)
+
+Токен = `SHA-256(SECRET_KEY)[:32]`
+
+```
+GET  /api/debug/notifications-status?token=...
+GET  /api/debug/gemini-models?token=...
+POST /api/debug/trigger-notifications?token=...
+POST /api/debug/trigger-replies-check?token=...
+POST /api/debug/trigger-approvals?token=...
 ```
 
-**Ошибка Fernet key:**
-```bash
-# Сгенерируй новый ключ:
-docker-compose run --rm backend python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-# Скопируй результат в .env в поле FERNET_KEY
-```
+---
 
-**Бэкенд не запускается:**
-```bash
-docker-compose logs backend
-# Читай последние строки — там будет причина ошибки
-```
+## Состояние сервера (на 24.06.2026)
+
+- **Диск:** 32 GB / 75 GB (45%)
+- **Память:** 2.8 GB / 3.7 GB — свап 2.6 GB из 4 GB ⚠️
+- **Пользователей в БД:** 8
+- **Git:** синхронизирован с main
+- **SSL:** Let's Encrypt (Certbot), автообновление
