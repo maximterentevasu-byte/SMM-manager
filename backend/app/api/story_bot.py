@@ -274,6 +274,24 @@ async def webhook(request: Request, db: AsyncSession = Depends(get_db)):
 
 # ── Story posting via Telethon ─────────────────────────────────────────────────
 
+def _sample_edge_color(img: "Image.Image") -> tuple[int, int, int]:
+    """Берёт средний цвет по краям изображения для фона холста."""
+    w, h = img.size
+    pixels = []
+    step_x = max(1, w // 30)
+    step_y = max(1, h // 30)
+    for x in range(0, w, step_x):
+        pixels.append(img.getpixel((x, 0)))
+        pixels.append(img.getpixel((x, h - 1)))
+    for y in range(0, h, step_y):
+        pixels.append(img.getpixel((0, y)))
+        pixels.append(img.getpixel((w - 1, y)))
+    r = sum(p[0] for p in pixels) // len(pixels)
+    g = sum(p[1] for p in pixels) // len(pixels)
+    b = sum(p[2] for p in pixels) // len(pixels)
+    return (r, g, b)
+
+
 async def _post_story(connection: PlatformConnection, photo_bytes: bytes):
     from telethon import TelegramClient
     from telethon.sessions import StringSession
@@ -288,10 +306,11 @@ async def _post_story(connection: PlatformConnection, photo_bytes: bytes):
 
     # Конвертируем в 9:16 (1080×1920)
     img = Image.open(io.BytesIO(photo_bytes)).convert("RGB")
+    bg_color = _sample_edge_color(img)
     scale = min(1080 / img.width, 1920 / img.height)
     nw, nh = int(img.width * scale), int(img.height * scale)
     img_r = img.resize((nw, nh), Image.LANCZOS)
-    canvas = Image.new("RGB", (1080, 1920), (20, 20, 20))
+    canvas = Image.new("RGB", (1080, 1920), bg_color)
     canvas.paste(img_r, ((1080 - nw) // 2, (1920 - nh) // 2))
 
     buf = io.BytesIO()
