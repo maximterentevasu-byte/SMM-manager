@@ -180,9 +180,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     api.get("/businesses/")
       .then(({ data }) => {
         setBusinesses(data);
-        if (!stored && data.length > 0) {
-          localStorage.setItem("businessId", data[0].id);
-          setActiveBizId(data[0].id);
+        if (data.length > 0) {
+          const valid = data.find((b: { id: string }) => b.id === stored);
+          if (!valid) {
+            // Сохранённый ID устарел или удалён — берём первый доступный
+            localStorage.setItem("businessId", data[0].id);
+            setActiveBizId(data[0].id);
+          } else {
+            setActiveBizId(stored);
+          }
         } else {
           setActiveBizId(stored);
         }

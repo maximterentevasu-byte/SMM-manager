@@ -227,18 +227,21 @@ async def save_profile(
         except Exception:
             business = None
 
-    # Антидубль: при обычном сохранении ("new" без force_new) ищем существующий бизнес.
-    # При force_new=True — всегда создаём новый (мультибизнес).
+    # БАРЬЕР: при любом сохранении без force_new — ищем существующий бизнес.
+    # Это гарантирует, что повторный онбординг обновляет существующий бизнес,
+    # а не создаёт новый. Новый бизнес создаётся ТОЛЬКО при явном force_new=True.
     if business is None and not force_new:
         try:
             result = await db.execute(
-                select(Business).where(Business.user_id == current_user.id)
+                select(Business)
+                .where(Business.user_id == current_user.id)
+                .order_by(Business.created_at.desc())
             )
             business = result.scalars().first()
         except Exception:
             business = None
 
-    # Лимит: не более 3 бизнесов на аккаунт
+    # Новый бизнес создаётся только при force_new=True — лимит 3 на аккаунт
     if business is None:
         count_result = await db.execute(
             select(func.count()).select_from(Business).where(Business.user_id == current_user.id)
