@@ -500,7 +500,7 @@ export default function PlatformsPage() {
                 {conn && (
                   <div style={{ borderTop: "1px solid #F2F0EC", background: "#FAFAF8" }}>
                     <div style={{ padding: "12px 24px", display: "flex", alignItems: "center", gap: 16, fontSize: 13, color: "#888" }}>
-                      <span>ID: <code style={{ ...code, fontSize: 11 }}>{conn.external_page_id}</code></span>
+                      <span>@username: <code style={{ ...code, fontSize: 11 }}>{conn.external_page_id}</code></span>
                       <span style={{ color: "#ddd" }}>|</span>
                       <span>Автопостинг активен</span>
                       <button onClick={() => setExpanded(isExpanded ? null : pl.id)}
