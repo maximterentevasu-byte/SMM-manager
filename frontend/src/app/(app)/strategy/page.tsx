@@ -34,6 +34,7 @@ export default function StrategyPage() {
   const [savingPostsPerWeek, setSavingPostsPerWeek] = useState<string | null>(null);
 
   const [profile, setProfile] = useState<Record<string, any>>({});
+  const [profileFetched, setProfileFetched] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
@@ -79,14 +80,15 @@ export default function StrategyPage() {
   };
 
   useEffect(() => {
-    if (tab === "profile" && Object.keys(profile).length === 0) {
+    if (tab === "profile" && !profileFetched) {
+      setProfileFetched(true);
       setLoadingProfile(true);
       api.get(`/businesses/${businessId}/profile`)
         .then(({ data }) => setProfile(data.profile || {}))
         .catch(() => {})
         .finally(() => setLoadingProfile(false));
     }
-  }, [tab, businessId, profile]);
+  }, [tab, businessId, profileFetched]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -488,6 +490,22 @@ export default function StrategyPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {loadingProfile ? (
               <div style={{ textAlign: "center", padding: "3rem", color: "#888" }}>Загружаем профиль...</div>
+            ) : !profileFetched || Object.keys(profile).length === 0 ? (
+              <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16,
+                padding: "40px 32px", textAlign: "center" }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
+                <p style={{ fontSize: 16, fontWeight: 600, color: "#0D1B2A", margin: "0 0 8px" }}>
+                  Профиль бизнеса не заполнен
+                </p>
+                <p style={{ color: "#6B7280", fontSize: 14, margin: "0 0 20px", lineHeight: 1.6 }}>
+                  Пройдите онбординг, чтобы заполнить профиль и сгенерировать стратегию
+                </p>
+                <button onClick={() => { window.location.href = "/onboarding"; }}
+                  style={{ padding: "10px 28px", background: "#3478F6", color: "#fff",
+                    border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                  Пройти онбординг →
+                </button>
+              </div>
             ) : (
               <>
                 <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16, padding: "20px 24px",
