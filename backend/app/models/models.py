@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 import uuid
 
-from sqlalchemy import String, Text, JSON, DateTime, ForeignKey, Enum, Boolean, Integer, Float, UniqueConstraint
+from sqlalchemy import String, Text, JSON, DateTime, ForeignKey, Enum, Boolean, Integer, Float, UniqueConstraint, BigInteger
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.database import Base
@@ -311,5 +311,21 @@ class Lead(Base):
     phone: Mapped[str] = mapped_column(String(50), nullable=True)
     source: Mapped[str] = mapped_column(String(100), default="landing")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class StoryBotSession(Base):
+    """Сессия пользователя Stories-бота. Создаётся при /start, хранит состояние подключения."""
+    __tablename__ = "story_bot_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
+    tg_user_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    state: Mapped[str] = mapped_column(String(50), default="waiting_channel")
+    # waiting_channel → waiting_confirm → pending_approval → active | rejected
+    connection_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    tg_username: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    tg_first_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    channel_title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
