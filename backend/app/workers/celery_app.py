@@ -13,6 +13,7 @@ celery_app = Celery(
         "app.workers.analytics_tasks",
         "app.workers.notification_tasks",
         "app.workers.image_tasks",
+        "app.workers.story_reminder_tasks",
     ]
 )
 
@@ -58,6 +59,11 @@ celery_app.conf.update(
         "check-telegram-replies": {
             "task": "app.workers.notification_tasks.check_telegram_replies",
             "schedule": 60.0,
+        },
+        # Напоминание о сторис: каждые 20 мин с 12:00 до 23:00 ЕКБ
+        "check-story-reminders": {
+            "task": "app.workers.story_reminder_tasks.check_story_reminders",
+            "schedule": crontab(minute="0,20,40"),
         },
     }
 )
