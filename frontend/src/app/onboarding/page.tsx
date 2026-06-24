@@ -1,9 +1,7 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
 import { useState, useEffect, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useMobile } from "@/hooks/useMobile";
 
@@ -129,8 +127,12 @@ const INITIAL: FormData = {
 export default function OnboardingPage() {
   const isMobile = useMobile();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const isNewBusiness = searchParams.get("new") === "true";
+  const [isNewBusiness, setIsNewBusiness] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setIsNewBusiness(params.get("new") === "true");
+  }, []);
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormData>(INITIAL);
   const [businessId, setBusinessId] = useState<string | null>(null);
