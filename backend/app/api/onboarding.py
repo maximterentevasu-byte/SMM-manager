@@ -299,6 +299,29 @@ async def get_clarifying_questions(
     return {"questions": questions}
 
 
+@router.post("/new-business")
+async def new_business(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Создаёт пустой бизнес немедленно, без онбординга. Лимит: 3 на аккаунт."""
+    count_result = await db.execute(
+        select(func.count()).select_from(Business).where(Business.user_id == current_user.id)
+    )
+    if (count_result.scalar() or 0) >= 3:
+        raise HTTPException(400, "Достигнут лимит: не более 3 бизнесов на аккаунт")
+
+    business = Business(
+        id=uuid.uuid4(),
+        user_id=current_user.id,
+        name="Новый бизнес",
+        profile={},
+    )
+    db.add(business)
+    await db.commit()
+    return {"business_id": str(business.id)}
+
+
 @router.post("/quick-start")
 async def quick_start(
     current_user: User = Depends(get_current_user),

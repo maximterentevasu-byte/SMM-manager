@@ -210,7 +210,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     window.location.href = "/home";
   };
 
-  const addBusiness = () => router.push("/onboarding?new=true");
+  const addBusiness = async () => {
+    try {
+      const { data } = await api.post("/onboarding/new-business");
+      localStorage.setItem("businessId", data.business_id);
+      window.location.href = "/onboarding";
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || "Ошибка создания бизнеса");
+    }
+  };
 
   useEffect(() => {
     api.get("/subscriptions/my")
