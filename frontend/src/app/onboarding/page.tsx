@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import { useMobile } from "@/hooks/useMobile";
 
@@ -127,6 +127,8 @@ const INITIAL: FormData = {
 export default function OnboardingPage() {
   const isMobile = useMobile();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isNewBusiness = searchParams.get("new") === "true";
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormData>(INITIAL);
   const [businessId, setBusinessId] = useState<string | null>(null);
@@ -279,9 +281,11 @@ export default function OnboardingPage() {
         competitors: form.competitors.filter(c => c.name || c.url).map(c => ({ name: c.name, url: c.url, pros: "", cons: "" })),
         brand_voice_examples: [],
       };
-      // Если бизнес уже существует — обновляем его, не создаём новый (иначе слетают подключённые платформы)
-      const existingId = typeof window !== "undefined" ? localStorage.getItem("businessId") : null;
-      const endpoint = existingId ? `/onboarding/save-profile/${existingId}` : "/onboarding/save-profile/new";
+      // При isNewBusiness — всегда создаём новый (force_new=true), игнорируем существующий businessId
+      const existingId = (!isNewBusiness && typeof window !== "undefined") ? localStorage.getItem("businessId") : null;
+      const endpoint = existingId
+        ? `/onboarding/save-profile/${existingId}`
+        : `/onboarding/save-profile/new${isNewBusiness ? "?force_new=true" : ""}`;
       const { data } = await api.post(endpoint, payload);
       const bId = data.business_id;
       setBusinessId(bId);

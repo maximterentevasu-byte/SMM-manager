@@ -4,7 +4,8 @@ import logging
 from urllib.parse import quote
 
 log = logging.getLogger(__name__)
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Query
+from sqlalchemy import func
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -206,13 +207,14 @@ class BusinessProfileRequest(BaseModel):
 async def save_profile(
     business_id: str,
     profile_data: BusinessProfileRequest,
+    force_new: bool = Query(False),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     profile = profile_data.model_dump()
     business = None
 
-    # Если business_id не "new" — ищем по конкретному ID
+    # Обновление конкретного бизнеса по ID
     if business_id != "new":
         try:
             result = await db.execute(
@@ -225,9 +227,9 @@ async def save_profile(
         except Exception:
             business = None
 
-    # Если не нашли по ID (или "new") — ищем любой существующий бизнес пользователя.
-    # Это предотвращает создание дублирующего бизнеса при потере localStorage.
-    if business is None:
+    # Антидубль: при обычном сохранении ("new" без force_new) ищем существующий бизнес.
+    # При force_new=True — всегда создаём новый (мультибизнес).
+    if business is None and not force_new:
         try:
             result = await db.execute(
                 select(Business).where(Business.user_id == current_user.id)
@@ -235,6 +237,15 @@ async def save_profile(
             business = result.scalars().first()
         except Exception:
             business = None
+
+    # Лимит: не более 3 бизнесов на аккаунт
+    if business is None:
+        count_result = await db.execute(
+            select(func.count()).select_from(Business).where(Business.user_id == current_user.id)
+        )
+        count = count_result.scalar() or 0
+        if count >= 3:
+            raise HTTPException(400, "Достигнут лимит: не более 3 бизнесов на аккаунт")
 
     if business:
         business.profile = profile

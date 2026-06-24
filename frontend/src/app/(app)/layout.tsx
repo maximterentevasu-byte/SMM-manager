@@ -172,6 +172,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Mobile nav state
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [businesses, setBusinesses] = useState<{ id: string; name: string; onboarding_done: boolean }[]>([]);
+  const [activeBizId, setActiveBizId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("businessId");
+    api.get("/businesses/")
+      .then(({ data }) => {
+        setBusinesses(data);
+        if (!stored && data.length > 0) {
+          localStorage.setItem("businessId", data[0].id);
+          setActiveBizId(data[0].id);
+        } else {
+          setActiveBizId(stored);
+        }
+      })
+      .catch(() => setActiveBizId(stored));
+  }, []);
+
+  const switchBusiness = (id: string) => {
+    localStorage.setItem("businessId", id);
+    window.location.href = "/home";
+  };
+
+  const addBusiness = () => router.push("/onboarding?new=true");
 
   useEffect(() => {
     api.get("/subscriptions/my")
@@ -270,6 +294,53 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   );
                 })}
               </div>
+
+              {/* Business Switcher */}
+              {businesses.length > 0 && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.25)", padding: "0 12px 5px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    Мои бизнесы
+                  </div>
+                  {businesses.map(biz => (
+                    <button
+                      key={biz.id}
+                      onClick={() => switchBusiness(biz.id)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        padding: "7px 12px", borderRadius: 10, border: "none",
+                        cursor: "pointer", width: "100%", textAlign: "left",
+                        background: activeBizId === biz.id ? "rgba(52,120,246,0.18)" : "transparent",
+                        color: activeBizId === biz.id ? "#3478F6" : "rgba(255,255,255,0.5)",
+                        fontSize: 12, fontWeight: activeBizId === biz.id ? 600 : 400,
+                      }}
+                    >
+                      <span style={{
+                        width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
+                        background: activeBizId === biz.id ? "#3478F6" : "rgba(255,255,255,0.2)",
+                      }} />
+                      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {biz.name || "Новый бизнес"}
+                      </span>
+                    </button>
+                  ))}
+                  {businesses.length < 3 && (
+                    <button
+                      onClick={addBusiness}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 7,
+                        padding: "6px 12px", borderRadius: 10,
+                        border: "1px dashed rgba(255,255,255,0.15)",
+                        cursor: "pointer", width: "100%", textAlign: "left",
+                        background: "transparent", color: "rgba(255,255,255,0.3)",
+                        fontSize: 11, marginTop: 3,
+                      }}
+                    >
+                      <span style={{ fontSize: 15, lineHeight: 1, marginTop: -1 }}>+</span>
+                      Добавить бизнес
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Trial warning */}
               {daysLeft !== null && daysLeft <= 3 && (
@@ -391,6 +462,54 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         })}
 
         <div style={{ flex: 1 }} />
+
+        {/* Business Switcher */}
+        {businesses.length > 0 && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.25)", padding: "0 12px 5px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+              Мои бизнесы
+            </div>
+            {businesses.map(biz => (
+              <button
+                key={biz.id}
+                onClick={() => switchBusiness(biz.id)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "7px 12px", borderRadius: 10, border: "none",
+                  cursor: "pointer", width: "100%", textAlign: "left",
+                  background: activeBizId === biz.id ? "rgba(52,120,246,0.18)" : "transparent",
+                  color: activeBizId === biz.id ? "#3478F6" : "rgba(255,255,255,0.5)",
+                  fontSize: 12, fontWeight: activeBizId === biz.id ? 600 : 400,
+                  transition: "background 0.15s",
+                }}
+              >
+                <span style={{
+                  width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
+                  background: activeBizId === biz.id ? "#3478F6" : "rgba(255,255,255,0.2)",
+                }} />
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {biz.name || "Новый бизнес"}
+                </span>
+              </button>
+            ))}
+            {businesses.length < 3 && (
+              <button
+                onClick={addBusiness}
+                style={{
+                  display: "flex", alignItems: "center", gap: 7,
+                  padding: "6px 12px", borderRadius: 10,
+                  border: "1px dashed rgba(255,255,255,0.15)",
+                  cursor: "pointer", width: "100%", textAlign: "left",
+                  background: "transparent", color: "rgba(255,255,255,0.3)",
+                  fontSize: 11, marginTop: 3,
+                }}
+              >
+                <span style={{ fontSize: 15, lineHeight: 1, marginTop: -1 }}>+</span>
+                Добавить бизнес
+              </button>
+            )}
+          </div>
+        )}
 
         {daysLeft !== null && daysLeft <= 3 && (
           <div style={{ padding: "8px 12px", borderRadius: 10, background: "rgba(239,68,68,0.15)", marginBottom: 4 }}>
