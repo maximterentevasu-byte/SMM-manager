@@ -29,15 +29,19 @@ def _week_bounds(dt: datetime) -> tuple[date, date]:
     return start, start + timedelta(days=6)
 
 
-def _parse_channel_id(chat_id: str) -> int:
+def _parse_channel_id(chat_id: str):
     """
-    Возвращает числовой ID канала без -100 префикса.
-    Принимает: '1003916447124', '-1001003916447124', '-1003916447124'
+    Возвращает числовой ID (int) или @username (str) для Telethon get_entity.
+    Принимает: '@username', '1003916447124', '-1001003916447124'
     """
-    s = str(chat_id).strip().lstrip("-")
-    if s.startswith("100") and len(s) > 12:
-        s = s[3:]
-    return int(s)
+    s = str(chat_id).strip()
+    # @username — Telethon принимает напрямую
+    if s.startswith("@") or not s.lstrip("-").isdigit():
+        return s if s.startswith("@") else f"@{s}"
+    s_num = s.lstrip("-")
+    if s_num.startswith("100") and len(s_num) > 12:
+        s_num = s_num[3:]
+    return int(s_num)
 
 
 async def _fetch_channel(api_id: int, api_hash: str, session_str: str, chat_id: str) -> tuple[int, str, list]:
@@ -45,8 +49,9 @@ async def _fetch_channel(api_id: int, api_hash: str, session_str: str, chat_id: 
     from telethon.sessions import StringSession
     from telethon.tl.functions.channels import GetFullChannelRequest
 
-    numeric_id = _parse_channel_id(chat_id)
-    full_id = int(f"-100{numeric_id}")
+    parsed = _parse_channel_id(chat_id)
+    # Для числового ID строим -100XXXX, для @username передаём напрямую
+    full_id = int(f"-100{parsed}") if isinstance(parsed, int) else parsed
 
     last_exc: Exception = RuntimeError("no attempts")
     for attempt in range(3):

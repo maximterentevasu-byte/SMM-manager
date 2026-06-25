@@ -309,7 +309,7 @@ async def _post_story(connection: PlatformConnection, photo_bytes: bytes):
     session_str = decrypt_token(connection.tg_session_encrypted)
     api_id = int(connection.tg_api_id)
     api_hash = connection.tg_api_hash
-    channel_id = int(connection.external_page_id)
+    channel_ref = connection.external_page_id  # @username или числовой ID
 
     # Конвертируем в 9:16 (1080×1920)
     img = Image.open(io.BytesIO(photo_bytes)).convert("RGB")
@@ -325,7 +325,7 @@ async def _post_story(connection: PlatformConnection, photo_bytes: bytes):
     buf.seek(0)
 
     async with TelegramClient(StringSession(session_str), api_id, api_hash) as client:
-        entity = await client.get_input_entity(channel_id)
+        entity = await client.get_input_entity(channel_ref)
         uploaded = await client.upload_file(buf, file_name="story.jpg")
         await client(SendStoryRequest(
             peer=entity,

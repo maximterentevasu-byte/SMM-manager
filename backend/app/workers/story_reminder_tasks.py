@@ -82,12 +82,13 @@ async def _has_story_today(conn: PlatformConnection) -> bool:
     session_str = decrypt_token(conn.tg_session_encrypted)
     api_id = int(conn.tg_api_id)
     api_hash = conn.tg_api_hash
-    channel_id = int(conn.external_page_id)
+    # external_page_id может быть @username или числовым ID — Telethon принимает оба
+    channel_ref = conn.external_page_id
 
     today_ekb = datetime.now(EKB).date()
 
     async with TelegramClient(StringSession(session_str), api_id, api_hash) as client:
-        entity = await client.get_input_entity(channel_id)
+        entity = await client.get_input_entity(channel_ref)
         result = await client(GetPeerStoriesRequest(peer=entity))
         stories = getattr(result.stories, "stories", [])
         for story in stories:
