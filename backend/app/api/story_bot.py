@@ -14,7 +14,7 @@ import random
 import aiohttp
 from fastapi import APIRouter, Request, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 
 from app.database import get_db
 from app.models.models import StoryBotSession, PlatformConnection
@@ -160,13 +160,20 @@ async def webhook(request: Request, db: AsyncSession = Depends(get_db)):
         numeric_id = str(chat_info["id"])
         channel_title = chat_info.get("title", ch_input)
 
+        # Ищем по числовому ID И по @username — канал мог быть подключён любым форматом
+        ch_username = chat_info.get("username")
+        username_variants = [numeric_id]
+        if ch_username:
+            username_variants.append(f"@{ch_username}")
+            username_variants.append(ch_username)
+
         conn_res = await db.execute(
             select(PlatformConnection).where(
-                PlatformConnection.external_page_id == numeric_id,
+                PlatformConnection.external_page_id.in_(username_variants),
                 PlatformConnection.is_active == True,
             )
         )
-        connection = conn_res.scalar_one_or_none()
+        connection = conn_res.scalars().first()
 
         if not connection:
             await _send(
