@@ -662,6 +662,7 @@ export default function AnalyticsPage() {
           <div onClick={() => setAiModal(null)}
             style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)" }} />
           <div style={{ position: "relative", width: "min(520px, 92vw)",
+            maxHeight: "80vh", display: "flex", flexDirection: "column",
             background: "#fff", borderRadius: 20, padding: "32px 36px",
             boxShadow: "0 24px 80px rgba(0,0,0,0.22)" }}>
             <button onClick={() => setAiModal(null)}
@@ -676,7 +677,8 @@ export default function AnalyticsPage() {
             <div style={{ fontSize: 16, fontWeight: 700, color: "#0D1B2A", marginBottom: 20 }}>
               {aiModal.period}
             </div>
-            <div style={{ fontSize: 14, color: "#444", lineHeight: 1.7 }}>
+            <div style={{ fontSize: 14, color: "#444", lineHeight: 1.7,
+              overflowY: "auto", paddingRight: 4 }}>
               {aiModal.text}
             </div>
           </div>
